@@ -117,7 +117,12 @@ export default function ModelEditor() {
     setBusy(true);
     try {
       const payload = { ...m, tag: Array.isArray(m.tag) ? m.tag : String(m.tag).split(',').map((t) => t.trim()).filter(Boolean) };
-      if (id) { await admUpdateModel(id, payload); const fresh = await admGetModel(id); setM({ ...emptyModel(), ...fresh }); toast.success('Modifiche salvate'); }
+      if (id) { const res = await admUpdateModel(id, payload); const fresh = await admGetModel(id); setM({ ...emptyModel(), ...fresh });
+        if (res && res._auto) {
+          if (res._auto.type === 'bozza') toast.warning('MODELLA RIPORTATA IN BOZZA', { description: `È stato rimosso un elemento obbligatorio (${res._auto.missing.join(', ')}). Il profilo non è più visibile pubblicamente.`, duration: 8000 });
+          else if (res._auto.type === 'pellicola_off') toast.warning('PELLICOLA DISATTIVATA', { description: `Manca ${res._auto.missing.join(', ')}. Il profilo resta pubblicato ma è stato rimosso dalla Pellicola Home.`, duration: 8000 });
+        } else { toast.success('Modifiche salvate'); }
+      }
       else { const created = await admCreateModel(payload); toast.success('Modella creata'); navigate(`/admin/modelle/${created.id}`); }
     } catch (e) {
       const det = e?.response?.data?.detail;

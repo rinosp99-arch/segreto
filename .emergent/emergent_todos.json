@@ -1,38 +1,34 @@
 [
   {
-    "content": "Backend: schemas add content_overrides; content_status rewrite (overrides + readiness + stato_operativo)",
+    "content": "Backend: readiness split (profile vs pellicola) in content_status",
     "status": "completed"
   },
   {
-    "content": "Backend routes_admin: list counts+states, publish block (structured 400), copy-config endpoint",
+    "content": "Backend: auto-bozza / auto-pellicola-off on PUT of published model + audit + _auto flag",
     "status": "completed"
   },
   {
-    "content": "Backend routes_public: admin preview of drafts (optional token) + anteprima flag",
+    "content": "Backend: bulk copy-config endpoint (sections, targets, audit)",
     "status": "completed"
   },
   {
-    "content": "adminApi: add copyConfig + preview helpers",
+    "content": "adminApi: admCopyConfigBulk",
     "status": "completed"
   },
   {
-    "content": "AdminModels: filters TUTTE/DEMO/REALI/INCOMPLETE/PRONTE + counts + state badges",
+    "content": "ModelEditor: auto-bozza/pellicola-off toast on save",
     "status": "completed"
   },
   {
-    "content": "UploadField: per-media stato_contenuto override selector",
+    "content": "AdminModels: multi-select checkboxes + bulk bar + bulk apply modal",
     "status": "completed"
   },
   {
-    "content": "ModelEditor: checklist panel, publish-block dialog, ANTEPRIMA button, Copia config, Import Rapido (file+URL) with slot assignment",
+    "content": "Build + backend curl verification",
     "status": "completed"
   },
   {
-    "content": "ModelProfile: noindex for admin preview",
-    "status": "completed"
-  },
-  {
-    "content": "Build + backend curl tests + end-to-end testing agent",
+    "content": "End-to-end testing agent (auto-bozza, pellicola-off, bulk copy)",
     "status": "completed"
   }
 ]

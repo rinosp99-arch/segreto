@@ -104,6 +104,9 @@ class LatoSegretoTester:
             self.test_admin_settings()
             self.test_admin_audit()
             self.test_analytics()
+            # NEW: Auto-bozza and bulk copy tests
+            self.test_auto_bozza_feature()
+            self.test_copy_config_bulk_feature()
         else:
             self.log("Skipping admin tests - no auth token", "WARN")
 
@@ -485,6 +488,275 @@ class LatoSegretoTester:
 
         if success:
             self.log(f"Webhook result: {resp.get('azione')} - stato: {resp.get('stato')}", "INFO")
+
+    def test_auto_bozza_feature(self):
+        self.log("\n--- AUTO-BOZZA SAFETY FEATURE ---", "INFO")
+        
+        # Get a published model to test with
+        success, resp = self.test("Get published models for auto-bozza test", "GET", "admin/models", 200)
+        if not success or not resp.get("items"):
+            self.log("No models found for auto-bozza test", "WARN")
+            return
+        
+        # Find a published model with complete profile
+        published_model = None
+        for m in resp["items"]:
+            if m.get("stato") == "pubblicata" and m.get("readiness", {}).get("is_ready"):
+                published_model = m
+                break
+        
+        if not published_model:
+            self.log("No complete published model found for auto-bozza test", "WARN")
+            return
+        
+        model_id = published_model["id"]
+        self.log(f"Testing auto-bozza with model: {published_model.get('nome_artistico')} (id: {model_id})", "INFO")
+        
+        # Get full model data
+        success, model_data = self.test(f"Get full model data for {model_id}", "GET", f"admin/models/{model_id}", 200)
+        if not success:
+            return
+        
+        # Store original onlyfans_url to restore later
+        original_onlyfans = model_data.get("onlyfans_url", "")
+        
+        # TEST 1: Remove OnlyFans URL (required field) while keeping stato=pubblicata
+        self.log("TEST 1: Remove OnlyFans URL from published model", "INFO")
+        model_data["onlyfans_url"] = ""
+        model_data["stato"] = "pubblicata"
+        
+        success, resp = self.test("Update published model with missing OnlyFans (should auto-revert to bozza)", 
+                                  "PUT", f"admin/models/{model_id}", 200, data=model_data,
+                                  check_response=lambda r: r.get("stato") == "bozza" and r.get("_auto", {}).get("type") == "bozza")
+        
+        if success:
+            auto_info = resp.get("_auto", {})
+            self.log(f"✓ Auto-bozza triggered: type={auto_info.get('type')}, missing={auto_info.get('missing')}", "SUCCESS")
+            
+            # Verify the model is now in bozza state
+            success2, check_resp = self.test(f"Verify model is now in bozza", "GET", f"admin/models/{model_id}", 200,
+                                             check_response=lambda r: r.get("stato") == "bozza")
+            if success2:
+                self.log("✓ Model successfully reverted to bozza state", "SUCCESS")
+        else:
+            self.log("✗ Auto-bozza did not trigger as expected", "FAIL")
+        
+        # Restore the model to published state with complete data
+        model_data["onlyfans_url"] = original_onlyfans or "https://onlyfans.com/test"
+        model_data["stato"] = "bozza"
+        self.test(f"Restore model data", "PUT", f"admin/models/{model_id}", 200, data=model_data)
+        self.test(f"Republish model", "PATCH", f"admin/models/{model_id}/stato", 200, data={"stato": "pubblicata"})
+        
+        # TEST 2: Verify that modifying a published model without removing required fields does NOT trigger auto-bozza
+        self.log("TEST 2: Modify published model without removing required fields", "INFO")
+        success, model_data = self.test(f"Get model data again", "GET", f"admin/models/{model_id}", 200)
+        if success:
+            model_data["bio"] = "Updated bio - testing no auto-bozza"
+            model_data["stato"] = "pubblicata"
+            
+            success, resp = self.test("Update published model with complete data (should stay pubblicata)", 
+                                      "PUT", f"admin/models/{model_id}", 200, data=model_data,
+                                      check_response=lambda r: r.get("stato") == "pubblicata" and "_auto" not in r)
+            
+            if success:
+                self.log("✓ Model stayed published (no auto-bozza triggered)", "SUCCESS")
+            else:
+                self.log("✗ Unexpected auto-bozza or status change", "FAIL")
+        
+        # TEST 3: Test auto-pellicola-off (if pellicola is active)
+        self.log("TEST 3: Test auto-pellicola-off feature", "INFO")
+        success, model_data = self.test(f"Get model data for pellicola test", "GET", f"admin/models/{model_id}", 200)
+        if success:
+            # Ensure pellicola is active
+            if not model_data.get("pellicola_home", {}).get("attiva"):
+                model_data["pellicola_home"] = model_data.get("pellicola_home", {})
+                model_data["pellicola_home"]["attiva"] = True
+                self.test("Activate pellicola", "PUT", f"admin/models/{model_id}", 200, data=model_data)
+                time.sleep(0.5)
+                success, model_data = self.test(f"Get model data after activating pellicola", "GET", f"admin/models/{model_id}", 200)
+            
+            # Store original pellicola videos
+            original_pel_pub = model_data.get("pellicola_home", {}).get("pubblico", {}).get("video_url", "")
+            original_pel_sec = model_data.get("pellicola_home", {}).get("segreto", {}).get("video_url", "")
+            
+            # Remove ONLY pellicola videos (but keep profile complete with media_pairs videos)
+            model_data["pellicola_home"]["pubblico"]["video_url"] = ""
+            model_data["pellicola_home"]["segreto"]["video_url"] = ""
+            model_data["stato"] = "pubblicata"
+            
+            # Check if model has video pairs (needed to keep profile complete)
+            has_video_pairs = any(p.get("tipo") == "video" for p in model_data.get("media_pairs", []))
+            
+            if has_video_pairs:
+                success, resp = self.test("Remove pellicola videos only (should disable pellicola, keep published)", 
+                                          "PUT", f"admin/models/{model_id}", 200, data=model_data)
+                
+                if success:
+                    # Check if pellicola was disabled or if auto-bozza triggered
+                    if resp.get("_auto", {}).get("type") == "pellicola_off":
+                        self.log(f"✓ Auto-pellicola-off triggered: {resp.get('_auto')}", "SUCCESS")
+                        if not resp.get("pellicola_home", {}).get("attiva"):
+                            self.log("✓ Pellicola correctly deactivated", "SUCCESS")
+                        if resp.get("stato") == "pubblicata":
+                            self.log("✓ Model stayed published", "SUCCESS")
+                    elif resp.get("stato") == "bozza":
+                        self.log("⚠ Model went to bozza (profile may be incomplete without pellicola videos)", "WARN")
+                    else:
+                        self.log("⚠ No auto action triggered (may be expected if fallback videos exist)", "WARN")
+            else:
+                self.log("⚠ Model has no video pairs, skipping pellicola-off test", "WARN")
+            
+            # Restore pellicola videos
+            if original_pel_pub or original_pel_sec:
+                model_data["pellicola_home"]["pubblico"]["video_url"] = original_pel_pub
+                model_data["pellicola_home"]["segreto"]["video_url"] = original_pel_sec
+                model_data["pellicola_home"]["attiva"] = True
+                self.test("Restore pellicola videos", "PUT", f"admin/models/{model_id}", 200, data=model_data)
+
+    def test_copy_config_bulk_feature(self):
+        self.log("\n--- COPY CONFIG BULK FEATURE ---", "INFO")
+        
+        # Get all models
+        success, resp = self.test("Get all models for bulk copy test", "GET", "admin/models", 200)
+        if not success or not resp.get("items") or len(resp["items"]) < 2:
+            self.log("Need at least 2 models for bulk copy test", "WARN")
+            return
+        
+        models = resp["items"]
+        source_model = models[0]
+        target_models = models[1:4]  # Use up to 3 targets
+        
+        source_id = source_model["id"]
+        target_ids = [m["id"] for m in target_models]
+        
+        self.log(f"Source model: {source_model.get('nome_artistico')} (id: {source_id})", "INFO")
+        self.log(f"Target models: {[m.get('nome_artistico') for m in target_models]}", "INFO")
+        
+        # Store original data from targets to verify personal content is NOT copied
+        target_originals = {}
+        for tid in target_ids:
+            success, data = self.test(f"Get target model {tid}", "GET", f"admin/models/{tid}", 200)
+            if success:
+                target_originals[tid] = {
+                    "foto_card": data.get("foto_card"),
+                    "onlyfans_url": data.get("onlyfans_url"),
+                    "nome_artistico": data.get("nome_artistico"),
+                    "bio": data.get("bio"),
+                    "media_pairs": data.get("media_pairs", [])
+                }
+        
+        # TEST 1: Copy all sections
+        self.log("TEST 1: Copy all config sections (regista, conversione, pellicola)", "INFO")
+        bulk_data = {
+            "source_id": source_id,
+            "target_ids": target_ids,
+            "sections": {
+                "regista": True,
+                "conversione": True,
+                "pellicola": True
+            }
+        }
+        
+        success, resp = self.test("Bulk copy all sections", "POST", "admin/models/copy-config-bulk", 200, 
+                                  data=bulk_data,
+                                  check_response=lambda r: r.get("updated") == len(target_ids) and len(r.get("sections", [])) == 3)
+        
+        if success:
+            self.log(f"✓ Bulk copy successful: updated {resp.get('updated')} models, sections: {resp.get('sections')}", "SUCCESS")
+            
+            # Verify that personal content was NOT copied
+            for tid in target_ids:
+                success, updated_data = self.test(f"Verify target {tid} personal content unchanged", "GET", f"admin/models/{tid}", 200)
+                if success and tid in target_originals:
+                    orig = target_originals[tid]
+                    if updated_data.get("foto_card") == orig["foto_card"]:
+                        self.log(f"✓ foto_card unchanged for {tid}", "SUCCESS")
+                    else:
+                        self.log(f"✗ foto_card was changed for {tid}", "FAIL")
+                    
+                    if updated_data.get("onlyfans_url") == orig["onlyfans_url"]:
+                        self.log(f"✓ onlyfans_url unchanged for {tid}", "SUCCESS")
+                    else:
+                        self.log(f"✗ onlyfans_url was changed for {tid}", "FAIL")
+                    
+                    if updated_data.get("nome_artistico") == orig["nome_artistico"]:
+                        self.log(f"✓ nome_artistico unchanged for {tid}", "SUCCESS")
+                    else:
+                        self.log(f"✗ nome_artistico was changed for {tid}", "FAIL")
+        
+        # TEST 2: Copy only regista section
+        self.log("TEST 2: Copy only regista section", "INFO")
+        bulk_data_regista = {
+            "source_id": source_id,
+            "target_ids": [target_ids[0]],
+            "sections": {
+                "regista": True,
+                "conversione": False,
+                "pellicola": False
+            }
+        }
+        
+        success, resp = self.test("Bulk copy regista only", "POST", "admin/models/copy-config-bulk", 200, 
+                                  data=bulk_data_regista,
+                                  check_response=lambda r: r.get("updated") == 1 and r.get("sections") == ["regista"])
+        
+        if success:
+            self.log(f"✓ Regista-only copy successful", "SUCCESS")
+        
+        # TEST 3: Validation - no sections selected (should fail)
+        self.log("TEST 3: Validation - no sections selected", "INFO")
+        bulk_data_invalid = {
+            "source_id": source_id,
+            "target_ids": target_ids,
+            "sections": {
+                "regista": False,
+                "conversione": False,
+                "pellicola": False
+            }
+        }
+        
+        success, resp = self.test("Bulk copy with no sections (should fail)", "POST", "admin/models/copy-config-bulk", 400, 
+                                  data=bulk_data_invalid)
+        
+        if success:
+            self.log("✓ Validation correctly rejected empty sections", "SUCCESS")
+        
+        # TEST 4: Validation - source not found (should fail)
+        self.log("TEST 4: Validation - source not found", "INFO")
+        bulk_data_bad_source = {
+            "source_id": "nonexistent-id-12345",
+            "target_ids": target_ids,
+            "sections": {
+                "regista": True,
+                "conversione": False,
+                "pellicola": False
+            }
+        }
+        
+        success, resp = self.test("Bulk copy with invalid source (should fail)", "POST", "admin/models/copy-config-bulk", 404, 
+                                  data=bulk_data_bad_source)
+        
+        if success:
+            self.log("✓ Validation correctly rejected invalid source", "SUCCESS")
+        
+        # TEST 5: Source in target list (should be ignored)
+        self.log("TEST 5: Source in target list (should be ignored)", "INFO")
+        bulk_data_self = {
+            "source_id": source_id,
+            "target_ids": [source_id] + target_ids[:1],  # Include source in targets
+            "sections": {
+                "regista": True,
+                "conversione": False,
+                "pellicola": False
+            }
+        }
+        
+        success, resp = self.test("Bulk copy with source in targets (should ignore source)", "POST", "admin/models/copy-config-bulk", 200, 
+                                  data=bulk_data_self,
+                                  check_response=lambda r: r.get("updated") == 1)  # Should only update 1 target, not source
+        
+        if success:
+            self.log(f"✓ Source correctly ignored in target list: updated {resp.get('updated')} models", "SUCCESS")
 
     def test_seo_endpoints(self):
         self.log("\n--- SEO ENDPOINTS ---", "INFO")

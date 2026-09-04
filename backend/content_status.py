@@ -161,11 +161,18 @@ def compute_readiness(doc: dict) -> dict:
     checklist.append({"label": "TikTok (opzionale)", "ok": _nz(social.get("tiktok")), "required": False})
 
     missing = [c["label"] for c in checklist if c["required"] and not c["ok"]]
+    pellicola_labels = {"Video Pellicola pubblico", "Video Pellicola segreto"}
+    profile_missing = [m for m in missing if m not in pellicola_labels]
+    pellicola_missing = [m for m in missing if m in pellicola_labels]
     return {
         "checklist": checklist,
         "missing_required": missing,
         "missing_count": len(missing),
         "is_ready": len(missing) == 0,
+        "profile_missing": profile_missing,
+        "profile_ready": len(profile_missing) == 0,
+        "pellicola_missing": pellicola_missing,
+        "pellicola_ready": len(pellicola_missing) == 0,
     }
 
 

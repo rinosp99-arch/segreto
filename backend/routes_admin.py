@@ -178,15 +178,39 @@ async def admin_update_model(model_id: str, body: ModelIn, admin=Depends(get_cur
         data["slug"] = await _unique_slug(data["slug"], exclude_id=model_id)
     else:
         data["slug"] = existing["slug"]
+    was_published = existing.get("stato") == "pubblicata"
     if data["stato"] == "pubblicata":
-        _assert_publishable(data)
+        if not was_published:
+            # transition draft -> published: hard block if incomplete
+            _assert_publishable(data)
     data["updated_at"] = now_iso()
     if data["stato"] == "pubblicata" and not existing.get("data_pubblicazione"):
         data["data_pubblicazione"] = now_iso()
+
+    # --- AUTO-BOZZA / AUTO-PELLICOLA safety (only for already-published models being edited) ---
+    auto = None
+    if was_published and data["stato"] == "pubblicata":
+        rd = compute_readiness(data)
+        if not rd["profile_ready"]:
+            data["stato"] = "bozza"
+            auto = {"type": "bozza", "missing": rd["profile_missing"]}
+        elif (data.get("pellicola_home") or {}).get("attiva") and not rd["pellicola_ready"]:
+            data["pellicola_home"]["attiva"] = False
+            auto = {"type": "pellicola_off", "missing": rd["pellicola_missing"]}
+
     await models_col.update_one({"id": model_id}, {"$set": data})
-    await audit(admin["email"], "update", "model", model_id)
+    if auto and auto["type"] == "bozza":
+        await audit(admin["email"], "auto_bozza", "model", model_id, {"missing": auto["missing"]})
+    elif auto and auto["type"] == "pellicola_off":
+        await audit(admin["email"], "auto_pellicola_off", "model", model_id, {"missing": auto["missing"]})
+    else:
+        await audit(admin["email"], "update", "model", model_id)
     doc = await models_col.find_one({"id": model_id}, {"_id": 0})
-    return serialize_doc(doc)
+    out = serialize_doc(doc)
+    out.update(full_status(out))
+    if auto:
+        out["_auto"] = auto
+    return out
 
 
 @admin_router.patch("/models/{model_id}/stato")
@@ -266,6 +290,64 @@ async def admin_copy_config(model_id: str, body: dict, admin=Depends(get_current
     out = serialize_doc(doc)
     out.update(full_status(out))
     return out
+
+
+def _config_patch(src, dst, sections):
+    """Build a $set patch copying ONLY selected config sections (never personal content)."""
+    upd = {}
+    if sections.get("regista"):
+        upd["tema"] = src.get("tema", {})
+        upd["regia"] = src.get("regia", {})
+    if sections.get("conversione"):
+        upd["cta_temporizzata"] = src.get("cta_temporizzata", {})
+        upd["cta_testo"] = src.get("cta_testo", dst.get("cta_testo", "CONTINUA CON ME"))
+        src_msg = src.get("messaggio_35s", {}) or {}
+        dst_msg = dst.get("messaggio_35s", {}) or {}
+        upd["messaggio_35s"] = {
+            **dst_msg,
+            "attivo": src_msg.get("attivo", dst_msg.get("attivo", True)),
+            "timer": src_msg.get("timer", dst_msg.get("timer", 35)),
+            "cta_testo": src_msg.get("cta_testo", dst_msg.get("cta_testo", "CONTINUA CON ME")),
+        }
+    if sections.get("pellicola"):
+        src_ph = src.get("pellicola_home", {}) or {}
+        dst_ph = dst.get("pellicola_home", {}) or {}
+        upd["pellicola_home"] = {
+            **dst_ph,
+            "attiva": src_ph.get("attiva", dst_ph.get("attiva", True)),
+            "priorita": src_ph.get("priorita", dst_ph.get("priorita", 5)),
+        }
+    return upd
+
+
+@admin_router.post("/models/copy-config-bulk")
+async def admin_copy_config_bulk(body: dict, admin=Depends(get_current_admin)):
+    """Apply selected CONFIG sections from a source model to many targets.
+    Never touches personal content (media/testi/onlyfans/social/seo/analytics)."""
+    source_id = (body or {}).get("source_id")
+    target_ids = (body or {}).get("target_ids", []) or []
+    sections = (body or {}).get("sections", {}) or {}
+    src = await models_col.find_one({"id": source_id}, {"_id": 0})
+    if not src:
+        raise HTTPException(status_code=404, detail="Modella sorgente non trovata")
+    if not any(sections.get(s) for s in ("regista", "conversione", "pellicola")):
+        raise HTTPException(status_code=400, detail="Seleziona almeno una sezione da copiare")
+    updated = []
+    for tid in target_ids:
+        if tid == source_id:
+            continue
+        dst = await models_col.find_one({"id": tid}, {"_id": 0})
+        if not dst:
+            continue
+        upd = _config_patch(src, dst, sections)
+        upd["updated_at"] = now_iso()
+        await models_col.update_one({"id": tid}, {"$set": upd})
+        updated.append(tid)
+    copied_sections = [s for s in ("regista", "conversione", "pellicola") if sections.get(s)]
+    await audit(admin["email"], "copy_config_bulk", "model", source_id, {
+        "targets": updated, "count": len(updated), "sections": copied_sections,
+    })
+    return {"updated": len(updated), "sections": copied_sections}
 
 
 # ---------------- CATEGORIES CRUD ----------------
