@@ -16,7 +16,7 @@ PUBLIC_FIELDS = {
     "id", "nome", "nome_artistico", "slug", "frase", "bio", "foto_copertina",
     "foto_card", "foto_card_teaser", "categorie", "tag", "badge", "badge_tipo",
     "seo", "ordine", "data_pubblicazione", "onlyfans_url", "cta_testo",
-    "teaser_copy",
+    "teaser_copy", "social",
 }
 
 
@@ -102,6 +102,9 @@ async def get_model_secret(slug: str):
         "galleria_segreta": d.get("galleria_segreta", []),
         "media_pairs": d.get("media_pairs", []),
         "tema": d.get("tema", {}),
+        "regia": d.get("regia", {}),
+        "cta_temporizzata": d.get("cta_temporizzata", {}),
+        "social": d.get("social", {}),
         "messaggio_35s": d.get("messaggio_35s", {}),
         "onlyfans_url": d.get("onlyfans_url", ""),
         "cta_testo": d.get("cta_testo", "CONTINUA CON ME"),

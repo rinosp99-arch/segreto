@@ -70,3 +70,24 @@ export function playImpact() {
   sg.gain.setValueAtTime(0.0001, t + 0.05); sg.gain.exponentialRampToValueAtTime(0.06, t + 0.12); sg.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
   s.connect(sg).connect(c.destination); s.start(t + 0.05); s.stop(t + 0.42);
 }
+
+// discreet ambient loop (starts only after activation)
+let _amb = null;
+export function startAmbient(volume = 0.12) {
+  const c = ac(); if (!c || _amb) return;
+  const o = c.createOscillator(); const o2 = c.createOscillator();
+  const g = c.createGain(); const lp = c.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = 320;
+  o.type = 'sine'; o.frequency.value = 58; o2.type = 'sine'; o2.frequency.value = 87;
+  g.gain.setValueAtTime(0.0001, c.currentTime);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume), c.currentTime + 1.2);
+  o.connect(lp); o2.connect(lp); lp.connect(g).connect(c.destination);
+  o.start(); o2.start();
+  _amb = { o, o2, g, c };
+}
+export function stopAmbient() {
+  if (!_amb) return;
+  const { o, o2, g, c } = _amb;
+  try { g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.5); o.stop(c.currentTime + 0.6); o2.stop(c.currentTime + 0.6); } catch (e) {}
+  _amb = null;
+}

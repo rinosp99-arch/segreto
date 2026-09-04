@@ -79,6 +79,9 @@ class ModelIn(BaseModel):
     messaggio_35s: Messaggio35s = Field(default_factory=Messaggio35s)
     seo: SeoFields = Field(default_factory=SeoFields)
     teaser_copy: str = 'Qui posso mostrarti solo fino a questo punto.'
+    regia: Dict[str, Any] = {}
+    cta_temporizzata: Dict[str, Any] = {}
+    social: Dict[str, Any] = {}
     stato: str = 'bozza'  # bozza | pubblicata | disattivata
     ordine: int = 0
     conferma_maggiorenne: bool = False

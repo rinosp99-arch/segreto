@@ -17,6 +17,9 @@ const emptyModel = () => ({
   onlyfans_url: '', cta_testo: 'CONTINUA CON ME',
   tema: { preset: 'bordeaux', colore_primario: '40 55% 60%', colore_secondario: '350 45% 30%', grain: 0.08, glow: true, sfondo_stile: 'vignetta', frase_attivazione: 'NON DOVRESTI PREMERLO', testo_dopo_click: "Te l'avevamo detto.", effetti_touch: true },
   messaggio_35s: { attivo: true, timer: 35, testo: '', foto: '', video: '', cta_testo: 'CONTINUA CON ME' },
+  regia: { preset: 'SENSUALE', fumo: 35, luci: 55, glow: 40, movimento: 25, effetto_sonoro: 'sensuale_01', ambiente_sonoro: { attivo: false, preset: 'warm_room', volume: 12 } },
+  cta_temporizzata: { attivo: true, ritardo: 10, testo_intro: 'Vuoi vedere dove continua?', testo_pulsante: 'CONTINUA CON ME' },
+  social: { instagram: '', tiktok: '', x: '', telegram: '', youtube: '', facebook: '', threads: '', snapchat: '', sito: '', custom: [] },
   seo: { title: '', meta_description: '', alt_default: '', og_image: '' },
   teaser_copy: 'Qui posso mostrarti solo fino a questo punto.',
   stato: 'bozza', ordine: 0, conferma_maggiorenne: false,
@@ -53,6 +56,12 @@ export default function ModelEditor() {
   const setTema = (k, v) => setM((p) => ({ ...p, tema: { ...p.tema, [k]: v } }));
   const setMsg = (k, v) => setM((p) => ({ ...p, messaggio_35s: { ...p.messaggio_35s, [k]: v } }));
   const setSeoF = (k, v) => setM((p) => ({ ...p, seo: { ...p.seo, [k]: v } }));
+  const setRegia = (k, v) => setM((p) => ({ ...p, regia: { ...p.regia, [k]: v } }));
+  const setAmb = (k, v) => setM((p) => ({ ...p, regia: { ...p.regia, ambiente_sonoro: { ...p.regia.ambiente_sonoro, [k]: v } } }));
+  const setCtaT = (k, v) => setM((p) => ({ ...p, cta_temporizzata: { ...p.cta_temporizzata, [k]: v } }));
+  const setSocial = (k, v) => setM((p) => ({ ...p, social: { ...p.social, [k]: v } }));
+  const REGIA_PRESETS = { DELICATO: { fumo: 20, luci: 60, glow: 30, movimento: 15 }, SENSUALE: { fumo: 35, luci: 55, glow: 40, movimento: 25 }, INTENSO: { fumo: 60, luci: 50, glow: 65, movimento: 45 } };
+  const applyRegiaPreset = (name) => setM((p) => ({ ...p, regia: { ...p.regia, preset: name, ...REGIA_PRESETS[name] } }));
 
   const toggleCat = (slug) => setM((p) => ({ ...p, categorie: p.categorie.includes(slug) ? p.categorie.filter((c) => c !== slug) : [...p.categorie, slug] }));
 
@@ -168,6 +177,47 @@ export default function ModelEditor() {
         <div className="flex gap-6 mt-1">
           <Toggle checked={m.tema.glow} onChange={(v) => setTema('glow', v)} label="Glow" />
           <Toggle checked={m.tema.effetti_touch} onChange={(v) => setTema('effetti_touch', v)} label="Effetti touch" />
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Regista del Lato Segreto" desc="Regola l'atmosfera del Lato Segreto per questa modella. Preset rapidi + rifinitura manuale.">
+        <div className="flex gap-2 mb-4">
+          {['DELICATO', 'SENSUALE', 'INTENSO'].map((pr) => (
+            <button key={pr} type="button" onClick={() => applyRegiaPreset(pr)} data-testid={`regia-preset-${pr}`}
+              className="caps-label px-3 py-1.5 rounded-full border text-xs transition-colors"
+              style={m.regia.preset === pr ? { background: 'hsl(var(--primary)/0.16)', borderColor: 'hsl(var(--primary)/0.45)', color: 'hsl(var(--primary))' } : { borderColor: 'hsl(var(--border))', color: 'hsl(var(--muted-foreground))' }}>{pr}</button>
+          ))}
+        </div>
+        {[['fumo', 'Intensità fumo'], ['luci', 'Intensità luci'], ['glow', 'Intensità glow'], ['movimento', 'Intensità movimento']].map(([k, label]) => (
+          <label key={k} className="block mb-3">
+            <span className="caps-label text-muted-foreground flex justify-between"><span>{label}</span><span className="gold-text">{m.regia[k]}</span></span>
+            <input type="range" min="0" max="100" value={m.regia[k]} onChange={(e) => setRegia(k, parseInt(e.target.value, 10))} data-testid={`regia-${k}`} className="w-full accent-[hsl(var(--primary))]" />
+          </label>
+        ))}
+        <div className="grid sm:grid-cols-2 gap-x-4 mt-2">
+          <Field label="Effetto trasformazione (suono)"><SelectInput value={m.regia.effetto_sonoro} onChange={(e) => setRegia('effetto_sonoro', e.target.value)}>{['sensuale_01', 'sensuale_02', 'cinematografico', 'soft'].map((s) => <option key={s} value={s}>{s}</option>)}</SelectInput></Field>
+          <Field label="Volume ambiente sonoro"><input type="range" min="0" max="100" value={m.regia.ambiente_sonoro.volume} onChange={(e) => setAmb('volume', parseInt(e.target.value, 10))} className="w-full accent-[hsl(var(--primary))]" /></Field>
+        </div>
+        <div className="flex items-center gap-6"><Toggle checked={m.regia.ambiente_sonoro.attivo} onChange={(v) => setAmb('attivo', v)} label="Ambiente sonoro (parte solo dopo l'attivazione)" /></div>
+        {id && m.slug && <a href={`/modelle/${m.slug}`} target="_blank" rel="noreferrer" className="inline-block mt-4 text-sm gold-text underline">Apri anteprima reale del Lato Segreto →</a>}
+      </SectionCard>
+
+      <SectionCard title="CTA temporizzata" desc="Compare dal basso dopo un ritardo configurabile (default 10s), senza popup aggressivo.">
+        <div className="flex items-center gap-6 mb-3">
+          <Toggle checked={m.cta_temporizzata.attivo} onChange={(v) => setCtaT('attivo', v)} label="Attiva" />
+          <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Ritardo (s)</span><TextInput type="number" value={m.cta_temporizzata.ritardo} onChange={(e) => setCtaT('ritardo', parseInt(e.target.value || '10', 10))} className="w-20" /></div>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-x-4">
+          <Field label="Testo introduttivo"><TextInput value={m.cta_temporizzata.testo_intro} onChange={(e) => setCtaT('testo_intro', e.target.value)} /></Field>
+          <Field label="Testo pulsante"><TextInput value={m.cta_temporizzata.testo_pulsante} onChange={(e) => setCtaT('testo_pulsante', e.target.value)} /></Field>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Social e link" desc="Mostrati nella sezione «Scoprimi anche qui». Solo i campi compilati verranno visualizzati. OnlyFans resta la CTA principale.">
+        <div className="grid sm:grid-cols-2 gap-x-4">
+          {[['instagram', 'Instagram'], ['tiktok', 'TikTok'], ['x', 'X'], ['telegram', 'Telegram'], ['youtube', 'YouTube'], ['facebook', 'Facebook'], ['threads', 'Threads'], ['snapchat', 'Snapchat'], ['sito', 'Sito personale']].map(([k, label]) => (
+            <Field key={k} label={label}><TextInput value={m.social[k] || ''} onChange={(e) => setSocial(k, e.target.value)} placeholder="https://…" data-testid={`social-input-${k}`} /></Field>
+          ))}
         </div>
       </SectionCard>
 

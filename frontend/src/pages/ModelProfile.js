@@ -6,7 +6,8 @@ import { getModel, getModelSecret, getRelated, track, mediaUrl } from '@/lib/api
 import { MediaMorph } from '@/components/MediaMorph';
 import { ModelCard } from '@/components/ModelCard';
 import { setSeo, SITE } from '@/lib/seo';
-import { playSwitch, playWhoosh, playImpact } from '@/lib/sound';
+import { playSwitch, playWhoosh, playImpact, startAmbient, stopAmbient } from '@/lib/sound';
+import { Instagram, Music2, Send, Youtube, Facebook, Globe, Twitter, Link2 } from 'lucide-react';
 import {
   getSessionId, markDiscovered, messageShownFor, markMessageShown,
   ofClickedFor, markOfClicked,
@@ -37,6 +38,8 @@ export default function ModelProfile() {
 
   const [envelopeVisible, setEnvelopeVisible] = useState(false);
   const [envelopeOpen, setEnvelopeOpen] = useState(false);
+  const [ctaTimed, setCtaTimed] = useState(false);
+  const ctaTimer = useRef(null);
 
   const pageLoadedAt = useRef(Date.now());
   const secretEnteredAt = useRef(null);
@@ -75,6 +78,8 @@ export default function ModelProfile() {
     return () => {
       alive = false;
       if (msgTimer.current) clearTimeout(msgTimer.current);
+      if (ctaTimer.current) clearTimeout(ctaTimer.current);
+      stopAmbient();
       if (secretEnteredAt.current) {
         const secs = Math.round((Date.now() - secretEnteredAt.current) / 1000);
         track({ tipo: 'secret_time', model_slug: slug, session_id: getSessionId(), valore: secs, _beacon: true });
@@ -85,6 +90,16 @@ export default function ModelProfile() {
   }, [slug]);
 
   const startEnvelopeTimer = useCallback(() => {
+    // ambient sound (only after activation, discreet, opt-in per model)
+    const amb = secretData?.regia?.ambiente_sonoro;
+    if (soundOn && amb?.attivo) startAmbient((amb.volume || 12) / 100);
+    // timed CTA (default 10s)
+    const ct = secretData?.cta_temporizzata;
+    if (ct?.attivo !== false && !ofClickedFor(slug)) {
+      const d = ((ct?.ritardo ?? 10)) * 1000;
+      ctaTimer.current = setTimeout(() => { if (!ofClickedFor(slug)) setCtaTimed(true); }, d);
+    }
+    // 35s envelope
     if (!secretData?.messaggio_35s?.attivo) return;
     if (messageShownFor(slug) || ofClickedFor(slug)) return;
     const timer = (secretData.messaggio_35s.timer || 35) * 1000;
@@ -94,7 +109,7 @@ export default function ModelProfile() {
       markMessageShown(slug);
       track({ tipo: 'message_shown', model_slug: slug, session_id: getSessionId() });
     }, timer);
-  }, [secretData, slug]);
+  }, [secretData, slug, soundOn]);
 
   const applyTheme = (on) => {
     const root = document.documentElement;
@@ -141,7 +156,9 @@ export default function ModelProfile() {
     }
     track({ tipo: 'secret_return', model_slug: slug, session_id: getSessionId() });
     if (msgTimer.current) clearTimeout(msgTimer.current);
-    setEnvelopeVisible(false); setEnvelopeOpen(false);
+    if (ctaTimer.current) clearTimeout(ctaTimer.current);
+    stopAmbient();
+    setEnvelopeVisible(false); setEnvelopeOpen(false); setCtaTimed(false);
     if (reduced) { applyTheme(false); setSecret(false); return; }
     setTransforming(true);
     setPhase('blackout');
@@ -162,9 +179,15 @@ export default function ModelProfile() {
     if (!url) return;
     track({ tipo: 'cta_click', model_slug: slug, session_id: getSessionId(), cta_source: source });
     track({ tipo: 'of_click', model_slug: slug, session_id: getSessionId(), cta_source: source });
-    markOfClicked(slug); setEnvelopeVisible(false);
+    markOfClicked(slug); setEnvelopeVisible(false); setCtaTimed(false);
     const sep = url.includes('?') ? '&' : '?';
     window.open(`${url}${sep}utm_source=lato_segreto&utm_medium=profilo&utm_campaign=lato_segreto&creator=${slug}&cta=${source}`, '_blank', 'noopener');
+  };
+
+  const openSocial = (key, url) => {
+    if (!url) return;
+    track({ tipo: `social_click_${key}`, model_slug: slug, session_id: getSessionId(), cta_source: key });
+    window.open(url, '_blank', 'noopener');
   };
 
   const onGridMove = (e) => {
@@ -197,6 +220,13 @@ export default function ModelProfile() {
   ].filter((t) => t.pair);
   const wideTile = videoPairs[1] ? { pair: videoPairs[1], effect: 'fadeblack', delay: 600 } : null;
   const tema = secretData?.tema || {};
+  const regia = secretData?.regia || {};
+  const inten = ((Number(regia.fumo ?? 35) + Number(regia.luci ?? 55) + Number(regia.glow ?? 40)) / 3) / 100;
+  const move = Number(regia.movimento ?? 25) / 100;
+  const ambOpacity = 0.3 + inten * 0.7;
+  const blobDur = `${(22 - move * 13).toFixed(1)}s`;
+  const beamDur = `${(13 - move * 7).toFixed(1)}s`;
+  const socialData = (secret ? secretData?.social : model.social) || {};
   const themeStyle = secret ? { '--primary': tema.colore_primario, '--accent': tema.colore_secondario } : {};
   const ctaLabel = secretData?.cta_testo || model.cta_testo || 'CONTINUA CON ME';
 
@@ -204,9 +234,9 @@ export default function ModelProfile() {
     <div style={themeStyle} onScroll={registerInteraction} onPointerDown={registerInteraction}>
       {/* secret ambience: fumo, luci da palco, glow bordeaux */}
       {secret && (
-        <div className="secret-ambience" data-testid="secret-ambience" aria-hidden>
-          <div className="blob b1" /><div className="blob b2" /><div className="blob b3" />
-          <div className="beam" style={{ left: '18%' }} /><div className="beam beam2" style={{ left: '62%' }} />
+        <div className="secret-ambience" data-testid="secret-ambience" aria-hidden style={{ opacity: ambOpacity }}>
+          <div className="blob b1" style={{ animationDuration: blobDur }} /><div className="blob b2" style={{ animationDuration: blobDur }} /><div className="blob b3" style={{ animationDuration: blobDur }} />
+          <div className="beam" style={{ left: '18%', animationDuration: beamDur }} /><div className="beam beam2" style={{ left: '62%', animationDuration: beamDur }} />
           <div className="grainlayer" />
         </div>
       )}
@@ -284,6 +314,19 @@ export default function ModelProfile() {
           )}
         </div>
 
+        {/* DESCRIZIONE (cambia con la modalità) */}
+        <section className="max-w-2xl mx-auto text-center mt-8">
+          <AnimatePresence mode="wait">
+            <motion.p key={secret ? 'sd' : 'pd'} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.5 }}
+              className="text-base leading-relaxed text-foreground/85">
+              {secret ? (secretData?.bio_segreta || model.bio) : model.bio}
+            </motion.p>
+          </AnimatePresence>
+        </section>
+
+        {/* SOCIAL — lato pubblico (secondari, non rubano attenzione alla CTA OF) */}
+        {!secret && <SocialLinks social={socialData} secret={false} onOpen={openSocial} />}
+
         {/* CONVERSION (secret) */}
         {secret && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="text-center max-w-xl mx-auto">
@@ -294,6 +337,9 @@ export default function ModelProfile() {
           </motion.div>
         )}
 
+        {/* SOCIAL — lato segreto in fondo, dopo la CTA OnlyFans */}
+        {secret && <SocialLinks social={socialData} secret onOpen={openSocial} />}
+
         {/* RELATED */}
         {related.length > 0 && (
           <section className="mt-16">
@@ -303,11 +349,21 @@ export default function ModelProfile() {
         )}
       </div>
 
-      {secret && (
-        <div className="fixed bottom-0 inset-x-0 z-[50] sm:hidden p-3 glass border-t border-border/60" data-testid="sticky-mobile-cta">
-          <button onClick={() => openOnlyFans('of_click_sticky')} className="btn-gold w-full rounded-xl py-3.5 text-sm inline-flex items-center justify-center gap-2">{ctaLabel} <ArrowRight className="h-4 w-4" /></button>
-        </div>
-      )}
+      {/* TIMED CTA (compare dopo il ritardo, default 10s) */}
+      <AnimatePresence>
+        {secret && ctaTimed && (
+          <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 40 }}
+            className="fixed bottom-0 inset-x-0 z-[55] p-3 glass border-t border-border/60" data-testid="cta-timed">
+            <div className="max-w-md mx-auto text-center">
+              <div className="text-xs text-muted-foreground mb-1.5">{secretData?.cta_temporizzata?.testo_intro || 'Vuoi vedere dove continua?'}</div>
+              <button onClick={() => openOnlyFans('of_click_timed')} className="btn-gold w-full rounded-xl py-3.5 text-sm inline-flex items-center justify-center gap-2">
+                {secretData?.cta_temporizzata?.testo_pulsante || ctaLabel} <ArrowRight className="h-4 w-4" />
+              </button>
+              <div className="text-[11px] text-muted-foreground mt-1.5">Apri il mio profilo OnlyFans</div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {envelopeVisible && (
@@ -332,5 +388,40 @@ export default function ModelProfile() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+const SOCIAL_DEFS = [
+  ['instagram', 'Instagram', Instagram],
+  ['tiktok', 'TikTok', Music2],
+  ['x', 'X', Twitter],
+  ['telegram', 'Telegram', Send],
+  ['youtube', 'YouTube', Youtube],
+  ['facebook', 'Facebook', Facebook],
+  ['threads', 'Threads', Link2],
+  ['snapchat', 'Snapchat', Link2],
+  ['sito', 'Sito', Globe],
+];
+
+function SocialLinks({ social, secret, onOpen }) {
+  if (!social) return null;
+  const items = SOCIAL_DEFS.filter(([k]) => social[k]).map(([k, label, Icon]) => ({ k, label, Icon, url: social[k] }));
+  (social.custom || []).forEach((c, i) => {
+    if (c && c.visibile !== false && c.url) items.push({ k: `custom_${i}`, label: c.nome || 'Link', Icon: Link2, url: c.url });
+  });
+  if (items.length === 0) return null;
+  return (
+    <section className="mt-10 text-center" data-testid="social-section">
+      <div className="caps-label gold-text mb-3">Scoprimi anche qui</div>
+      <div className="flex flex-wrap justify-center gap-2">
+        {items.map((it) => (
+          <button key={it.k} onClick={() => onOpen(it.k.startsWith('custom') ? 'custom' : it.k, it.url)} data-testid={`social-${it.k}`}
+            className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs transition-colors"
+            style={{ border: `1px solid hsl(var(--border))`, background: secret ? 'hsl(var(--primary) / 0.08)' : 'transparent', color: 'hsl(var(--muted-foreground))' }}>
+            <it.Icon className="h-4 w-4" /> {it.label}
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }

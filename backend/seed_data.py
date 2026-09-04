@@ -46,6 +46,14 @@ PRESETS = {
     'cosplay': ('275 50% 62%', '320 55% 46%'),
 }
 
+REGIA_PRESETS = {
+    'bordeaux': {"preset": "SENSUALE", "fumo": 35, "luci": 55, "glow": 40, "movimento": 25, "effetto_sonoro": "sensuale_01", "ambiente_sonoro": {"attivo": False, "preset": "warm_room", "volume": 12}},
+    'tattoo': {"preset": "INTENSO", "fumo": 55, "luci": 45, "glow": 60, "movimento": 40, "effetto_sonoro": "cinematografico", "ambiente_sonoro": {"attivo": False, "preset": "dark_room", "volume": 12}},
+    'dolce': {"preset": "DELICATO", "fumo": 20, "luci": 60, "glow": 30, "movimento": 15, "effetto_sonoro": "soft", "ambiente_sonoro": {"attivo": False, "preset": "warm_room", "volume": 10}},
+    'sportiva': {"preset": "SENSUALE", "fumo": 25, "luci": 65, "glow": 35, "movimento": 45, "effetto_sonoro": "sensuale_02", "ambiente_sonoro": {"attivo": False, "preset": "warm_room", "volume": 10}},
+    'cosplay': {"preset": "INTENSO", "fumo": 45, "luci": 50, "glow": 55, "movimento": 35, "effetto_sonoro": "cinematografico", "ambiente_sonoro": {"attivo": False, "preset": "dark_room", "volume": 12}},
+}
+
 # name, artistico, slug, frase, categorie, tag, badge, badge_tipo, preset, of_slug
 SPECS = [
     ("Francesca", "Francesca Rossi", "francesca-rossi", "Dolce finch\u00e9 non premi.",
@@ -183,6 +191,18 @@ def build_model(i, spec, order):
             "og_image": hero_pub,
         },
         "teaser_copy": "Qui posso mostrarti solo fino a questo punto.",
+        "regia": REGIA_PRESETS.get(preset, REGIA_PRESETS['bordeaux']),
+        "cta_temporizzata": {
+            "attivo": True, "ritardo": 10,
+            "testo_intro": "Vuoi vedere dove continua?",
+            "testo_pulsante": "CONTINUA CON ME",
+        },
+        "social": ({
+            "instagram": f"https://instagram.com/{of_slug}",
+            "tiktok": f"https://tiktok.com/@{of_slug}",
+            "telegram": f"https://t.me/{of_slug}",
+            "custom": [],
+        } if i < 4 else {"instagram": f"https://instagram.com/{of_slug}", "custom": []}),
         "stato": "pubblicata",
         "ordine": order,
         "conferma_maggiorenne": True,
