@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+
+Sitemap: https://secret-side.preview.emergentagent.com/api/sitemap.xml

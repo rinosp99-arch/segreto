@@ -1,0 +1,80 @@
+import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { MediaImage } from '@/components/MediaImage';
+import { isDiscovered } from '@/lib/session';
+import { Lock, Unlock } from 'lucide-react';
+
+const BADGE_STYLES = {
+  'IN TENDENZA': { bg: 'hsl(var(--primary) / 0.16)', bd: 'hsl(var(--primary) / 0.45)', c: 'hsl(var(--primary))' },
+  'NUOVA': { bg: 'hsl(var(--accent) / 0.18)', bd: 'hsl(var(--accent) / 0.5)', c: 'hsl(var(--accent-foreground))' },
+  'SCELTA DEL GIORNO': { bg: 'hsl(var(--wine) / 0.22)', bd: 'hsl(var(--wine) / 0.5)', c: 'hsl(38 30% 86%)' },
+  'PIÙ VISTA': { bg: 'hsl(var(--primary) / 0.16)', bd: 'hsl(var(--primary) / 0.45)', c: 'hsl(var(--primary))' },
+};
+
+export function ModelCard({ model, index = 0, teaser = false }) {
+  const discovered = isDiscovered(model.slug);
+  const badge = model.badge;
+  const bs = badge ? BADGE_STYLES[badge] || BADGE_STYLES['IN TENDENZA'] : null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-40px' }}
+      transition={{ duration: 0.5, delay: Math.min(index * 0.04, 0.4), ease: [0.2, 0.8, 0.2, 1] }}
+    >
+      <Link to={`/modelle/${model.slug}`} data-testid="model-card"
+        className="group relative block rounded-2xl overflow-hidden border border-border/60 bg-card card-elev hover:card-elev-2 transition-shadow">
+        <div className="relative" style={{ aspectRatio: '3 / 4' }}>
+          <MediaImage src={model.foto_card} alt={model.seo?.alt_default || model.nome_artistico}
+            className="h-full w-full transition-transform duration-500 group-hover:scale-[1.04]" />
+
+          {/* secret teaser blurred layer */}
+          {(teaser || model.foto_card_teaser) && (
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+              <MediaImage src={model.foto_card_teaser} alt="" className="h-full w-full"
+                style={{ filter: 'blur(18px) brightness(0.6) saturate(1.1)', transform: 'scale(1.1)' }} />
+              <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(20,0,8,0.7), rgba(0,0,0,0.15))' }} />
+            </div>
+          )}
+
+          {/* bottom gradient */}
+          <div className="absolute inset-x-0 bottom-0 h-2/5 pointer-events-none"
+            style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.82), transparent)' }} />
+
+          {/* badge */}
+          {bs && (
+            <div className="absolute top-2.5 left-2.5 caps-label px-2.5 py-1 rounded-full"
+              style={{ background: bs.bg, border: `1px solid ${bs.bd}`, color: bs.c, backdropFilter: 'blur(6px)' }}>
+              {badge}
+            </div>
+          )}
+
+          {/* discovered indicator */}
+          <div className="absolute top-2.5 right-2.5">
+            {discovered ? (
+              <div className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-full"
+                style={{ background: 'hsl(var(--primary) / 0.18)', border: '1px solid hsl(var(--primary) / 0.4)', color: 'hsl(var(--primary))' }}>
+                <Unlock className="h-3 w-3" /> SCOPERTO
+              </div>
+            ) : (
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[10px] px-2 py-1 rounded-full glass">
+                <Lock className="h-3 w-3" /> LATO SEGRETO
+              </div>
+            )}
+          </div>
+
+          {/* meta */}
+          <div className="absolute inset-x-0 bottom-0 p-3.5">
+            <div className="text-xl md:text-2xl font-serif leading-none mb-1">{model.nome_artistico}</div>
+            <div className="text-xs text-white/70 line-clamp-1">{model.frase}</div>
+            <div className="mt-2 h-[1px] w-0 group-hover:w-full transition-all duration-500" style={{ background: 'hsl(var(--primary) / 0.6)' }} />
+            <div className="overflow-hidden max-h-0 group-hover:max-h-8 transition-all duration-500">
+              <div className="pt-2 text-[11px] gold-text caps-label">C'è un lato che non hai ancora visto</div>
+            </div>
+          </div>
+        </div>
+      </Link>
+    </motion.div>
+  );
+}

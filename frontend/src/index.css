@@ -1,0 +1,148 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ===== LATO PUBBLICO (default theme) ===== */
+  :root {
+    --background: 220 10% 6%;
+    --foreground: 38 28% 92%;
+    --card: 220 9% 10%;
+    --card-foreground: 38 28% 92%;
+    --popover: 220 10% 8%;
+    --popover-foreground: 38 28% 92%;
+    --primary: 42 45% 62%;            /* oro elegante */
+    --primary-foreground: 220 12% 8%;
+    --secondary: 220 8% 14%;
+    --secondary-foreground: 38 28% 92%;
+    --muted: 220 7% 16%;
+    --muted-foreground: 38 10% 70%;
+    --accent: 38 30% 86%;             /* champagne */
+    --accent-foreground: 220 12% 8%;
+    --destructive: 0 55% 45%;
+    --destructive-foreground: 38 28% 92%;
+    --border: 220 8% 18%;
+    --input: 220 8% 18%;
+    --ring: 42 45% 62%;
+    --radius: 0.9rem;
+
+    --glass-bg: 220 10% 10%;
+    --glass-border: 42 30% 70%;
+    --gold: 42 45% 62%;
+    --champagne: 38 30% 86%;
+    --wine: 350 45% 32%;
+    --grain-opacity: 0.05;
+    --vignette: radial-gradient(120% 90% at 50% 12%, rgba(0,0,0,0) 0%, rgba(0,0,0,0.35) 60%, rgba(0,0,0,0.6) 100%);
+
+    --chart-1: 42 45% 62%;
+    --chart-2: 38 30% 86%;
+    --chart-3: 220 8% 55%;
+    --chart-4: 150 25% 45%;
+    --chart-5: 20 35% 55%;
+
+    --sidebar-background: 220 10% 8%;
+    --sidebar-foreground: 38 20% 82%;
+  }
+
+  /* ===== LATO SEGRETO (activated) ===== */
+  .theme-secret {
+    --background: 240 12% 4%;
+    --foreground: 38 28% 92%;
+    --card: 240 10% 8%;
+    --card-foreground: 38 28% 92%;
+    --popover: 240 10% 7%;
+    --popover-foreground: 38 28% 92%;
+    --primary: 40 55% 60%;
+    --primary-foreground: 240 12% 6%;
+    --secondary: 350 30% 16%;
+    --secondary-foreground: 38 28% 92%;
+    --muted: 240 9% 14%;
+    --muted-foreground: 38 10% 70%;
+    --accent: 350 45% 30%;            /* bordeaux */
+    --accent-foreground: 38 30% 90%;
+    --border: 350 20% 20%;
+    --input: 240 10% 16%;
+    --ring: 40 55% 60%;
+
+    --glass-bg: 240 12% 6%;
+    --glass-border: 40 35% 62%;
+    --wine: 355 55% 34%;
+    --grain-opacity: 0.09;
+    --vignette: radial-gradient(120% 90% at 50% 18%, rgba(0,0,0,0) 0%, rgba(10,0,4,0.55) 55%, rgba(5,0,2,0.9) 100%);
+  }
+
+  * { border-color: hsl(var(--border)); }
+
+  body {
+    margin: 0;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.5s cubic-bezier(0.2,0.8,0.2,1), color 0.5s cubic-bezier(0.2,0.8,0.2,1);
+  }
+
+  h1, h2, h3, .font-serif { font-family: 'Cormorant Garamond', Georgia, serif; }
+
+  ::selection { background: hsl(var(--primary) / 0.35); color: hsl(var(--foreground)); }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: hsl(var(--background)); }
+  ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 8px; }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--primary) / 0.5); }
+}
+
+@layer components {
+  .glass {
+    background: hsl(var(--glass-bg) / 0.6);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    border: 1px solid hsl(var(--glass-border) / 0.18);
+  }
+  .gold-text { color: hsl(var(--primary)); }
+  .caps-label {
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .card-elev { box-shadow: 0 1px 0 rgba(255,255,255,0.04), 0 14px 40px rgba(0,0,0,0.45); }
+  .card-elev-2 { box-shadow: 0 1px 0 rgba(255,255,255,0.06), 0 22px 70px rgba(0,0,0,0.6); }
+
+  /* film grain overlay */
+  .grain::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 60;
+    opacity: var(--grain-opacity);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    mix-blend-mode: overlay;
+  }
+
+  .btn-gold {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+  }
+  .btn-gold:hover { filter: brightness(1.06); box-shadow: 0 10px 30px hsl(var(--primary) / 0.25); }
+  .btn-gold:active { transform: scale(0.98); }
+
+  .hairline { border-top: 1px solid hsl(var(--border) / 0.6); }
+}
+
+@layer utilities {
+  .transition-theme { transition: background-color .5s, color .5s, border-color .5s; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .text-balance { text-wrap: balance; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}

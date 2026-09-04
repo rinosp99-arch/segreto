@@ -1,0 +1,230 @@
+import uuid
+import random
+from fastapi import APIRouter, HTTPException, Query, Request, Response
+from typing import Optional
+
+from database import (
+    models_col, categories_col, articles_col, events_col, settings_col, files_col,
+    now_iso, serialize_doc,
+)
+from schemas import TrackEventIn
+from storage import get_object
+
+public_router = APIRouter(prefix="/api")
+
+PUBLIC_FIELDS = {
+    "id", "nome", "nome_artistico", "slug", "frase", "bio", "foto_copertina",
+    "foto_card", "foto_card_teaser", "categorie", "tag", "badge", "badge_tipo",
+    "seo", "ordine", "data_pubblicazione", "onlyfans_url", "cta_testo",
+    "teaser_copy",
+}
+
+
+async def view_counts():
+    pipeline = [
+        {"$match": {"tipo": "page_view"}},
+        {"$group": {"_id": "$model_id", "n": {"$sum": 1}}},
+    ]
+    out = {}
+    async for row in events_col.aggregate(pipeline):
+        if row["_id"]:
+            out[row["_id"]] = row["n"]
+    return out
+
+
+def public_projection(doc, views=0):
+    d = serialize_doc(doc)
+    out = {k: d.get(k) for k in PUBLIC_FIELDS}
+    # public gallery (images) + public video from pairs
+    out["galleria_pubblica"] = d.get("galleria_pubblica", [])
+    videos = [pr["pubblico"] for pr in d.get("media_pairs", []) if pr.get("tipo") == "video"]
+    out["video_pubblici"] = videos
+    out["visite"] = views
+    out["has_secret"] = True
+    return out
+
+
+@public_router.get("/models")
+async def list_models(
+    categoria: Optional[str] = None,
+    filtro: str = "tutte",
+    q: Optional[str] = None,
+    limit: int = 60,
+    skip: int = 0,
+):
+    query = {"stato": "pubblicata"}
+    if categoria and categoria != "tutte":
+        query["categorie"] = categoria
+    if q:
+        rx = {"$regex": q.strip(), "$options": "i"}
+        query["$or"] = [
+            {"nome": rx}, {"nome_artistico": rx}, {"slug": rx}, {"tag": rx},
+        ]
+    docs = await models_col.find(query, {"_id": 0}).to_list(500)
+    vc = await view_counts()
+    items = [public_projection(d, vc.get(d["id"], 0)) for d in docs]
+
+    if filtro == "nuove":
+        items.sort(key=lambda x: x.get("data_pubblicazione") or "", reverse=True)
+    elif filtro in ("piu-viste", "piu_viste"):
+        items.sort(key=lambda x: x.get("visite", 0), reverse=True)
+    elif filtro in ("in-tendenza", "in_tendenza"):
+        items = [x for x in items if x.get("badge") == "IN TENDENZA"] + \
+                [x for x in items if x.get("badge") != "IN TENDENZA"]
+    else:
+        items.sort(key=lambda x: x.get("ordine", 0))
+
+    total = len(items)
+    items = items[skip:skip + limit]
+    return {"items": items, "total": total}
+
+
+@public_router.get("/models/{slug}")
+async def get_model(slug: str):
+    doc = await models_col.find_one({"slug": slug, "stato": "pubblicata"}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Modella non trovata")
+    vc = await view_counts()
+    return public_projection(doc, vc.get(doc["id"], 0))
+
+
+@public_router.get("/models/{slug}/segreto")
+async def get_model_secret(slug: str):
+    doc = await models_col.find_one({"slug": slug, "stato": "pubblicata"}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Modella non trovata")
+    d = serialize_doc(doc)
+    return {
+        "id": d["id"],
+        "slug": d["slug"],
+        "bio_segreta": d.get("bio_segreta", ""),
+        "foto_segreta_hero": d.get("foto_segreta_hero", ""),
+        "galleria_segreta": d.get("galleria_segreta", []),
+        "media_pairs": d.get("media_pairs", []),
+        "tema": d.get("tema", {}),
+        "messaggio_35s": d.get("messaggio_35s", {}),
+        "onlyfans_url": d.get("onlyfans_url", ""),
+        "cta_testo": d.get("cta_testo", "CONTINUA CON ME"),
+        "teaser_copy": d.get("teaser_copy", ""),
+    }
+
+
+@public_router.get("/models/{slug}/correlate")
+async def related_models(slug: str, limit: int = 4):
+    doc = await models_col.find_one({"slug": slug}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Modella non trovata")
+    cats = doc.get("categorie", [])
+    query = {"stato": "pubblicata", "slug": {"$ne": slug}}
+    if cats:
+        query["categorie"] = {"$in": cats}
+    docs = await models_col.find(query, {"_id": 0}).to_list(limit)
+    if len(docs) < limit:
+        extra = await models_col.find(
+            {"stato": "pubblicata", "slug": {"$ne": slug}}, {"_id": 0}
+        ).to_list(limit + 5)
+        seen = {x["slug"] for x in docs}
+        for e in extra:
+            if e["slug"] not in seen and len(docs) < limit:
+                docs.append(e)
+                seen.add(e["slug"])
+    return {"items": [public_projection(d) for d in docs[:limit]]}
+
+
+@public_router.get("/surprise")
+async def surprise():
+    docs = await models_col.find({"stato": "pubblicata"}, {"_id": 0, "slug": 1, "nome": 1, "foto_card": 1}).to_list(200)
+    if not docs:
+        raise HTTPException(status_code=404, detail="Nessuna modella disponibile")
+    return random.choice(docs)
+
+
+@public_router.get("/categories")
+async def list_categories():
+    docs = await categories_col.find({"stato": "pubblicata"}, {"_id": 0}).sort("ordine", 1).to_list(200)
+    # attach counts
+    counts = {}
+    async for row in models_col.aggregate([
+        {"$match": {"stato": "pubblicata"}},
+        {"$unwind": "$categorie"},
+        {"$group": {"_id": "$categorie", "n": {"$sum": 1}}},
+    ]):
+        counts[row["_id"]] = row["n"]
+    for d in docs:
+        d["conteggio"] = counts.get(d["slug"], 0)
+    return {"items": docs}
+
+
+@public_router.get("/categories/{slug}")
+async def get_category(slug: str):
+    cat = await categories_col.find_one({"slug": slug, "stato": "pubblicata"}, {"_id": 0})
+    if not cat:
+        raise HTTPException(status_code=404, detail="Categoria non trovata")
+    docs = await models_col.find({"stato": "pubblicata", "categorie": slug}, {"_id": 0}).to_list(200)
+    vc = await view_counts()
+    return {"categoria": cat, "items": [public_projection(d, vc.get(d["id"], 0)) for d in docs]}
+
+
+@public_router.get("/articles")
+async def list_articles(limit: int = 30):
+    docs = await articles_col.find({"stato": "pubblicato"}, {"_id": 0, "contenuto": 0}).sort("data_pubblicazione", -1).to_list(limit)
+    return {"items": docs}
+
+
+@public_router.get("/articles/{slug}")
+async def get_article(slug: str):
+    doc = await articles_col.find_one({"slug": slug, "stato": "pubblicato"}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Articolo non trovato")
+    # attach related models basic info
+    related = []
+    for ms in doc.get("modelle_correlate", []):
+        m = await models_col.find_one({"slug": ms, "stato": "pubblicata"}, {"_id": 0, "nome": 1, "nome_artistico": 1, "slug": 1, "foto_card": 1, "frase": 1, "badge": 1})
+        if m:
+            related.append(m)
+    doc["modelle_correlate_dettaglio"] = related
+    return doc
+
+
+@public_router.get("/settings")
+async def public_settings():
+    s = await settings_col.find_one({"id": "global"}, {"_id": 0})
+    if not s:
+        return {"brand_name": "LATO SEGRETO"}
+    return {
+        "brand_name": s.get("brand_name", "LATO SEGRETO"),
+        "site_description": s.get("site_description", ""),
+        "footer_contatti": s.get("footer_contatti", ""),
+        "global_switch_default": s.get("global_switch_default", "public"),
+    }
+
+
+@public_router.post("/track")
+async def track_event(ev: TrackEventIn, request: Request):
+    doc = ev.model_dump()
+    doc["id"] = str(uuid.uuid4())
+    doc["timestamp"] = now_iso()
+    # resolve model_id from slug if missing
+    if not doc.get("model_id") and doc.get("model_slug"):
+        m = await models_col.find_one({"slug": doc["model_slug"]}, {"_id": 0, "id": 1})
+        if m:
+            doc["model_id"] = m["id"]
+    await events_col.insert_one(doc)
+    return {"ok": True}
+
+
+@public_router.get("/uploads/{path:path}")
+async def serve_upload(path: str):
+    """Public serving of uploaded media (marketing content is public)."""
+    record = await files_col.find_one({"storage_path": path, "is_deleted": False}, {"_id": 0})
+    if not record:
+        raise HTTPException(status_code=404, detail="File non trovato")
+    try:
+        data, ctype = get_object(path)
+    except Exception:
+        raise HTTPException(status_code=404, detail="File non disponibile")
+    return Response(
+        content=data,
+        media_type=record.get("content_type", ctype),
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )

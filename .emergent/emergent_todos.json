@@ -1,0 +1,42 @@
+[
+  {
+    "content": "Phase 1: Foundations - DB models + Admin JWT auth + demo seed data",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 1: Object storage upload integration + media serving",
+    "status": "completed"
+  },
+  {
+    "content": "Frontend setup: dual-theme tokens, fonts, libs, routing, age gate, header/footer",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: Home (grid, filters, search, Sorprendimi, card interactions, discovered state, global switch)",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 3+4: Profile Lato Pubblico + Lato Segreto cinematic transformation (SIGNATURE)",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 5: Conversion (CTA tracking, 35s envelope, sticky CTA)",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 6: Admin full (CRUD, media pairs, categories, badges, themes, SEO, editorial)",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 7: Analytics dashboard (KPIs, funnel, leaderboard, charts)",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 8: SEO (dynamic meta, category pages, articles, sitemap/robots, webhook), legal, 404, cookie banner",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 9-10: Mobile/perf verification + end-to-end testing + fixes",
+    "status": "completed"
+  }
+]
