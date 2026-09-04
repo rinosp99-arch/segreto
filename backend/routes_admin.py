@@ -14,6 +14,7 @@ from auth import (
 from schemas import ModelIn, CategoryIn, ArticleIn, SettingsIn, LoginIn
 from sanitize import sanitize_html, slugify
 from storage import put_object, APP_NAME
+from content_status import compute_content_status
 
 admin_router = APIRouter(prefix="/api/admin")
 
@@ -100,7 +101,11 @@ async def admin_list_models(stato: Optional[str] = None, admin=Depends(get_curre
     if stato:
         query["stato"] = stato
     docs = await models_col.find(query, {"_id": 0}).sort("ordine", 1).to_list(500)
-    return {"items": serialize_doc(docs)}
+    items = serialize_doc(docs)
+    for it in items:
+        it["content_status"] = compute_content_status(it)
+    demo_totale = sum(1 for it in items if it["content_status"]["is_demo"])
+    return {"items": items, "demo_totale": demo_totale, "totale": len(items)}
 
 
 @admin_router.get("/models/{model_id}")
@@ -108,7 +113,9 @@ async def admin_get_model(model_id: str, admin=Depends(get_current_admin)):
     doc = await models_col.find_one({"id": model_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Modella non trovata")
-    return serialize_doc(doc)
+    out = serialize_doc(doc)
+    out["content_status"] = compute_content_status(out)
+    return out
 
 
 async def _unique_slug(base, exclude_id=None):

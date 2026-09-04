@@ -1,50 +1,26 @@
 [
   {
-    "content": "Backend: extend schemas (ModelIn pellicola_home + SettingsIn home_pellicola)",
+    "content": "Backend: content_status helper to detect DEMO vs REAL content per model",
     "status": "completed"
   },
   {
-    "content": "Backend: seed per-model pellicola config + global home_pellicola defaults + reseed",
+    "content": "Backend: expose content_status in admin model list + detail",
     "status": "completed"
   },
   {
-    "content": "Backend: public GET /api/pellicola endpoint",
+    "content": "Admin UI: DEMO/REALE badge + summary in AdminModels list",
     "status": "completed"
   },
   {
-    "content": "Backend: analytics GET /api/admin/analytics/pellicola aggregation",
+    "content": "Admin UI: 'Stato contenuti' panel in ModelEditor listing demo fields",
     "status": "completed"
   },
   {
-    "content": "Regenerate demo teasers to seamless ~12s boomerang clips",
+    "content": "ModelEditor: add editable poster for video pairs + main CTA field",
     "status": "completed"
   },
   {
-    "content": "Frontend: rewrite FilmStrip",
-    "status": "completed"
-  },
-  {
-    "content": "Frontend: add getPellicola to api.js + CSS additions",
-    "status": "completed"
-  },
-  {
-    "content": "Frontend: integrate FilmStrip into Home after ~10 models",
-    "status": "completed"
-  },
-  {
-    "content": "Admin: ModelEditor + AdminSettings + analytics card",
-    "status": "completed"
-  },
-  {
-    "content": "Build + esbuild check + fix errors",
-    "status": "completed"
-  },
-  {
-    "content": "Visual screenshot verification (public + secret)",
-    "status": "completed"
-  },
-  {
-    "content": "End-to-end testing via testing_agent_v3 incl mobile 390x844",
+    "content": "Build check + backend curl test + screenshots",
     "status": "completed"
   }
 ]

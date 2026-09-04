@@ -71,13 +71,14 @@ export default function ModelEditor() {
   // media pairs
   const addPair = (tipo) => setM((p) => ({ ...p, media_pairs: [...p.media_pairs, { id: Math.random().toString(36).slice(2), tipo, pubblico: { tipo, url: '' }, segreto: { tipo, url: '' } }] }));
   const setPair = (i, side, url) => setM((p) => { const mp = [...p.media_pairs]; mp[i] = { ...mp[i], [side]: { ...mp[i][side], url, tipo: mp[i].tipo } }; return { ...p, media_pairs: mp }; });
+  const setPairPoster = (i, side, poster) => setM((p) => { const mp = [...p.media_pairs]; mp[i] = { ...mp[i], [side]: { ...mp[i][side], poster, tipo: mp[i].tipo } }; return { ...p, media_pairs: mp }; });
   const delPair = (i) => setM((p) => ({ ...p, media_pairs: p.media_pairs.filter((_, j) => j !== i) }));
 
   const save = async () => {
     setBusy(true);
     try {
       const payload = { ...m, tag: Array.isArray(m.tag) ? m.tag : String(m.tag).split(',').map((t) => t.trim()).filter(Boolean) };
-      if (id) { await admUpdateModel(id, payload); toast.success('Modifiche salvate'); }
+      if (id) { await admUpdateModel(id, payload); const fresh = await admGetModel(id); setM({ ...emptyModel(), ...fresh }); toast.success('Modifiche salvate'); }
       else { const created = await admCreateModel(payload); toast.success('Modella creata'); navigate(`/admin/modelle/${created.id}`); }
     } catch (e) { toast.error(e?.response?.data?.detail || 'Errore nel salvataggio'); }
     finally { setBusy(false); }
@@ -93,6 +94,27 @@ export default function ModelEditor() {
         <Btn onClick={save} disabled={busy} data-testid="save-model-button">{busy ? 'Salvataggio…' : 'Salva'}</Btn>
       </div>
 
+      {id && m.content_status && (
+        <SectionCard title="Stato contenuti (DEMO / REALE)" desc="Riepilogo dei contenuti ancora demo per questa modella. Sostituiscili con i tuoi file reali dai campi qui sotto: il sito pubblico si aggiorna automaticamente. Il badge si ricalcola dopo il salvataggio.">
+          {m.content_status.is_demo ? (
+            <div>
+              <div className="inline-flex items-center gap-2 caps-label px-3 py-1.5 rounded-full text-xs mb-3" style={{ color: 'hsl(38 75% 60%)', border: '1px solid hsl(38 75% 60% / 0.45)' }} data-testid="editor-content-demo">
+                Contenuti DEMO · {m.content_status.demo_count} da sostituire
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {m.content_status.demo_fields.map((f) => (
+                  <span key={f} className="text-[11px] px-2.5 py-1 rounded-lg border border-border/60 text-muted-foreground">{f}</span>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-2 caps-label px-3 py-1.5 rounded-full text-xs" style={{ color: 'hsl(150 45% 58%)', border: '1px solid hsl(150 45% 58% / 0.45)' }} data-testid="editor-content-real">
+              Tutti i contenuti sono REALI
+            </div>
+          )}
+        </SectionCard>
+      )}
+
       <SectionCard title="Dati principali">
         <div className="grid sm:grid-cols-2 gap-x-4">
           <Field label="Nome"><TextInput value={m.nome} onChange={(e) => set('nome', e.target.value)} data-testid="model-nome" /></Field>
@@ -101,6 +123,7 @@ export default function ModelEditor() {
           <Field label="Link OnlyFans"><TextInput value={m.onlyfans_url} onChange={(e) => set('onlyfans_url', e.target.value)} placeholder="https://onlyfans.com/…" data-testid="model-onlyfans" /></Field>
         </div>
         <Field label="Frase breve"><TextInput value={m.frase} onChange={(e) => set('frase', e.target.value)} placeholder="Es. Dolce finché non premi." /></Field>
+        <Field label="Testo CTA principale" hint="Es. CONTINUA CON ME"><TextInput value={m.cta_testo || ''} onChange={(e) => set('cta_testo', e.target.value)} data-testid="model-cta-testo" /></Field>
         <Field label="Bio pubblica"><TextArea value={m.bio} onChange={(e) => set('bio', e.target.value)} /></Field>
         <Field label="Bio segreta"><TextArea value={m.bio_segreta} onChange={(e) => set('bio_segreta', e.target.value)} /></Field>
         <Field label="Testo teaser (limite)"><TextInput value={m.teaser_copy} onChange={(e) => set('teaser_copy', e.target.value)} /></Field>
@@ -145,6 +168,12 @@ export default function ModelEditor() {
               <UploadField label="Pubblico" value={p.pubblico?.url} onChange={(v) => setPair(i, 'pubblico', v)} accept={p.tipo === 'video' ? 'video/*' : 'image/*'} />
               <UploadField label="Segreto" value={p.segreto?.url} onChange={(v) => setPair(i, 'segreto', v)} accept={p.tipo === 'video' ? 'video/*' : 'image/*'} />
             </div>
+            {p.tipo === 'video' && (
+              <div className="grid sm:grid-cols-2 gap-4 mt-3">
+                <UploadField label="Poster video pubblico" value={p.pubblico?.poster} onChange={(v) => setPairPoster(i, 'pubblico', v)} accept="image/*" />
+                <UploadField label="Poster video segreto" value={p.segreto?.poster} onChange={(v) => setPairPoster(i, 'segreto', v)} accept="image/*" />
+              </div>
+            )}
           </div>
         ))}
         <div className="flex gap-2">
