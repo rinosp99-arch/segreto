@@ -50,9 +50,8 @@ export function Btn({ variant = 'primary', className = '', children, ...props })
   return <button {...props} className={`${base} ${styles[variant]} ${className}`} style={variant === 'danger' ? { borderColor: 'hsl(0 55% 45% / 0.5)' } : {}}>{children}</button>;
 }
 
-export function UploadField({ label, value, onChange, accept = 'image/*,video/*', hint }) {
+export function UploadField({ label, value, onChange, accept = 'image/*,video/*', hint, statusKey, overrides, onOverride }) {
   const [busy, setBusy] = useState(false);
-  const isVideo = value && (value.includes('.mp4') || value.includes('.webm') || value.includes('/media/') && value.match(/sec|pub/));
   const handleFile = async (e) => {
     const file = e.target.files?.[0]; if (!file) return;
     setBusy(true);
@@ -60,6 +59,7 @@ export function UploadField({ label, value, onChange, accept = 'image/*,video/*'
     catch (err) { toast.error(err?.response?.data?.detail || 'Errore caricamento'); }
     finally { setBusy(false); }
   };
+  const ov = statusKey && overrides ? (overrides[statusKey] || 'auto') : null;
   return (
     <Field label={label} hint={hint}>
       <div className="flex gap-2 items-start">
@@ -72,10 +72,23 @@ export function UploadField({ label, value, onChange, accept = 'image/*,video/*'
         </div>
         <div className="flex-1">
           <TextInput value={value || ''} onChange={(e) => onChange(e.target.value)} placeholder="URL o carica un file" />
-          <label className="mt-2 inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border border-border cursor-pointer hover:border-primary/60 transition-colors">
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />} Carica
-            <input type="file" accept={accept} onChange={handleFile} className="hidden" disabled={busy} />
-          </label>
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            <label className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border border-border cursor-pointer hover:border-primary/60 transition-colors">
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />} Carica
+              <input type="file" accept={accept} onChange={handleFile} className="hidden" disabled={busy} />
+            </label>
+            {statusKey && onOverride && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="text-[10px] text-muted-foreground caps-label">Tipo</span>
+                <select value={ov} onChange={(e) => onOverride(statusKey, e.target.value)} data-testid={`override-${statusKey}`}
+                  className="rounded-lg bg-background border border-border px-2 py-1 text-[11px] outline-none focus:border-primary/60">
+                  <option value="auto">Automatico</option>
+                  <option value="demo">Demo</option>
+                  <option value="reale">Reale</option>
+                </select>
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </Field>

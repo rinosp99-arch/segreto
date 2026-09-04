@@ -99,6 +99,7 @@ class ModelIn(BaseModel):
     cta_temporizzata: Dict[str, Any] = {}
     social: Dict[str, Any] = {}
     pellicola_home: PellicolaHome = Field(default_factory=PellicolaHome)
+    content_overrides: Dict[str, str] = {}
     stato: str = 'bozza'  # bozza | pubblicata | disattivata
     ordine: int = 0
     conferma_maggiorenne: bool = False

@@ -60,6 +60,7 @@ export default function ModelProfile() {
         title: m.seo?.title || `${m.nome_artistico} | ${SITE.name}`,
         description: m.seo?.meta_description || m.bio,
         image: m.seo?.og_image || m.foto_card, type: 'profile',
+        noindex: !!m.anteprima,
         jsonLd: { '@context': 'https://schema.org', '@type': 'Person', name: m.nome_artistico, description: m.bio, image: m.foto_card },
       });
       getModelSecret(slug).then((s) => {

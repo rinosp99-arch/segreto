@@ -14,7 +14,18 @@ from auth import (
 from schemas import ModelIn, CategoryIn, ArticleIn, SettingsIn, LoginIn
 from sanitize import sanitize_html, slugify
 from storage import put_object, APP_NAME
-from content_status import compute_content_status
+from content_status import compute_content_status, full_status, compute_readiness
+
+
+def _assert_publishable(data):
+    """Raise 400 with structured detail if REQUIRED fields are missing for publication."""
+    rd = compute_readiness(data)
+    if not rd["is_ready"]:
+        raise HTTPException(status_code=400, detail={
+            "message": "NON PUOI ANCORA PUBBLICARE",
+            "missing_required": rd["missing_required"],
+            "missing_count": rd["missing_count"],
+        })
 
 admin_router = APIRouter(prefix="/api/admin")
 
@@ -102,10 +113,21 @@ async def admin_list_models(stato: Optional[str] = None, admin=Depends(get_curre
         query["stato"] = stato
     docs = await models_col.find(query, {"_id": 0}).sort("ordine", 1).to_list(500)
     items = serialize_doc(docs)
+    counts = {"tutte": len(items), "demo": 0, "reali": 0, "incomplete": 0, "pronte": 0}
     for it in items:
-        it["content_status"] = compute_content_status(it)
-    demo_totale = sum(1 for it in items if it["content_status"]["is_demo"])
-    return {"items": items, "demo_totale": demo_totale, "totale": len(items)}
+        fs = full_status(it)
+        it["content_status"] = fs["content_status"]
+        it["readiness"] = {"is_ready": fs["readiness"]["is_ready"], "missing_count": fs["readiness"]["missing_count"], "missing_required": fs["readiness"]["missing_required"]}
+        it["stato_operativo"] = fs["stato_operativo"]
+        if fs["content_status"]["is_demo"]:
+            counts["demo"] += 1
+        else:
+            counts["reali"] += 1
+        if fs["stato_operativo"] == "incompleta":
+            counts["incomplete"] += 1
+        if fs["readiness"]["is_ready"] and it.get("stato") != "pubblicata":
+            counts["pronte"] += 1
+    return {"items": items, "counts": counts, "demo_totale": counts["demo"], "totale": counts["tutte"]}
 
 
 @admin_router.get("/models/{model_id}")
@@ -114,7 +136,7 @@ async def admin_get_model(model_id: str, admin=Depends(get_current_admin)):
     if not doc:
         raise HTTPException(status_code=404, detail="Modella non trovata")
     out = serialize_doc(doc)
-    out["content_status"] = compute_content_status(out)
+    out.update(full_status(out))
     return out
 
 
@@ -133,8 +155,8 @@ async def _unique_slug(base, exclude_id=None):
 @admin_router.post("/models")
 async def admin_create_model(body: ModelIn, admin=Depends(get_current_admin)):
     data = body.model_dump()
-    if data["stato"] == "pubblicata" and not data.get("conferma_maggiorenne"):
-        raise HTTPException(status_code=400, detail="Impossibile pubblicare: conferma che la creator \u00e8 maggiorenne.")
+    if data["stato"] == "pubblicata":
+        _assert_publishable(data)
     data["slug"] = await _unique_slug(data.get("slug") or data["nome"])
     data["id"] = str(uuid.uuid4())
     data["created_at"] = now_iso()
@@ -152,12 +174,12 @@ async def admin_update_model(model_id: str, body: ModelIn, admin=Depends(get_cur
     if not existing:
         raise HTTPException(status_code=404, detail="Modella non trovata")
     data = body.model_dump()
-    if data["stato"] == "pubblicata" and not data.get("conferma_maggiorenne"):
-        raise HTTPException(status_code=400, detail="Impossibile pubblicare: conferma che la creator \u00e8 maggiorenne.")
     if data.get("slug"):
         data["slug"] = await _unique_slug(data["slug"], exclude_id=model_id)
     else:
         data["slug"] = existing["slug"]
+    if data["stato"] == "pubblicata":
+        _assert_publishable(data)
     data["updated_at"] = now_iso()
     if data["stato"] == "pubblicata" and not existing.get("data_pubblicazione"):
         data["data_pubblicazione"] = now_iso()
@@ -175,8 +197,8 @@ async def admin_set_status(model_id: str, body: dict, admin=Depends(get_current_
     existing = await models_col.find_one({"id": model_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Modella non trovata")
-    if stato == "pubblicata" and not existing.get("conferma_maggiorenne"):
-        raise HTTPException(status_code=400, detail="Impossibile pubblicare: conferma che la creator \u00e8 maggiorenne.")
+    if stato == "pubblicata":
+        _assert_publishable(existing)
     upd = {"stato": stato, "updated_at": now_iso()}
     if stato == "pubblicata" and not existing.get("data_pubblicazione"):
         upd["data_pubblicazione"] = now_iso()
@@ -201,6 +223,49 @@ async def admin_reorder(body: dict, admin=Depends(get_current_admin)):
         await models_col.update_one({"id": mid}, {"$set": {"ordine": idx}})
     await audit(admin["email"], "reorder", "model", "-")
     return {"ok": True}
+
+
+@admin_router.post("/models/{model_id}/copy-config")
+async def admin_copy_config(model_id: str, body: dict, admin=Depends(get_current_admin)):
+    """Copy ONLY configuration (no personal media/text) from a source model."""
+    source_id = (body or {}).get("source_id")
+    src = await models_col.find_one({"id": source_id}, {"_id": 0})
+    dst = await models_col.find_one({"id": model_id}, {"_id": 0})
+    if not src or not dst:
+        raise HTTPException(status_code=404, detail="Modella non trovata")
+
+    upd = {}
+    # secret theme (full config, no personal media)
+    upd["tema"] = src.get("tema", {})
+    # regia (fumo/luci/glow/movimento + suoni)
+    upd["regia"] = src.get("regia", {})
+    # timed CTA (timer/copy/style)
+    upd["cta_temporizzata"] = src.get("cta_temporizzata", {})
+    upd["cta_testo"] = src.get("cta_testo", dst.get("cta_testo", "CONTINUA CON ME"))
+    # 35s message: only timing/copy/CTA, NOT personal media (foto/video)
+    src_msg = src.get("messaggio_35s", {}) or {}
+    dst_msg = dst.get("messaggio_35s", {}) or {}
+    upd["messaggio_35s"] = {
+        **dst_msg,
+        "attivo": src_msg.get("attivo", dst_msg.get("attivo", True)),
+        "timer": src_msg.get("timer", dst_msg.get("timer", 35)),
+        "cta_testo": src_msg.get("cta_testo", dst_msg.get("cta_testo", "CONTINUA CON ME")),
+    }
+    # pellicola settings: only flags (mostra/priorita/ordine), NOT media urls
+    src_ph = src.get("pellicola_home", {}) or {}
+    dst_ph = dst.get("pellicola_home", {}) or {}
+    upd["pellicola_home"] = {
+        **dst_ph,
+        "attiva": src_ph.get("attiva", dst_ph.get("attiva", True)),
+        "priorita": src_ph.get("priorita", dst_ph.get("priorita", 5)),
+    }
+    upd["updated_at"] = now_iso()
+    await models_col.update_one({"id": model_id}, {"$set": upd})
+    await audit(admin["email"], "copy_config", "model", model_id, {"from": source_id})
+    doc = await models_col.find_one({"id": model_id}, {"_id": 0})
+    out = serialize_doc(doc)
+    out.update(full_status(out))
+    return out
 
 
 # ---------------- CATEGORIES CRUD ----------------

@@ -1,0 +1,55 @@
+{
+  "summary": "Completed comprehensive testing of LATO SEGRETO admin workflow iteration: filters, counts, demo/real detection with manual override, readiness checklist, publish blocking, copy-config, import rapido, draft preview, and public site regression. All backend APIs working correctly. Frontend UI fully functional with all new admin features.",
+  "backend_issues": {
+    "critical_bugs": [],
+    "flaky_endpoints": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: Admin login successful",
+    "Backend: GET /api/admin/models returns counts (tutte=10, demo=10, reali=0, incomplete=0, pronte=0)",
+    "Backend: Items have content_status (is_demo, demo_fields), readiness (is_ready, missing_count, missing_required), stato_operativo",
+    "Backend: Publish blocking works - PATCH stato=pubblicata returns HTTP 400 with structured error (message='NON PUOI ANCORA PUBBLICARE', missing_required array, missing_count)",
+    "Backend: Manual override works - content_overrides forces is_demo=False even with demo URLs",
+    "Backend: Readiness detection works - found complete model with is_ready=true, missing_count=0",
+    "Backend: Copy-config endpoint works - copies tema/regia/cta_temporizzata/pellicola but NOT bio/foto_card/onlyfans",
+    "Backend: Draft preview works - 404 without auth, 200 with admin token + anteprima=true for both /api/models/{slug} and /api/models/{slug}/segreto",
+    "Backend: Regression tests pass - /api/models, /api/pellicola, /api/categories, /api/admin/me all return 200",
+    "Frontend: Admin login successful",
+    "Frontend: Models list shows counts display (TUTTE, DEMO, REALI, INCOMPLETE, PRONTE)",
+    "Frontend: All 5 filters work (tutte, demo, reali, incomplete, pronte)",
+    "Frontend: Model rows show content badges (DEMO/REALE) and operational state badges (PUBBLICATA/PRONTA/INCOMPLETA)",
+    "Frontend: Model editor shows checklist panel with 16 items and ready/notready badge",
+    "Frontend: Model editor has 16 override selectors (Automatico/Demo/Reale) for media fields",
+    "Frontend: Import Rapido modal opens, accepts URL input, creates assets with slot assignment",
+    "Frontend: Copy config section present with select and button",
+    "Frontend: Preview button present for existing models",
+    "Frontend: Incomplete model creation shows checklist with missing required fields",
+    "Frontend: Public home page loads correctly",
+    "Frontend: Pellicola 'IN MOVIMENTO' section visible",
+    "Frontend: Model cards display (10 found)",
+    "Frontend: Model profile loads with secret mode indicator showing 'LATO PUBBLICO'",
+    "Frontend: Secret trigger button present with correct text 'NON DOVRESTI PREMERLO'",
+    "Frontend: Media grid displays correctly",
+    "Frontend: Secret transformation works - clicking trigger changes mode to 'LATO SEGRETO'",
+    "Frontend: Secret ambience effects visible (purple/bordeaux theme)",
+    "Frontend: Revert button works - returns to 'LATO PUBBLICO' mode"
+  ],
+  "test_report_links": [
+    "/app/backend_test_admin_workflow.py"
+  ],
+  "success_percentage": {
+    "backend": "100% (46/46 tests passed)",
+    "frontend": "100% (all features working)"
+  },
+  "updated_files": [
+    "/app/backend_test_admin_workflow.py"
+  ],
+  "action_item_for_main_agent": "",
+  "should_call_test_agent_after_fix": "false",
+  "should_main_agent_test_itself": "false"
+}

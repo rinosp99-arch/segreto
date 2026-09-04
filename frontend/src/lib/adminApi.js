@@ -12,6 +12,7 @@ export const admUpdateModel = (id, data) => api.put(`/admin/models/${id}`, data)
 export const admSetStatus = (id, stato) => api.patch(`/admin/models/${id}/stato`, { stato }).then((r) => r.data);
 export const admDeleteModel = (id) => api.delete(`/admin/models/${id}`).then((r) => r.data);
 export const admReorder = (order) => api.post('/admin/models/reorder', { order }).then((r) => r.data);
+export const admCopyConfig = (id, source_id) => api.post(`/admin/models/${id}/copy-config`, { source_id }).then((r) => r.data);
 
 // categories
 export const admGetCategories = () => api.get('/admin/categories').then((r) => r.data);

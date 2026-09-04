@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { admGetModel, admCreateModel, admUpdateModel, admGetCategories } from '@/lib/adminApi';
+import { admGetModel, admCreateModel, admUpdateModel, admGetCategories, admGetModels, admCopyConfig } from '@/lib/adminApi';
 import { mediaUrl } from '@/lib/api';
 import { SectionCard, Field, TextInput, TextArea, SelectInput, Toggle, Btn, UploadField } from '@/pages/admin/ui';
-import { Plus, Trash2, ArrowLeft, Copy, Check } from 'lucide-react';
+import ImportRapido from '@/components/admin/ImportRapido';
+import { Plus, Trash2, ArrowLeft, Copy, Check, Eye, Upload, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 const PRESETS = ['bordeaux', 'tattoo', 'dolce', 'sportiva', 'cosplay'];
@@ -22,6 +23,7 @@ const emptyModel = () => ({
   social: { instagram: '', tiktok: '', x: '', telegram: '', youtube: '', facebook: '', threads: '', snapchat: '', sito: '', custom: [] },
   seo: { title: '', meta_description: '', alt_default: '', og_image: '' },
   pellicola_home: { attiva: true, priorita: 5, ordine: null, pubblico: { video_url: '', poster_url: '' }, segreto: { video_url: '', poster_url: '' } },
+  content_overrides: {},
   teaser_copy: 'Qui posso mostrarti solo fino a questo punto.',
   stato: 'bozza', ordine: 0, conferma_maggiorenne: false,
 });
@@ -37,6 +39,10 @@ export default function ModelEditor() {
   const [linkFonte, setLinkFonte] = useState('instagram');
   const [linkCampagna, setLinkCampagna] = useState('');
   const [copied, setCopied] = useState(false);
+  const [publishError, setPublishError] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [allModels, setAllModels] = useState([]);
+  const [copySource, setCopySource] = useState('');
 
   const promoLink = () => {
     const params = new URLSearchParams({ ref: m.slug || '', fonte: linkFonte });
@@ -48,7 +54,7 @@ export default function ModelEditor() {
     catch { toast.error('Impossibile copiare'); }
   };
 
-  useEffect(() => { admGetCategories().then((d) => setCats(d.items || [])); }, []);
+  useEffect(() => { admGetCategories().then((d) => setCats(d.items || [])); admGetModels().then((d) => setAllModels(d.items || [])); }, []);
   useEffect(() => {
     if (id) { admGetModel(id).then((data) => { setM({ ...emptyModel(), ...data }); }).finally(() => setLoading(false)); }
   }, [id]);
@@ -63,6 +69,39 @@ export default function ModelEditor() {
   const setSocial = (k, v) => setM((p) => ({ ...p, social: { ...p.social, [k]: v } }));
   const setPelli = (k, v) => setM((p) => ({ ...p, pellicola_home: { ...(p.pellicola_home || {}), [k]: v } }));
   const setPelliSide = (side, k, v) => setM((p) => ({ ...p, pellicola_home: { ...(p.pellicola_home || {}), [side]: { ...((p.pellicola_home || {})[side] || {}), [k]: v } } }));
+  const setOverride = (key, val) => setM((p) => ({ ...p, content_overrides: { ...(p.content_overrides || {}), [key]: val } }));
+  const ovr = m.content_overrides || {};
+
+  const rid = () => Math.random().toString(36).slice(2, 9);
+  const applyAssets = (assets) => setM((p) => {
+    const next = { ...p };
+    const pairs = [...(next.media_pairs || [])];
+    const ensureImagePair = (idx) => {
+      let imgs = pairs.filter((x) => x.tipo === 'image');
+      while (imgs.length <= idx) { pairs.push({ id: rid(), tipo: 'image', pubblico: { tipo: 'image', url: '' }, segreto: { tipo: 'image', url: '' } }); imgs = pairs.filter((x) => x.tipo === 'image'); }
+      return pairs.indexOf(imgs[idx]);
+    };
+    const ensureVideoPair = () => { let v = pairs.find((x) => x.tipo === 'video'); if (!v) { v = { id: rid(), tipo: 'video', pubblico: { tipo: 'video', url: '' }, segreto: { tipo: 'video', url: '' } }; pairs.push(v); } return pairs.indexOf(v); };
+    assets.forEach((a) => {
+      if (!a.url || a.slot === 'ignora') return;
+      if (a.slot === 'foto_card') next.foto_card = a.url;
+      else if (a.slot.startsWith('foto_pub_')) { const pi = ensureImagePair(+a.slot.split('_')[2] - 1); pairs[pi] = { ...pairs[pi], pubblico: { tipo: 'image', url: a.url } }; }
+      else if (a.slot.startsWith('foto_sec_')) { const pi = ensureImagePair(+a.slot.split('_')[2] - 1); pairs[pi] = { ...pairs[pi], segreto: { tipo: 'image', url: a.url } }; }
+      else if (a.slot === 'video_pub') { const vi = ensureVideoPair(); pairs[vi] = { ...pairs[vi], pubblico: { tipo: 'video', url: a.url } }; }
+      else if (a.slot === 'video_sec') { const vi = ensureVideoPair(); pairs[vi] = { ...pairs[vi], segreto: { tipo: 'video', url: a.url } }; }
+      else if (a.slot === 'pel_pub') next.pellicola_home = { ...next.pellicola_home, pubblico: { ...(next.pellicola_home?.pubblico || {}), video_url: a.url } };
+      else if (a.slot === 'pel_sec') next.pellicola_home = { ...next.pellicola_home, segreto: { ...(next.pellicola_home?.segreto || {}), video_url: a.url } };
+    });
+    next.media_pairs = pairs;
+    return next;
+  });
+
+  const openPreview = () => { if (m.slug) window.open(`/modelle/${m.slug}?anteprima=1`, '_blank', 'noopener'); };
+  const doCopyConfig = async () => {
+    if (!copySource) { toast.error('Seleziona una modella'); return; }
+    try { const fresh = await admCopyConfig(id, copySource); setM({ ...emptyModel(), ...fresh }); toast.success('Impostazioni copiate'); }
+    catch (e) { toast.error(e?.response?.data?.detail || 'Errore'); }
+  };
   const REGIA_PRESETS = { DELICATO: { fumo: 20, luci: 60, glow: 30, movimento: 15 }, SENSUALE: { fumo: 35, luci: 55, glow: 40, movimento: 25 }, INTENSO: { fumo: 60, luci: 50, glow: 65, movimento: 45 } };
   const applyRegiaPreset = (name) => setM((p) => ({ ...p, regia: { ...p.regia, preset: name, ...REGIA_PRESETS[name] } }));
 
@@ -80,7 +119,11 @@ export default function ModelEditor() {
       const payload = { ...m, tag: Array.isArray(m.tag) ? m.tag : String(m.tag).split(',').map((t) => t.trim()).filter(Boolean) };
       if (id) { await admUpdateModel(id, payload); const fresh = await admGetModel(id); setM({ ...emptyModel(), ...fresh }); toast.success('Modifiche salvate'); }
       else { const created = await admCreateModel(payload); toast.success('Modella creata'); navigate(`/admin/modelle/${created.id}`); }
-    } catch (e) { toast.error(e?.response?.data?.detail || 'Errore nel salvataggio'); }
+    } catch (e) {
+      const det = e?.response?.data?.detail;
+      if (det && det.missing_required) { setPublishError(det); }
+      else { toast.error(det || 'Errore nel salvataggio'); }
+    }
     finally { setBusy(false); }
   };
 
@@ -89,10 +132,48 @@ export default function ModelEditor() {
   return (
     <div className="max-w-3xl">
       <button onClick={() => navigate('/admin/modelle')} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4"><ArrowLeft className="h-4 w-4" /> Modelle</button>
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
         <h1 className="font-serif text-3xl">{id ? m.nome_artistico || 'Modifica modella' : 'Nuova modella'}</h1>
-        <Btn onClick={save} disabled={busy} data-testid="save-model-button">{busy ? 'Salvataggio…' : 'Salva'}</Btn>
+        <div className="flex items-center gap-2">
+          <Btn variant="ghost" onClick={() => setImportOpen(true)} data-testid="open-import-button"><Upload className="h-4 w-4" /> Import Rapido</Btn>
+          {id && m.slug && <Btn variant="ghost" onClick={openPreview} data-testid="preview-button"><Eye className="h-4 w-4" /> Anteprima sito</Btn>}
+          <Btn onClick={save} disabled={busy} data-testid="save-model-button">{busy ? 'Salvataggio…' : 'Salva'}</Btn>
+        </div>
       </div>
+
+      {id && m.readiness && (
+        <SectionCard title="Checklist pubblicazione" desc="Elementi obbligatori per pubblicare (i social sono opzionali). Lo stato si aggiorna dopo il salvataggio.">
+          <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1.5">
+            {(m.readiness.checklist || []).map((c) => (
+              <div key={c.label} className="flex items-center gap-2 text-sm py-0.5" data-testid="checklist-item">
+                {c.ok
+                  ? <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: 'hsl(150 45% 58%)' }} />
+                  : (c.required ? <XCircle className="h-4 w-4 shrink-0" style={{ color: 'hsl(0 65% 62%)' }} /> : <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: 'hsl(38 75% 60%)' }} />)}
+                <span className={c.ok ? '' : 'text-muted-foreground'}>{c.label}{!c.required && !c.ok ? ' — opzionale' : ''}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 pt-3 border-t border-border/50">
+            {m.readiness.is_ready
+              ? <span className="caps-label px-3 py-1.5 rounded-full text-xs" style={{ color: 'hsl(150 45% 58%)', border: '1px solid hsl(150 45% 58% / 0.45)' }} data-testid="ready-badge">Pronta alla pubblicazione</span>
+              : <span className="caps-label px-3 py-1.5 rounded-full text-xs" style={{ color: 'hsl(38 75% 60%)', border: '1px solid hsl(38 75% 60% / 0.45)' }} data-testid="notready-badge">Mancano {m.readiness.missing_count} elementi obbligatori</span>}
+          </div>
+        </SectionCard>
+      )}
+
+      {id && allModels.length > 1 && (
+        <SectionCard title="Copia impostazioni da un'altra modella" desc="Copia SOLO la configurazione (tema, regia, CTA, timer messaggio, impostazioni pellicola). NON copia foto, video, descrizioni, claim, OnlyFans o social.">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-[220px]">
+              <SelectInput value={copySource} onChange={(e) => setCopySource(e.target.value)} data-testid="copy-source-select">
+                <option value="">— Scegli modella sorgente —</option>
+                {allModels.filter((x) => x.id !== id).map((x) => <option key={x.id} value={x.id}>{x.nome_artistico}</option>)}
+              </SelectInput>
+            </div>
+            <Btn variant="ghost" onClick={doCopyConfig} disabled={!copySource} data-testid="copy-config-button"><Copy className="h-4 w-4" /> Copia impostazioni</Btn>
+          </div>
+        </SectionCard>
+      )}
 
       {id && m.content_status && (
         <SectionCard title="Stato contenuti (DEMO / REALE)" desc="Riepilogo dei contenuti ancora demo per questa modella. Sostituiscili con i tuoi file reali dai campi qui sotto: il sito pubblico si aggiorna automaticamente. Il badge si ricalcola dopo il salvataggio.">
@@ -131,10 +212,10 @@ export default function ModelEditor() {
 
       <SectionCard title="Immagini principali">
         <div className="grid sm:grid-cols-2 gap-x-4">
-          <UploadField label="Foto card (pubblica)" value={m.foto_card} onChange={(v) => set('foto_card', v)} accept="image/*" />
-          <UploadField label="Foto copertina (hero pubblico)" value={m.foto_copertina} onChange={(v) => set('foto_copertina', v)} accept="image/*" />
-          <UploadField label="Foto teaser card (segreta, sfocata)" value={m.foto_card_teaser} onChange={(v) => set('foto_card_teaser', v)} accept="image/*" />
-          <UploadField label="Foto hero segreta" value={m.foto_segreta_hero} onChange={(v) => set('foto_segreta_hero', v)} accept="image/*" />
+          <UploadField label="Foto card (pubblica)" value={m.foto_card} onChange={(v) => set('foto_card', v)} accept="image/*" statusKey="foto_card" overrides={ovr} onOverride={setOverride} />
+          <UploadField label="Foto copertina (hero pubblico)" value={m.foto_copertina} onChange={(v) => set('foto_copertina', v)} accept="image/*" statusKey="foto_copertina" overrides={ovr} onOverride={setOverride} />
+          <UploadField label="Foto teaser card (segreta, sfocata)" value={m.foto_card_teaser} onChange={(v) => set('foto_card_teaser', v)} accept="image/*" statusKey="foto_card_teaser" overrides={ovr} onOverride={setOverride} />
+          <UploadField label="Foto hero segreta" value={m.foto_segreta_hero} onChange={(v) => set('foto_segreta_hero', v)} accept="image/*" statusKey="foto_segreta_hero" overrides={ovr} onOverride={setOverride} />
         </div>
       </SectionCard>
 
@@ -165,8 +246,8 @@ export default function ModelEditor() {
               <button onClick={() => delPair(i)} className="text-red-300"><Trash2 className="h-4 w-4" /></button>
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
-              <UploadField label="Pubblico" value={p.pubblico?.url} onChange={(v) => setPair(i, 'pubblico', v)} accept={p.tipo === 'video' ? 'video/*' : 'image/*'} />
-              <UploadField label="Segreto" value={p.segreto?.url} onChange={(v) => setPair(i, 'segreto', v)} accept={p.tipo === 'video' ? 'video/*' : 'image/*'} />
+              <UploadField label="Pubblico" value={p.pubblico?.url} onChange={(v) => setPair(i, 'pubblico', v)} accept={p.tipo === 'video' ? 'video/*' : 'image/*'} statusKey={`pair:${p.id}:pubblico`} overrides={ovr} onOverride={setOverride} />
+              <UploadField label="Segreto" value={p.segreto?.url} onChange={(v) => setPair(i, 'segreto', v)} accept={p.tipo === 'video' ? 'video/*' : 'image/*'} statusKey={`pair:${p.id}:segreto`} overrides={ovr} onOverride={setOverride} />
             </div>
             {p.tipo === 'video' && (
               <div className="grid sm:grid-cols-2 gap-4 mt-3">
@@ -268,12 +349,12 @@ export default function ModelEditor() {
         <div className="grid sm:grid-cols-2 gap-4 mt-1">
           <div className="rounded-xl border border-border/60 p-3">
             <div className="caps-label text-muted-foreground mb-2">Versione pubblica</div>
-            <UploadField label="Video pubblico" value={(m.pellicola_home || {}).pubblico?.video_url} onChange={(v) => setPelliSide('pubblico', 'video_url', v)} accept="video/*" />
+            <UploadField label="Video pubblico" value={(m.pellicola_home || {}).pubblico?.video_url} onChange={(v) => setPelliSide('pubblico', 'video_url', v)} accept="video/*" statusKey="pel_pub_video" overrides={ovr} onOverride={setOverride} />
             <UploadField label="Poster pubblico" value={(m.pellicola_home || {}).pubblico?.poster_url} onChange={(v) => setPelliSide('pubblico', 'poster_url', v)} accept="image/*" />
           </div>
           <div className="rounded-xl border border-border/60 p-3">
             <div className="caps-label text-muted-foreground mb-2">Versione segreta</div>
-            <UploadField label="Video segreto" value={(m.pellicola_home || {}).segreto?.video_url} onChange={(v) => setPelliSide('segreto', 'video_url', v)} accept="video/*" />
+            <UploadField label="Video segreto" value={(m.pellicola_home || {}).segreto?.video_url} onChange={(v) => setPelliSide('segreto', 'video_url', v)} accept="video/*" statusKey="pel_sec_video" overrides={ovr} onOverride={setOverride} />
             <UploadField label="Poster segreto" value={(m.pellicola_home || {}).segreto?.poster_url} onChange={(v) => setPelliSide('segreto', 'poster_url', v)} accept="image/*" />
           </div>
         </div>
@@ -325,6 +406,27 @@ export default function ModelEditor() {
       )}
 
       <div className="flex justify-end pb-10"><Btn onClick={save} disabled={busy}>{busy ? 'Salvataggio…' : 'Salva'}</Btn></div>
+
+      {importOpen && <ImportRapido onApply={applyAssets} onClose={() => setImportOpen(false)} />}
+
+      {publishError && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" data-testid="publish-block-modal">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setPublishError(null)} />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-border/60 bg-card p-6 card-elev-2">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle className="h-6 w-6" style={{ color: 'hsl(38 75% 60%)' }} />
+              <h3 className="font-serif text-2xl">{publishError.message || 'NON PUOI ANCORA PUBBLICARE'}</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mb-3">Mancano {publishError.missing_count} elementi obbligatori:</p>
+            <ul className="space-y-1.5 mb-5">
+              {(publishError.missing_required || []).map((f) => (
+                <li key={f} className="flex items-center gap-2 text-sm"><XCircle className="h-4 w-4 shrink-0" style={{ color: 'hsl(0 65% 62%)' }} /> {f}</li>
+              ))}
+            </ul>
+            <div className="flex justify-end"><Btn onClick={() => setPublishError(null)} data-testid="complete-profile-button">Completa profilo</Btn></div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

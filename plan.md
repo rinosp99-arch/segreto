@@ -6,11 +6,17 @@
 - Conversione e attribuzione first‑party: funnel verso OnlyFans con tracking (ref/fonte/campagna) persistente e analytics reali (no fake stats).
 - Architettura “future‑proof SEO”: dati/slug/metadata/contenuti nel backend; frontend responsabile del rendering (migrazione futura a SSR/prerender possibile senza cloaking).
 - Performance mobile-first: lazy media, nessun jank, rispetto autoplay policy (muted/playsInline), fallback robusti.
-- **Nuovo obiettivo UX Home:** sezione “**IN MOVIMENTO**” come **pellicola cinematografica** seamless/infinita (non carosello), che si trasforma insieme allo switch Pubblico/Segreto.
+- **UX Home:** sezione “**IN MOVIMENTO**” come **pellicola cinematografica** seamless/infinita (non carosello), che si trasforma insieme allo switch Pubblico/Segreto.
+- **Nuovo obiettivo operativo (admin):** rendere **rapidissimo** sostituire contenuti DEMO con contenuti REALI per decine di creator, con:
+  - stato DEMO/REALE robusto (non solo heuristics URL)
+  - checklist “Pronta alla pubblicazione” basata SOLO su requisiti obbligatori
+  - blocco pubblicazione con messaggi chiari e lista campi mancanti
+  - import massivo media e strumenti di produttività (copia configurazione, anteprima admin bozza)
 
 **Stato attuale (snapshot)**
-- Phase 1–6: implementate in gran parte (home griglia, profili con trasformazione, admin/auth, analytics base/funnel, categorie/articoli/SEO endpoints, campagne/referral). Test agent disponibili fino a iteration_5 (agent-tested; non user-confirmed).
-- “IN MOVIMENTO”: presente solo bozza iniziale FE (`/frontend/src/components/FilmStrip.js`) **non integrata** e senza backend/admin/settings/analytics dedicati.
+- Phase 1–6: implementate (home griglia, profili con trasformazione, admin/auth, analytics base/funnel, categorie/articoli/SEO endpoints, campagne/referral). Agent-tested.
+- Phase 7 “IN MOVIMENTO”: **completata** end-to-end e verificata da testing agent (iteration_6).
+- Admin: aggiunto **controllo DEMO/REALE automatico** + badge/summary lista + pannello editor “Stato contenuti” (agent-tested via curl + screenshot). Da evolvere con override manuale e workflow PRONTA/INCOMPLETA.
 
 ---
 
@@ -24,17 +30,7 @@
 4. Come utente, posso tornare al Lato Pubblico senza ricaricare.
 5. Come owner, vedo eventi tracciati (view, secret_activate, of_click_*).
 
-**Steps**
-- Websearch breve best-practice: React cinematic transitions (View Transition API fallback), Framer Motion patterns, performance for media crossfade.
-- Implementare POC minimo (solo FE) con:
-  - 1 route profilo (/modelle/francesca) + dataset locale temporaneo.
-  - Transizione: blackout 150–250ms, flash soft, crossfade immagine A→B, cambio palette, copy swap, indicatore “LATO SEGRETO”.
-  - prefers-reduced-motion: versione semplificata (fade senza flash/parallax).
-- Aggiungere micro-tracking first-party (endpoint fittizio/locale) e verificare payload eventi.
-- Test rapido con testing agent: URL invariata, no refresh, trasformazione fluida su viewport mobile 390×844.
-- **Gate di qualità**: se la trasformazione non è “wow” e stabile, iterare finché lo è.
-
-**Stato:** completata (implementata e iterata nelle fasi successive; agent-tested).
+**Stato:** completata (agent-tested).
 
 ---
 
@@ -45,32 +41,6 @@
 3. Come utente, apro una modella e vivo la trasformazione Lato Segreto completa con foto/video/copy.
 4. Come utente, dopo ~35s nel Lato Segreto ricevo “Ti ha lasciato qualcosa…” e posso aprire il messaggio.
 5. Come utente, clicco “CONTINUA CON ME” e vado su OnlyFans (link tracciato, non rotto).
-
-**Backend (FastAPI + MongoDB)**
-- Modelli dati decoupled: Model/Category/AnalyticsEvent/Article/AuditLog/Settings.
-- API pubbliche:
-  - GET /api/models (filtri, search, sorting, pagination)
-  - GET /api/models/{slug}
-  - GET /api/models/{slug}/segreto
-  - GET /api/categories + GET /api/categories/{slug}
-  - POST /api/track (eventi: page_view, secret_activate, message_open, of_click, ecc.)
-  - GET /sitemap.xml, /robots.txt, /rss.xml (se attivato)
-- Sanitizzazione contenuti editoriali (HTML) prevista.
-
-**Frontend (React)**
-- Design system: layout, card, badge, filter chips, search, skeleton, modal, envelope message.
-- Home:
-  - Griglia responsive + hover/press microinterazioni + teaser blur in modalità segreta.
-  - Filtri (TUTTE/NUOVE/PIÙ VISTE/IN TENDENZA).
-  - “SORPRENDIMI”.
-  - Stato localStorage “LATO SEGRETO SCOPERTO”.
-- Profilo:
-  - /modelle/{slug} con SEO meta dinamici.
-  - Lato Pubblico + trigger “NON DOVRESTI PREMERLO”.
-  - Lato Segreto: media swap (coppie), atmosfera, video autoplay muted/loop/playsInline con IntersectionObserver.
-  - Messaggio ~35s con regole.
-- Tracking:
-  - Eventi a backend con session id privacy-safe (localStorage) + attribuzione.
 
 **Stato:** completata (agent-tested).
 
@@ -84,15 +54,7 @@
 4. Come admin, configuro CTA, timer/messaggio 35s, tema/palette del Lato Segreto.
 5. Come admin, imposto SEO title/meta e l’ordine in Home.
 
-**Steps**
-- Auth: email+password, bcrypt, JWT, logout, rate limiting login; struttura ruoli estendibile (1 ruolo: AMMINISTRATORE).
-- Admin UI /admin:
-  - CRUD modelle + reorder + stato + blocco pubblicazione senza conferma maggiorenne.
-  - CRUD categorie.
-  - Gestione media: upload tramite object storage (no filesystem locale), pairing per posizione.
-  - Audit log.
-
-**Stato:** completata (agent-tested).
+**Stato:** completata (agent-tested). Nota: workflow pubblicazione verrà raffinato in Phase 8 con checklist e blocchi “solo obbligatori”.
 
 ---
 
@@ -103,11 +65,6 @@
 3. Come owner, confronto OGGI/7G/30G e leaderboard CTR.
 4. Come owner, distinguo sorgenti click OnlyFans.
 5. Come owner, so quali articoli generano click verso modelle e OF.
-
-**Steps**
-- Aggregazioni backend per timeframe.
-- Dashboard admin: KPI + leaderboard + drilldown.
-- Validazione “no fake stats”.
 
 **Stato:** completata (agent-tested) + campagne/referral integrati.
 
@@ -121,13 +78,6 @@
 4. Come sistema esterno, invio un articolo via webhook e arriva come BOZZA (default OFF auto-publish).
 5. Come owner, misuro ARTICOLO→MODELLA→LATO SEGRETO→CLICK OF.
 
-**Steps**
-- SEO FE: title/meta/OG/canonical per Home/categoria/modella/articolo.
-- Structured data: Organization, WebSite, BreadcrumbList.
-- robots.txt: blocco /admin.
-- Editorial DB-backed + sanitizzazione.
-- Webhook sicuro per articoli esterni (auto-publish OFF di default).
-
 **Stato:** completata (agent-tested).
 
 ---
@@ -140,11 +90,6 @@
 4. Come utente, la trasformazione resta fluida anche con video (poster + lazy).
 5. Come utente, trovo pagine legali e un 404 coerente.
 
-**Steps**
-- Performance: lazy media, dimensioni fisse, preload controllato post-click.
-- Security: validation, upload limits, sanitizzazione.
-- Testing agent: suite completa.
-
 **Stato:** completata in gran parte; quality gate continuo ad ogni nuova feature.
 
 ---
@@ -153,119 +98,143 @@
 **Scope**
 Nuova sezione in Home (dopo ~8–12 modelle) con fascia orizzontale di teaser video verticali (10–15s; demo ~12s) che scorre lentamente e continuamente da destra verso sinistra, senza reset visibile. Non è un carousel standard (niente frecce/pallini). Deve trasformarsi in modo cinematografico insieme allo switch Pubblico/Segreto senza scatti o video neri e mantenendo la posizione nel movimento.
 
-#### 7.1 User stories (Pubblico)
-1. Come utente, scorrendo la Home, vedo “IN MOVIMENTO” con sottotitolo “Una foto non racconta tutto.” inserito dopo ~10 card e poi la griglia continua.
-2. Come utente, vedo una pellicola video verticale autoplay/muted/loop/playsInline senza controlli.
-3. Come utente mobile (390×844), vedo ~2 video completi + parte del successivo.
-4. Come utente, quando passo il dito/hover, la pellicola rallenta o si ferma temporaneamente; la tile ha micro-zoom/glow, overlay con nome e CTA “Scopri il suo Lato Segreto”; click porta al profilo modella.
-5. Come utente, quando attivo la modalità segreta Home, la pellicola **si trasforma davanti ai miei occhi** usando media segreti e atmosfera (glow leggero, fumo sottile, bordeaux/viola/oro, luce diagonale/vignetta) mantenendo continuità del movimento.
+**Stato:** COMPLETATA — implementata end-to-end e verificata dal testing agent (iteration_6): pellicola seamless, cap 8 video attivi rispettato, poster fallback (no black), pausa fuori viewport, trasformazione Pubblico↔Segreto continua, analytics impression/video_view/click attive, teaser demo rigenerati a ~12s seamless. Seconda fila predisposta ma OFF di default.
 
-#### 7.2 User stories (Admin)
-1. Come admin, per ogni modella configuro “PELLICOLA HOME”: mostra sì/no, video pubblico+poster, video segreto+poster, priorità 1–10, ordine manuale opzionale.
-2. Come admin, configuro impostazioni globali pellicola: attiva, titolo, sottotitolo, velocità, massimo video attivi (default 8), seconda fila (predisposta ma OFF), pausa su touch/hover, nomi sempre visibili, posizione inserimento (dopo N card).
+---
 
-#### 7.3 Data model & Seed
-- Estendere `ModelIn` (backend schemas) con campo `pellicola_home` (dict o sub-schema) contenente:
-  - `attiva` (bool)
-  - `priorita` (1–10)
-  - `ordine` (int, opzionale)
-  - `pubblico`: {`video_url`, `poster_url`}
-  - `segreto`: {`video_url`, `poster_url`}
-- Estendere settings globali (`SettingsIn` + documento settings `id=global`) con `home_pellicola`:
-  - `attiva` (bool)
-  - `titolo` (string)
-  - `sottotitolo` (string)
-  - `velocita` (float o preset: lenta/medio)
-  - `max_video_attivi` (int, default 8; range 6–10)
-  - `seconda_fila` (bool, default false)
-  - `pausa_su_touch` (bool, default true)
-  - `nomi_sempre_visibili` (bool, default false)
-  - `inserisci_dopo_n` (int, default 10; range suggerito 8–12)
-- Seed demo:
-  - associare a ~8–12 modelle video/poster pubblici e segreti usando asset locali `/frontend/public/media/*`.
-  - rigenerare teaser demo a ~12s (vedi 7.6).
+### Phase 8 — Admin Content Workflow (DEMO/REALE + INCOMPLETA/PRONTA + Produttività)
+**Vincolo:** non modificare il design pubblico già approvato. Questa iterazione riguarda soprattutto il workflow amministrativo.
 
-#### 7.4 API pubbliche
-- `GET /api/pellicola`
-  - Response: settings pellicola + items ordinati (ordine manuale poi priorità) con slug/nome/urls pubbliche+segrete.
-  - Deve includere solo modelle pubblicate e solo item `attiva=true`.
+#### 8.1 Concetti di stato (distinti e non sovrapposti)
+- **DEMO**: utilizza ancora contenuti temporanei (ma non necessariamente incompleta).
+- **INCOMPLETA**: mancano contenuti obbligatori.
+- **PRONTA**: tutti i contenuti obbligatori (e reali) sono presenti.
+- **PUBBLICATA**: è effettivamente visibile nel sito.
 
-#### 7.5 Analytics (eventi + aggregazioni)
-- Eventi FE → `POST /api/track`:
-  - `pellicola_impression` (quando sezione entra in viewport; include campagna/ref se presente; modalità home)
-  - `pellicola_video_view` (quando un tile video raggiunge soglia visibilità/durata minima o start play effettivo)
-  - `pellicola_click_profilo` (criterio richiesto): payload con `creator/slug`, `posizione`, `modalità` (pubblico|segreto), `campagna/ref/fonte`.
-- Admin analytics:
-  - Nuovo endpoint `GET /api/admin/analytics/pellicola` con aggregazioni per range (oggi/7g/30g): impression, view video, click, CTR; breakdown per modella + modalità.
+#### 8.2 DEMO/REALE: rilevamento + override manuale per media
+**Problema:** non affidarsi solo al riconoscimento automatico dell’URL (CDN/URL esterni). 
 
-#### 7.6 Frontend FilmStrip (definitivo)
-- Riscrittura `FilmStrip`:
-  - Marquee “infinito” **seamless** (duplicazione contenuti + animazione translateX(-50%) senza gap/reset visibile).
-  - Nessun controllo UI da carousel (no frecce/pallini).
-  - Autoplay `muted`, `loop`, `playsInline`, senza controlli visibili.
-  - Touch/hover: pausa o rallenta temporaneamente (configurabile), micro-zoom/glow + overlay.
-  - Modalità segreta: overlay/gradient/fumo e palette bordeaux/viola/oro; nessun cambio “a scatto”.
-  - **Continuity requirement:** lo switch Pubblico/Segreto non deve resettare la posizione del movimento né mostrare video neri.
-  - Performance:
-    - massimo **8 video attivi** (config) con un “active-cap manager”: solo i tile vicini al viewport riproducono/sono caricati.
-    - IntersectionObserver per:
-      - pausa totale quando sezione fuori viewport;
-      - play/pause delle tile in viewport;
-      - lazy-load `src` solo quando necessario.
-    - Poster fallback sempre presente (immagine) prima del play e in caso di errore (no black frame).
-  - A11y:
-    - `prefers-reduced-motion`: scorrimento disattivato o molto ridotto + tile statiche.
-    - focus-visible su tile, navigazione tastiera non bloccata.
-  - Tracking:
-    - impression/video view/click con `session_id` e attribuzione.
+**Soluzione**
+- Mantenere heuristics automatiche (stock hosts + /media/ + *_demo), ma introdurre per ogni media un campo:
+  - `stato_contenuto`: `AUTO` | `DEMO` | `REALE` (default: `AUTO`)
+- Se `REALE` manuale: il sistema lo tratta come reale anche se URL “sospetto”.
+- Se `DEMO` manuale: forzare demo anche se URL sembra reale.
 
-#### 7.7 Integrazione Home
-- Inserire “IN MOVIMENTO” nella Home dopo ~10 modelle:
-  - render: prime N card → FilmStrip → resto griglia.
-  - Deve funzionare con filtri Home senza rompere layout.
-  - In modalità segreta Home, FilmStrip usa i media segreti, stessa velocità/posizione.
+**Copertura:**
+- Foto card / hero / teaser / secret hero
+- Media pairs (pubblico+segreto) incl. poster video
+- Pellicola Home (pubblico+segreto) incl. poster
+- Media messaggio segreto (foto/video)
+- (Opzionale) link esterni: mantenere solo AUTO demo-detection per “*_demo”, ma non bloccare PRONTA per social.
 
-#### 7.8 Admin UI
-- ModelEditor: nuova sezione “PELLICOLA HOME” per modella:
-  - Toggle mostra sì/no;
-  - UploadField video/poster pubblico e segreto;
-  - priorità 1–10;
-  - ordine manuale.
-- AdminSettings: nuova sezione “HOME → PELLICOLA”:
-  - attiva, titolo, sottotitolo;
-  - velocità;
-  - max video attivi (default 8);
-  - pausa su touch;
-  - nomi sempre visibili;
-  - seconda fila (predisposta ma OFF di default);
-  - posizione inserimento (dopo N card).
+#### 8.3 Checklist “Pronta alla pubblicazione” (SOLO obbligatori)
+**Default requisiti obbligatori**
+- conferma maggiorenne
+- nome
+- slug
+- foto card
+- **≥ 3 foto pubbliche** (da `media_pairs` tipo image lato pubblico)
+- **≥ 3 foto segrete** (da `media_pairs` tipo image lato segreto)
+- **≥ 1 video pubblico** (da `media_pairs` tipo video lato pubblico)
+- **≥ 1 video segreto** (da `media_pairs` tipo video lato segreto)
+- descrizione pubblica
+- descrizione segreta
+- claim (frase breve)
+- link OnlyFans
 
-#### 7.9 Teaser demo (rigenerazione)
-- Aggiornare `/scripts/gen_clips.sh` per produrre clip verticali **10–15s** (target demo ~12s) con motion naturale:
-  - Ken Burns delicato + crop/zoom; evitare slow-motion “brutto” e ripetizioni evidenti.
-  - Se si usa loop: render loop **seamless** (boomerang o crossfade) per evitare stacco.
-  - Compressione mobile: H.264, CRF adeguato, `+faststart`, dimensione contenuta.
-  - Rigenerare poster coerenti.
+**Requisiti condizionali (Pellicola)**
+- Se “Mostra nella pellicola” = SÌ:
+  - video pellicola pubblico
+  - video pellicola segreto
 
-#### 7.10 Test end-to-end (obbligatorio)
-- Build + smoke test.
-- Testing agent su scenari:
-  - Home 390×844: pellicola visibile con 2 video + partial, autoplay ok.
-  - Scroll: nessun overflow/jank; se fuori viewport: video in pausa.
-  - Touch/hover: pausa/ripresa; overlay e click verso profilo.
-  - Switch Home Pubblico→Segreto: trasformazione pellicola **senza reset** e senza video neri.
-  - Cap 8 video attivi rispettato.
-  - Analytics: impression/video view/click registrati; attribuzione ref/fonte/campagna mantenuta fino a click OF (funnel).
-  - Regressioni: trasformazione profilo, admin CRUD, campagne, articoli/SEO, analytics esistenti.
+**Non obbligatori (mai blocco):** Instagram/TikTok/social, 2° video opzionale, Snapchat ecc.
 
-**Stato:** COMPLETATA — implementata end-to-end e verificata dal testing agent (iteration_6): frontend 100%, admin 100%, backend 98.5% (unico rilievo = falso positivo su age-validation, confermato HTTP 400 via curl). Pellicola seamless, cap 8 video attivi rispettato, poster fallback (no black), pausa fuori viewport, trasformazione Pubblico↔Segreto continua, analytics impression/video_view/click attive, teaser demo rigenerati a ~12s seamless. Seconda fila predisposta ma OFF di default.
+#### 8.4 Blocco pubblicazione (solo obbligatori) + errore strutturato
+- Backend:
+  - quando si tenta di impostare stato `pubblicata`, validare la checklist obbligatoria.
+  - se mancano campi: rispondere **HTTP 400** con payload strutturato:
+    - `detail`: "NON PUOI ANCORA PUBBLICARE"
+    - `missing_required`: ["Foto Segreta 2", "Video Segreto", "Link OnlyFans", ...]
+    - `missing_count`: N
+- Frontend admin:
+  - mostrare dialog/alert premium con titolo, lista mancanti e CTA **COMPLETA PROFILO**.
+
+#### 8.5 Lista MODELLE: filtri + conteggi
+Aggiungere filtri:
+- TUTTE
+- SOLO DEMO
+- SOLO REALI
+- INCOMPLETE
+- PRONTE ALLA PUBBLICAZIONE
+
+Mostrare conteggi nel UI (es. “TUTTE 48 · DEMO 31 · REALI 17 · INCOMPLETE 8”).
+
+#### 8.6 Editor modella: checklist chiara + stato complessivo
+- Nuovo pannello “CHECKLIST PUBBLICAZIONE” (required + optional):
+  - ✅ / ⚠ / ❌ con label esplicite (come esempio utente)
+  - in fondo: “PRONTA ✅” oppure “MANCANO N ELEMENTI OBBLIGATORI”
+- Integrare con pannello DEMO già presente, ma separando:
+  - “DEMO/REALE” (per contenuti temporanei)
+  - “INCOMPLETA/PRONTA” (per requisiti)
+
+#### 8.7 Import Rapido media (multi-file drag & drop)
+Obiettivo: evitare 15 upload singoli.
+- UI: “IMPORT RAPIDO” nell’editor modella
+- supporto multi-selezione file + drag & drop
+- flow:
+  1) carica batch (object storage) 
+  2) mostra lista file con anteprima
+  3) assegnazione rapida a “slot” (Foto Pubblica 1, Foto Segreta 1, ... Video Pubblico, Video Segreto, Pellicola, poster)
+  4) supporto drag & drop + dropdown per slot
+
+#### 8.8 Import multiplo da URL (incolla più link)
+- UI: textarea “INCOLLA PIÙ LINK” (uno per riga)
+- backend service (o FE fetch) per scaricare e validare (dimensione/MIME), poi upload su storage
+- prima del salvataggio: **anteprima** + assegnazione a slot
+
+#### 8.9 Duplica configurazione (no contenuti personali)
+Funzione: “COPIA IMPOSTAZIONI DA UN’ALTRA MODELLA”
+- Copiare SOLO configurazione:
+  - preset tema segreto
+  - regia (fumo/luci/glow/movimento + suoni)
+  - CTA temporizzata (timer/copy/stile)
+  - messaggio 35s (timer/testo/CTA **senza** media)
+  - impostazioni pellicola (toggle/priorità/ordine, ma **senza** media)
+- Non copiare: foto/video/poster, bio, claim, onlyfans, social.
+
+#### 8.10 Anteprima completa admin per bozze (non indicizzabile)
+- Obiettivo: aprire il profilo come utente, anche se in bozza, ma **solo per admin**.
+- Backend:
+  - estendere GET model endpoints per accettare `stato=bozza` se request ha token admin valido.
+  - response con header/meta `noindex` (o flag API) per la pagina.
+- Frontend:
+  - bottone “ANTEPRIMA SITO” in ModelEditor
+  - apre `/modelle/{slug}?preview=1` (o route dedicata) e il frontend imposta `noindex` via `setSeo({noindex:true})`.
+
+#### 8.11 Test end-to-end (obbligatorio)
+Scenario completo:
+1) crea nuova modella → stato iniziale INCOMPLETA
+2) import rapido media (multi-file)
+3) pairing Pubblico↔Segreto + poster
+4) inserisci descrizioni + claim + link OF
+5) conferma maggiorenne
+6) attiva pellicola + inserisci video pellicola
+7) stato diventa PRONTA
+8) apri anteprima (solo admin, noindex)
+9) pubblica
+10) modella appare in Home
+11) Lato Segreto funziona
+12) Pellicola funziona
+13) analytics funzionano
+
+**Stato:** COMPLETATA — implementata end-to-end e verificata dal testing agent (iteration_7): backend 100% (46/46), frontend 100%. Override manuale per-media rispettato (nessun falso positivo con URL demo-looking), blocco pubblicazione solo su obbligatori con 400 strutturato + modale "COMPLETA PROFILO", filtri+conteggi lista, checklist editor, Import Rapido (file+URL), Copia configurazione (solo config), Anteprima admin bozze non indicizzabile. Design pubblico invariato.
 
 ---
 
 ## 3) Next Actions
-1. Implementare Phase 7 end-to-end (backend schema+seed+routes, admin settings/editor, frontend FilmStrip definitivo + integrazione Home, rigenerazione teaser ~12s, analytics + aggregazioni).
-2. Eseguire build e poi **testing agent** focalizzato su mobile 390×844 e seamless continuity.
-3. Aggiornare questo plan.md marcando Phase 7 come completata solo dopo report di test.
+1. Implementare Phase 8 (override manuale per-media, checklist required, filtri lista, blocco pubblicazione con errori strutturati, import rapido file+URL, copia configurazione, anteprima admin bozza).
+2. Test end-to-end dello scenario di creazione modella fino a pubblicazione senza modificare codice.
+3. Aggiornare questo plan.md con stato “COMPLETATA” per Phase 8 solo dopo testing agent.
 
 ---
 
@@ -273,7 +242,15 @@ Nuova sezione in Home (dopo ~8–12 modelle) con fascia orizzontale di teaser vi
 - Trasformazione Lato Pubblico→Segreto: stessa URL, zero refresh, 600–1200ms, percezione “luxury cinematic”, reverse ok, reduced-motion ok.
 - Home: griglia premium + filtri+search+Sorprendimi + stato “scoperto” persistente.
 - Conversion: CTA OnlyFans tracciate per sorgente + messaggio ~35s con regole corrette.
-- Admin: login sicuro + CRUD completo + pairing media + publish workflow con check “creator maggiorenne”.
+- Admin: login sicuro + CRUD completo + pairing media + publish workflow robusto.
 - Analytics: funnel e leaderboard basati su eventi reali + campagne/referral.
 - SEO best-possible (senza SSR): meta dinamici, canonical, OG, structured data, sitemap/robots, categorie+articoli indicizzabili.
 - **IN MOVIMENTO:** pellicola seamless (nessun salto/reset/spazio vuoto), autoplay affidabile, poster fallback (no video neri), max 8 video attivi, pausa fuori viewport, trasformazione Pubblico↔Segreto continua e cinematografica, tracking completo (impression/view/click) e attribuzione end-to-end.
+- **Workflow contenuti (Phase 8):**
+  - DEMO/REALE affidabile con override manuale per-media
+  - distinzione chiara DEMO vs INCOMPLETA/PRONTA/PUBBLICATA
+  - blocco pubblicazione solo su required, con lista mancanti e CTA “Completa profilo”
+  - filtri admin con conteggi
+  - import rapido file/URL + assegnazione slot + anteprima
+  - copia configurazione senza contenuti personali
+  - anteprima admin bozza non indicizzabile

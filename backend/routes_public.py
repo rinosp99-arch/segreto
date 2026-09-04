@@ -9,8 +9,17 @@ from database import (
 )
 from schemas import TrackEventIn
 from storage import get_object
+from auth import decode_token
 
 public_router = APIRouter(prefix="/api")
+
+
+def _is_admin_request(request: Request) -> bool:
+    auth = request.headers.get("authorization") or request.headers.get("Authorization") or ""
+    if not auth.lower().startswith("bearer "):
+        return False
+    token = auth.split(" ", 1)[1].strip()
+    return decode_token(token) is not None
 
 PUBLIC_FIELDS = {
     "id", "nome", "nome_artistico", "slug", "frase", "bio", "foto_copertina",
@@ -80,17 +89,25 @@ async def list_models(
 
 
 @public_router.get("/models/{slug}")
-async def get_model(slug: str):
+async def get_model(slug: str, request: Request):
     doc = await models_col.find_one({"slug": slug, "stato": "pubblicata"}, {"_id": 0})
+    anteprima = False
+    if not doc and _is_admin_request(request):
+        doc = await models_col.find_one({"slug": slug}, {"_id": 0})
+        anteprima = bool(doc)
     if not doc:
         raise HTTPException(status_code=404, detail="Modella non trovata")
     vc = await view_counts()
-    return public_projection(doc, vc.get(doc["id"], 0))
+    out = public_projection(doc, vc.get(doc["id"], 0))
+    out["anteprima"] = anteprima
+    return out
 
 
 @public_router.get("/models/{slug}/segreto")
-async def get_model_secret(slug: str):
+async def get_model_secret(slug: str, request: Request):
     doc = await models_col.find_one({"slug": slug, "stato": "pubblicata"}, {"_id": 0})
+    if not doc and _is_admin_request(request):
+        doc = await models_col.find_one({"slug": slug}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Modella non trovata")
     d = serialize_doc(doc)

@@ -1,26 +1,38 @@
 [
   {
-    "content": "Backend: content_status helper to detect DEMO vs REAL content per model",
+    "content": "Backend: schemas add content_overrides; content_status rewrite (overrides + readiness + stato_operativo)",
     "status": "completed"
   },
   {
-    "content": "Backend: expose content_status in admin model list + detail",
+    "content": "Backend routes_admin: list counts+states, publish block (structured 400), copy-config endpoint",
     "status": "completed"
   },
   {
-    "content": "Admin UI: DEMO/REALE badge + summary in AdminModels list",
+    "content": "Backend routes_public: admin preview of drafts (optional token) + anteprima flag",
     "status": "completed"
   },
   {
-    "content": "Admin UI: 'Stato contenuti' panel in ModelEditor listing demo fields",
+    "content": "adminApi: add copyConfig + preview helpers",
     "status": "completed"
   },
   {
-    "content": "ModelEditor: add editable poster for video pairs + main CTA field",
+    "content": "AdminModels: filters TUTTE/DEMO/REALI/INCOMPLETE/PRONTE + counts + state badges",
     "status": "completed"
   },
   {
-    "content": "Build check + backend curl test + screenshots",
+    "content": "UploadField: per-media stato_contenuto override selector",
+    "status": "completed"
+  },
+  {
+    "content": "ModelEditor: checklist panel, publish-block dialog, ANTEPRIMA button, Copia config, Import Rapido (file+URL) with slot assignment",
+    "status": "completed"
+  },
+  {
+    "content": "ModelProfile: noindex for admin preview",
+    "status": "completed"
+  },
+  {
+    "content": "Build + backend curl tests + end-to-end testing agent",
     "status": "completed"
   }
 ]

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { admGetModels, admSetStatus, admDeleteModel, admReorder } from '@/lib/adminApi';
 import { mediaUrl } from '@/lib/api';
@@ -12,21 +12,49 @@ const STATO_STYLE = {
   disattivata: { c: 'hsl(0 55% 60%)', b: 'hsl(0 55% 60% / 0.4)' },
 };
 
+const OP_STYLE = {
+  pubblicata: { c: 'hsl(150 45% 58%)', l: 'PUBBLICATA' },
+  pronta: { c: 'hsl(190 55% 60%)', l: 'PRONTA' },
+  incompleta: { c: 'hsl(38 75% 60%)', l: 'INCOMPLETA' },
+};
+
+const FILTERS = [
+  { k: 'tutte', l: 'Tutte' },
+  { k: 'demo', l: 'Solo Demo' },
+  { k: 'reali', l: 'Solo Reali' },
+  { k: 'incomplete', l: 'Incomplete' },
+  { k: 'pronte', l: 'Pronte alla pubblicazione' },
+];
+
 export default function AdminModels() {
   const [items, setItems] = useState([]);
+  const [counts, setCounts] = useState({ tutte: 0, demo: 0, reali: 0, incomplete: 0, pronte: 0 });
   const [loading, setLoading] = useState(true);
-  const [demoTot, setDemoTot] = useState(0);
+  const [filter, setFilter] = useState('tutte');
 
   const load = () => {
     setLoading(true);
-    admGetModels().then((d) => { setItems(d.items || []); setDemoTot(d.demo_totale || 0); }).finally(() => setLoading(false));
+    admGetModels().then((d) => { setItems(d.items || []); setCounts(d.counts || counts); }).finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, []);
+
+  const filtered = useMemo(() => items.filter((m) => {
+    const cs = m.content_status || {}; const rd = m.readiness || {}; const op = m.stato_operativo;
+    if (filter === 'demo') return cs.is_demo;
+    if (filter === 'reali') return !cs.is_demo;
+    if (filter === 'incomplete') return op === 'incompleta';
+    if (filter === 'pronte') return rd.is_ready && m.stato !== 'pubblicata';
+    return true;
+  }), [items, filter]);
 
   const toggleStatus = async (m) => {
     const next = m.stato === 'pubblicata' ? 'bozza' : 'pubblicata';
     try { await admSetStatus(m.id, next); toast.success(next === 'pubblicata' ? 'Pubblicata' : 'Messa in bozza'); load(); }
-    catch (e) { toast.error(e?.response?.data?.detail || 'Errore'); }
+    catch (e) {
+      const det = e?.response?.data?.detail;
+      if (det && det.missing_required) toast.error(`${det.message}: mancano ${det.missing_count} elementi obbligatori`);
+      else toast.error(det || 'Errore');
+    }
   };
   const del = async (m) => { if (!window.confirm(`Eliminare ${m.nome_artistico}?`)) return; await admDeleteModel(m.id); toast.success('Eliminata'); load(); };
   const move = async (idx, dir) => {
@@ -42,21 +70,35 @@ export default function AdminModels() {
         <Link to="/admin/modelle/nuova"><Btn data-testid="new-model-button"><Plus className="h-4 w-4" /> Nuova modella</Btn></Link>
       </div>
 
-      {!loading && items.length > 0 && (
-        <div className="flex items-center gap-3 mb-4 p-3 rounded-xl border border-border/60 bg-card" data-testid="demo-summary">
-          <span className="caps-label text-muted-foreground">Stato contenuti</span>
-          <span className="text-sm">
-            <span className="gold-text font-semibold" data-testid="demo-count">{demoTot}</span> con contenuti <span style={{ color: 'hsl(38 75% 60%)' }}>DEMO</span>
-            <span className="text-muted-foreground"> · </span>
-            <span style={{ color: 'hsl(150 45% 58%)' }} className="font-semibold">{items.length - demoTot}</span> con contenuti REALI
-          </span>
-          <span className="ml-auto text-xs text-muted-foreground">su {items.length} totali</span>
+      {!loading && (
+        <div className="mb-4" data-testid="demo-summary">
+          <div className="text-sm mb-3">
+            <span className="caps-label text-muted-foreground mr-2">Stato contenuti</span>
+            TUTTE <span className="font-semibold">{counts.tutte}</span>
+            <span className="text-muted-foreground"> · </span>DEMO <span style={{ color: 'hsl(38 75% 60%)' }} className="font-semibold" data-testid="demo-count">{counts.demo}</span>
+            <span className="text-muted-foreground"> · </span>REALI <span style={{ color: 'hsl(150 45% 58%)' }} className="font-semibold">{counts.reali}</span>
+            <span className="text-muted-foreground"> · </span>INCOMPLETE <span style={{ color: 'hsl(38 75% 60%)' }} className="font-semibold">{counts.incomplete}</span>
+            <span className="text-muted-foreground"> · </span>PRONTE <span style={{ color: 'hsl(190 55% 60%)' }} className="font-semibold">{counts.pronte}</span>
+          </div>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar" data-testid="models-filters">
+            {FILTERS.map((f) => (
+              <button key={f.k} onClick={() => setFilter(f.k)} data-testid={`filter-${f.k}`}
+                className="shrink-0 caps-label px-3 py-1.5 rounded-full border text-xs transition-colors"
+                style={filter === f.k ? { background: 'hsl(var(--primary)/0.16)', borderColor: 'hsl(var(--primary)/0.45)', color: 'hsl(var(--primary))' } : { borderColor: 'hsl(var(--border))', color: 'hsl(var(--muted-foreground))' }}>
+                {f.l}
+              </button>
+            ))}
+          </div>
         </div>
       )}
+
       {loading ? <div className="h-40 animate-pulse bg-muted/40 rounded-2xl" /> : (
         <div className="space-y-2" data-testid="admin-models-list">
-          {items.map((m, i) => {
+          {filtered.length === 0 && <div className="py-14 text-center text-muted-foreground">Nessuna modella per questo filtro.</div>}
+          {filtered.map((m) => {
+            const i = items.indexOf(m);
             const ss = STATO_STYLE[m.stato] || STATO_STYLE.bozza;
+            const op = OP_STYLE[m.stato_operativo] || OP_STYLE.incompleta;
             return (
               <div key={m.id} className="flex items-center gap-3 rounded-xl border border-border/60 bg-card p-3" data-testid="admin-model-row">
                 <div className="flex flex-col">
@@ -69,12 +111,11 @@ export default function AdminModels() {
                   <div className="text-xs text-muted-foreground truncate">/{m.slug} {m.badge ? `· ${m.badge}` : ''}</div>
                 </div>
                 {m.content_status && (
-                  m.content_status.is_demo ? (
-                    <span className="caps-label px-2.5 py-1 rounded-full text-[10px]" title={`Demo: ${m.content_status.demo_fields.join(', ')}`} style={{ color: 'hsl(38 75% 60%)', border: '1px solid hsl(38 75% 60% / 0.4)' }} data-testid="content-badge-demo">DEMO</span>
-                  ) : (
-                    <span className="caps-label px-2.5 py-1 rounded-full text-[10px]" style={{ color: 'hsl(150 45% 58%)', border: '1px solid hsl(150 45% 58% / 0.4)' }} data-testid="content-badge-real">REALE</span>
-                  )
+                  m.content_status.is_demo
+                    ? <span className="caps-label px-2.5 py-1 rounded-full text-[10px]" title={`Demo: ${m.content_status.demo_fields.join(', ')}`} style={{ color: 'hsl(38 75% 60%)', border: '1px solid hsl(38 75% 60% / 0.4)' }} data-testid="content-badge-demo">DEMO</span>
+                    : <span className="caps-label px-2.5 py-1 rounded-full text-[10px]" style={{ color: 'hsl(150 45% 58%)', border: '1px solid hsl(150 45% 58% / 0.4)' }} data-testid="content-badge-real">REALE</span>
                 )}
+                <span className="caps-label px-2.5 py-1 rounded-full text-[10px]" style={{ color: op.c, border: `1px solid ${op.c.replace(')', ' / 0.4)')}` }} data-testid="op-badge">{op.l}</span>
                 <span className="caps-label px-2.5 py-1 rounded-full text-[10px]" style={{ color: ss.c, border: `1px solid ${ss.b}` }}>{m.stato}</span>
                 <button onClick={() => toggleStatus(m)} className="text-xs px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground">{m.stato === 'pubblicata' ? 'Bozza' : 'Pubblica'}</button>
                 <Link to={`/admin/modelle/${m.id}`} className="h-9 w-9 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground"><Pencil className="h-4 w-4" /></Link>
