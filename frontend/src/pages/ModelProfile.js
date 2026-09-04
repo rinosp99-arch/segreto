@@ -117,13 +117,13 @@ export default function ModelProfile() {
 
     setPhase('blackout');
     if (soundOn) setTimeout(playWhoosh, 60);
-    await wait(230);
+    await wait(300);
     applyTheme(true); setSecret(true);
     if (soundOn) playImpact();
     setPhase('flash');
-    await wait(100);
+    await wait(110);
     setPhase('reveal');
-    await wait(160);
+    await wait(240);
     setPhase('idle');
     setTransforming(false);
     secretEnteredAt.current = Date.now();
@@ -191,17 +191,25 @@ export default function ModelProfile() {
   const videoPairs = pairs.filter((p) => p.tipo === 'video').slice(0, 2);
   const topTiles = [
     { pair: imagePairs[0], effect: 'flash', delay: 0 },
-    { pair: imagePairs[1], effect: 'blur', delay: 80 },
-    { pair: videoPairs[0], effect: 'glitch', delay: 160 },
-    { pair: imagePairs[2], effect: 'sweep', delay: 240 },
+    { pair: imagePairs[1], effect: 'blur', delay: 150 },
+    { pair: videoPairs[0], effect: 'glitch', delay: 300 },
+    { pair: imagePairs[2], effect: 'sweep', delay: 450 },
   ].filter((t) => t.pair);
-  const wideTile = videoPairs[1] ? { pair: videoPairs[1], effect: 'fadeblack', delay: 320 } : null;
+  const wideTile = videoPairs[1] ? { pair: videoPairs[1], effect: 'fadeblack', delay: 600 } : null;
   const tema = secretData?.tema || {};
   const themeStyle = secret ? { '--primary': tema.colore_primario, '--accent': tema.colore_secondario } : {};
   const ctaLabel = secretData?.cta_testo || model.cta_testo || 'CONTINUA CON ME';
 
   return (
     <div style={themeStyle} onScroll={registerInteraction} onPointerDown={registerInteraction}>
+      {/* secret ambience: fumo, luci da palco, glow bordeaux */}
+      {secret && (
+        <div className="secret-ambience" data-testid="secret-ambience" aria-hidden>
+          <div className="blob b1" /><div className="blob b2" /><div className="blob b3" />
+          <div className="beam" style={{ left: '18%' }} /><div className="beam beam2" style={{ left: '62%' }} />
+          <div className="grainlayer" />
+        </div>
+      )}
       {/* transformation overlays */}
       <div className="fixed inset-0 z-[95] pointer-events-none" style={{ background: 'rgba(4,2,6,1)', opacity: (phase === 'blackout' || phase === 'flash') ? 1 : 0, transition: 'opacity 200ms ease' }} data-testid="theme-blackout-overlay" />
       <div className="fixed inset-0 z-[96] pointer-events-none" style={{ background: 'radial-gradient(circle at 50% 40%, hsl(38 40% 88% / 0.9), hsl(350 40% 40% / 0.2))', opacity: phase === 'flash' ? 0.8 : 0, transition: 'opacity 90ms ease' }} />
@@ -213,7 +221,7 @@ export default function ModelProfile() {
         )}
       </AnimatePresence>
 
-      <div className="max-w-5xl mx-auto px-4 lg:px-8 pt-4 pb-16">
+      <div className="relative z-10 max-w-5xl mx-auto px-4 lg:px-8 pt-4 pb-16">
         <div className="flex items-center justify-between mb-4">
           <Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"><ArrowLeft className="h-4 w-4" /> Tutte le modelle</Link>
           <button onClick={() => setSoundOn((v) => !v)} data-testid="sound-toggle" className="h-9 w-9 flex items-center justify-center rounded-full border border-border text-muted-foreground hover:text-foreground transition-colors" aria-label="Audio">
@@ -238,39 +246,41 @@ export default function ModelProfile() {
           </AnimatePresence>
         </div>
 
+        {/* TRIGGER / REVERT — posizione premium sopra la griglia */}
+        <div className="flex justify-center mb-6">
+          {!secret ? (
+            <div className="text-center w-full sm:w-auto">
+              <motion.button onClick={activate} disabled={transforming} data-testid="secret-trigger-button"
+                whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.94, y: 2 }}
+                className="group relative inline-flex items-center gap-3 rounded-2xl px-8 sm:px-10 py-5 overflow-hidden w-full sm:w-auto justify-center"
+                style={{ background: 'linear-gradient(180deg, hsl(var(--card)), hsl(var(--secondary)))', border: '1px solid hsl(var(--primary) / 0.55)', boxShadow: '0 0 0 1px hsl(var(--primary)/0.15), 0 0 40px hsl(var(--primary)/0.28), inset 0 1px 0 hsl(40 40% 80% / 0.15)' }}>
+                <span className="absolute inset-0 opacity-70 group-hover:opacity-100 transition-opacity" style={{ background: 'radial-gradient(120% 140% at 50% 0%, hsl(var(--primary)/0.18), transparent 65%)' }} />
+                <span className="h-10 w-10 rounded-full flex items-center justify-center shrink-0" style={{ background: 'hsl(var(--wine) / 0.4)', border: '1px solid hsl(var(--primary)/0.5)' }}><Lock className="h-5 w-5" style={{ color: 'hsl(var(--primary))' }} /></span>
+                <span className="relative font-serif text-2xl sm:text-3xl tracking-wide">{tema?.frase_attivazione || 'NON DOVRESTI PREMERLO'}</span>
+              </motion.button>
+              <div className="text-[11px] text-muted-foreground mt-2.5">…e infatti non dovresti.</div>
+            </div>
+          ) : (
+            <button onClick={revert} data-testid="revert-button" className="inline-flex items-center gap-2 text-sm px-6 py-3 rounded-full transition-colors" style={{ border: '1px solid hsl(var(--primary)/0.4)', color: 'hsl(var(--primary))', background: 'hsl(var(--primary)/0.08)' }}>
+              <ArrowLeft className="h-4 w-4" /> Ritorna al Lato Pubblico
+            </button>
+          )}
+        </div>
+
         {/* MEDIA GRID (vetrina) */}
         <div ref={gridRef} onMouseMove={onGridMove} onTouchMove={onGridMove} className="relative" data-testid="media-grid">
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
             {topTiles.map((t, i) => (
-              <MediaMorph key={t.pair.id || i} pub={t.pair.pubblico} sec={t.pair.segreto} secret={secret} reduced={reduced} effect={t.effect} delay={t.delay} ratio="3 / 4" className="rounded-2xl border border-border/60 card-elev" />
+              <MediaMorph key={t.pair.id || i} pub={t.pair.pubblico} sec={t.pair.segreto} secret={secret} reduced={reduced} effect={t.effect} delay={t.delay} ambient={secret} ratio="3 / 4" className="rounded-2xl border border-border/60 card-elev" />
             ))}
             {wideTile && (
               <div className="col-span-2">
-                <MediaMorph pub={wideTile.pair.pubblico} sec={wideTile.pair.segreto} secret={secret} reduced={reduced} effect={wideTile.effect} delay={wideTile.delay} ratio="16 / 9" className="rounded-2xl border border-border/60 card-elev" />
+                <MediaMorph pub={wideTile.pair.pubblico} sec={wideTile.pair.segreto} secret={secret} reduced={reduced} effect={wideTile.effect} delay={wideTile.delay} ambient={secret} ratio="16 / 9" className="rounded-2xl border border-border/60 card-elev" />
               </div>
             )}
           </div>
           {secret && !reduced && (
             <div className="absolute inset-0 pointer-events-none rounded-2xl" style={{ background: 'radial-gradient(260px circle at var(--mx,50%) var(--my,40%), hsl(var(--primary)/0.15), transparent 60%)' }} />
-          )}
-        </div>
-
-        {/* TRIGGER / REVERT */}
-        <div className="flex justify-center my-9">
-          {!secret ? (
-            <div className="text-center">
-              <motion.button onClick={activate} disabled={transforming} data-testid="secret-trigger-button" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
-                className="group relative inline-flex items-center gap-3 rounded-2xl px-8 py-5 glass card-elev-2 overflow-hidden">
-                <span className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: 'radial-gradient(120% 120% at 50% 0%, hsl(var(--primary)/0.14), transparent 70%)' }} />
-                <span className="h-9 w-9 rounded-full flex items-center justify-center shrink-0" style={{ background: 'hsl(var(--wine) / 0.35)', border: '1px solid hsl(var(--primary)/0.4)' }}><Lock className="h-4 w-4" style={{ color: 'hsl(var(--primary))' }} /></span>
-                <span className="relative font-serif text-xl sm:text-2xl tracking-wide">{tema?.frase_attivazione || 'NON DOVRESTI PREMERLO'}</span>
-              </motion.button>
-              <div className="text-[11px] text-muted-foreground mt-3">…e infatti non dovresti.</div>
-            </div>
-          ) : (
-            <button onClick={revert} data-testid="revert-button" className="inline-flex items-center gap-2 text-sm px-5 py-2.5 rounded-full border border-border hover:border-primary/50 text-muted-foreground hover:text-foreground transition-colors">
-              <ArrowLeft className="h-4 w-4" /> Ritorna al Lato Pubblico
-            </button>
           )}
         </div>
 

@@ -19,7 +19,7 @@ function Layer({ item, active, reduced, grade, visible, extraFilter }) {
       opacity: active ? 1 : 0,
       transform: active ? 'scale(1)' : 'scale(1.05)',
       filter: `${baseGrade} ${extraFilter || ''}`.trim() || 'none',
-      transition: reduced ? 'opacity 260ms ease' : 'opacity 520ms cubic-bezier(0.2,0.8,0.2,1), transform 900ms cubic-bezier(0.2,0.8,0.2,1), filter 400ms ease',
+      transition: reduced ? 'opacity 300ms ease' : 'opacity 900ms cubic-bezier(0.2,0.8,0.2,1), transform 1300ms cubic-bezier(0.2,0.8,0.2,1), filter 600ms ease',
     },
   };
   if (item.tipo === 'video') {
@@ -28,7 +28,7 @@ function Layer({ item, active, reduced, grade, visible, extraFilter }) {
   return <img src={src} alt={item.alt || ''} loading="lazy" decoding="async" {...common} />;
 }
 
-export function MediaMorph({ pub, sec, secret, reduced, effect = 'flash', delay = 0, className = '', ratio = '3 / 4' }) {
+export function MediaMorph({ pub, sec, secret, reduced, effect = 'flash', delay = 0, ambient = false, className = '', ratio = '3 / 4' }) {
   const wrapRef = useRef(null);
   const [visible, setVisible] = useState(false);
   const [shown, setShown] = useState(secret);
@@ -55,9 +55,12 @@ export function MediaMorph({ pub, sec, secret, reduced, effect = 'flash', delay 
   const glitch = (fx && effect === 'glitch') ? { transform: 'translateX(1.5px) skewX(-1deg)', filter: 'hue-rotate(20deg)' } : {};
 
   return (
-    <div ref={wrapRef} className={`relative overflow-hidden bg-muted/40 ${className}`} style={{ aspectRatio: ratio, ...glitch, transition: 'transform 120ms ease, filter 120ms ease' }} data-testid="media-tile">
+    <div ref={wrapRef} className={`relative overflow-hidden bg-muted/40 ${showSec && ambient ? 'secret-tile' : ''} ${className}`} style={{ aspectRatio: ratio, ...glitch, transition: 'transform 120ms ease, filter 120ms ease, box-shadow 600ms ease' }} data-testid="media-tile">
       <Layer item={pub} active={!showSec} reduced={reduced} visible={visible} />
       {sec && sec.url && <Layer item={sec} active={showSec} reduced={reduced} grade visible={visible} extraFilter={showSec ? blurFilter : ''} />}
+
+      {/* persistent stage-light sheen on secret tiles */}
+      {showSec && ambient && !reduced && <div className="secret-sheen" />}
 
       {/* flash */}
       {(effect === 'flash') && (
