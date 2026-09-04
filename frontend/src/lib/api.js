@@ -38,12 +38,14 @@ export const getPublicSettings = () => api.get('/settings').then((r) => r.data);
 // ---- tracking ----
 export function track(evt) {
   try {
-    const body = JSON.stringify(evt);
-    // navigator.sendBeacon is fire-and-forget, great for unload
+    let attr = null;
+    try { attr = JSON.parse(sessionStorage.getItem('ls_attr') || 'null'); } catch (e) { attr = null; }
+    const payload = attr ? { ref: attr.ref, fonte: attr.fonte, campagna: attr.campagna, ...evt } : evt;
+    const body = JSON.stringify(payload);
     if (evt._beacon && navigator.sendBeacon) {
       navigator.sendBeacon(`${API_BASE}/track`, new Blob([body], { type: 'application/json' }));
       return;
     }
-    api.post('/track', evt).catch(() => {});
+    api.post('/track', payload).catch(() => {});
   } catch (e) { /* noop */ }
 }

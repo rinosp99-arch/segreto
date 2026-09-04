@@ -182,6 +182,39 @@ async def timeseries(range: str = "30g", admin=Depends(get_current_admin)):
     return {"items": sorted(series.values(), key=lambda x: x["giorno"])}
 
 
+@analytics_router.get("/campaigns")
+async def campaigns(range: str = "30g", admin=Depends(get_current_admin)):
+    cut = cutoff_for(range)
+    match = {"ref": {"$nin": [None, ""]}}
+    if cut:
+        match["timestamp"] = {"$gte": cut}
+    agg = {}
+    async for r in events_col.aggregate([
+        {"$match": match},
+        {"$group": {"_id": {"ref": "$ref", "fonte": "$fonte", "campagna": "$campagna", "tipo": "$tipo"}, "n": {"$sum": 1}}},
+    ]):
+        k = (r["_id"].get("ref"), r["_id"].get("fonte") or "diretta", r["_id"].get("campagna") or "-")
+        agg.setdefault(k, {})[r["_id"]["tipo"]] = r["n"]
+    # map ref (slug) -> nome
+    names = {}
+    async for m in models_col.find({}, {"_id": 0, "slug": 1, "nome_artistico": 1}):
+        names[m["slug"]] = m["nome_artistico"]
+    items = []
+    for (ref, fonte, campagna), c in agg.items():
+        aperture = c.get("page_view", 0)
+        of = c.get("of_click", 0)
+        items.append({
+            "modella": names.get(ref, ref), "ref": ref, "fonte": fonte, "campagna": campagna,
+            "visite": c.get("landing", 0),
+            "aperture_profilo": aperture,
+            "attivazioni": c.get("secret_activate", 0),
+            "click_of": of,
+            "ctr_of": round(of / aperture * 100, 1) if aperture else 0,
+        })
+    items.sort(key=lambda x: x["aperture_profilo"], reverse=True)
+    return {"range": range, "items": items}
+
+
 @analytics_router.get("/articles")
 async def article_stats(range: str = "30g", admin=Depends(get_current_admin)):
     cut = cutoff_for(range)

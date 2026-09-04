@@ -32,7 +32,6 @@ export default function ModelProfile() {
 
   const [secret, setSecret] = useState(false);
   const [phase, setPhase] = useState('idle');
-  const [tileFlash, setTileFlash] = useState(false);
   const [transforming, setTransforming] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
 
@@ -110,7 +109,7 @@ export default function ModelProfile() {
     if (soundOn) playSwitch();
 
     if (reduced) {
-      applyTheme(true); setSecret(true); setTileFlash(true); setTimeout(() => setTileFlash(false), 240);
+      applyTheme(true); setSecret(true);
       secretEnteredAt.current = Date.now();
       track({ tipo: 'secret_activate', model_slug: slug, session_id: getSessionId(), valore: elapsed });
       markDiscovered(slug); startEnvelopeTimer(); setTransforming(false); return;
@@ -119,14 +118,13 @@ export default function ModelProfile() {
     setPhase('blackout');
     if (soundOn) setTimeout(playWhoosh, 60);
     await wait(230);
-    applyTheme(true); setSecret(true); setTileFlash(true);
+    applyTheme(true); setSecret(true);
     if (soundOn) playImpact();
     setPhase('flash');
     await wait(100);
     setPhase('reveal');
     await wait(160);
     setPhase('idle');
-    setTimeout(() => setTileFlash(false), 120);
     setTransforming(false);
     secretEnteredAt.current = Date.now();
     track({ tipo: 'secret_activate', model_slug: slug, session_id: getSessionId(), valore: elapsed });
@@ -191,9 +189,13 @@ export default function ModelProfile() {
   const pairs = (secretData?.media_pairs?.length ? secretData.media_pairs : fallbackPairs(model));
   const imagePairs = pairs.filter((p) => p.tipo === 'image').slice(0, 3);
   const videoPairs = pairs.filter((p) => p.tipo === 'video').slice(0, 2);
-  // grid order: [img0][img1] / [vid0][img2] / [vid1 full]
-  const topTiles = [imagePairs[0], imagePairs[1], videoPairs[0], imagePairs[2]].filter(Boolean);
-  const wideTile = videoPairs[1];
+  const topTiles = [
+    { pair: imagePairs[0], effect: 'flash', delay: 0 },
+    { pair: imagePairs[1], effect: 'blur', delay: 80 },
+    { pair: videoPairs[0], effect: 'glitch', delay: 160 },
+    { pair: imagePairs[2], effect: 'sweep', delay: 240 },
+  ].filter((t) => t.pair);
+  const wideTile = videoPairs[1] ? { pair: videoPairs[1], effect: 'fadeblack', delay: 320 } : null;
   const tema = secretData?.tema || {};
   const themeStyle = secret ? { '--primary': tema.colore_primario, '--accent': tema.colore_secondario } : {};
   const ctaLabel = secretData?.cta_testo || model.cta_testo || 'CONTINUA CON ME';
@@ -239,12 +241,12 @@ export default function ModelProfile() {
         {/* MEDIA GRID (vetrina) */}
         <div ref={gridRef} onMouseMove={onGridMove} onTouchMove={onGridMove} className="relative" data-testid="media-grid">
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
-            {topTiles.map((p, i) => (
-              <MediaMorph key={p.id || i} pub={p.pubblico} sec={p.segreto} secret={secret} reduced={reduced} flash={tileFlash} ratio="3 / 4" className="rounded-2xl border border-border/60 card-elev" />
+            {topTiles.map((t, i) => (
+              <MediaMorph key={t.pair.id || i} pub={t.pair.pubblico} sec={t.pair.segreto} secret={secret} reduced={reduced} effect={t.effect} delay={t.delay} ratio="3 / 4" className="rounded-2xl border border-border/60 card-elev" />
             ))}
             {wideTile && (
               <div className="col-span-2">
-                <MediaMorph pub={wideTile.pubblico} sec={wideTile.segreto} secret={secret} reduced={reduced} flash={tileFlash} ratio="16 / 9" className="rounded-2xl border border-border/60 card-elev" />
+                <MediaMorph pub={wideTile.pair.pubblico} sec={wideTile.pair.segreto} secret={secret} reduced={reduced} effect={wideTile.effect} delay={wideTile.delay} ratio="16 / 9" className="rounded-2xl border border-border/60 card-elev" />
               </div>
             )}
           </div>

@@ -383,6 +383,12 @@ class LatoSegretoTester:
         self.test("Analytics articles", "GET", "admin/analytics/articles?range=30g", 200,
                   check_response=lambda r: "items" in r)
 
+        # Campaign attribution
+        self.test("Analytics campaigns (30g)", "GET", "admin/analytics/campaigns?range=30g", 200,
+                  check_response=lambda r: "items" in r and "range" in r)
+        self.test("Analytics campaigns (7g)", "GET", "admin/analytics/campaigns?range=7g", 200)
+        self.test("Analytics campaigns (oggi)", "GET", "admin/analytics/campaigns?range=oggi", 200)
+
         # Model detail (if we have a model)
         if self.test_model_slug:
             # Get model ID from slug

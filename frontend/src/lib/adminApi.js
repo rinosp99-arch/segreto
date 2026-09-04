@@ -38,6 +38,7 @@ export const anModels = (range) => api.get('/admin/analytics/models', { params: 
 export const anModelDetail = (id, range) => api.get(`/admin/analytics/model/${id}`, { params: { range } }).then((r) => r.data);
 export const anTimeseries = (range) => api.get('/admin/analytics/timeseries', { params: { range } }).then((r) => r.data);
 export const anArticles = (range) => api.get('/admin/analytics/articles', { params: { range } }).then((r) => r.data);
+export const anCampaigns = (range) => api.get('/admin/analytics/campaigns', { params: { range } }).then((r) => r.data);
 
 // upload
 export async function uploadMedia(file) {

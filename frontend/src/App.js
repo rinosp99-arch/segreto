@@ -9,6 +9,8 @@ import CookieBanner from '@/components/CookieBanner';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { getSessionId } from '@/lib/session';
+import { captureAttribution } from '@/lib/attribution';
+import { track } from '@/lib/api';
 
 import Home from '@/pages/Home';
 import ModelProfile from '@/pages/ModelProfile';
@@ -26,6 +28,7 @@ import AdminCategories from '@/pages/admin/AdminCategories';
 import AdminArticles from '@/pages/admin/AdminArticles';
 import ArticleEditor from '@/pages/admin/ArticleEditor';
 import AdminAnalytics from '@/pages/admin/AdminAnalytics';
+import AdminCampaigns from '@/pages/admin/AdminCampaigns';
 import AdminSettings from '@/pages/admin/AdminSettings';
 
 function PublicLayout() {
@@ -47,7 +50,13 @@ function RequireAdmin({ children }) {
 export default function App() {
   const [homeMode, setHomeMode] = useState('public');
 
-  useEffect(() => { getSessionId(); }, []);
+  useEffect(() => {
+    getSessionId();
+    const attr = captureAttribution();
+    if (attr && attr.ref) {
+      track({ tipo: 'landing', model_slug: attr.ref, session_id: getSessionId() });
+    }
+  }, []);
 
   return (
     <ThemeCtx.Provider value={{ homeMode, setHomeMode }}>
@@ -80,6 +89,7 @@ export default function App() {
             <Route path="articoli/nuovo" element={<ArticleEditor />} />
             <Route path="articoli/:id" element={<ArticleEditor />} />
             <Route path="analytics" element={<AdminAnalytics />} />
+            <Route path="campagne" element={<AdminCampaigns />} />
             <Route path="impostazioni" element={<AdminSettings />} />
           </Route>
         </Routes>

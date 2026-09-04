@@ -143,6 +143,9 @@ class TrackEventIn(BaseModel):
     cta_source: Optional[str] = None
     valore: Optional[float] = None
     referrer: Optional[str] = None
+    ref: Optional[str] = None
+    fonte: Optional[str] = None
+    campagna: Optional[str] = None
     meta: Dict[str, Any] = {}
 
 

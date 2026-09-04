@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { admGetModel, admCreateModel, admUpdateModel, admGetCategories } from '@/lib/adminApi';
 import { mediaUrl } from '@/lib/api';
 import { SectionCard, Field, TextInput, TextArea, SelectInput, Toggle, Btn, UploadField } from '@/pages/admin/ui';
-import { Plus, Trash2, ArrowLeft } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, Copy, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
 const PRESETS = ['bordeaux', 'tattoo', 'dolce', 'sportiva', 'cosplay'];
@@ -30,6 +30,19 @@ export default function ModelEditor() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(!!id);
   const [previewSecret, setPreviewSecret] = useState(false);
+  const [linkFonte, setLinkFonte] = useState('instagram');
+  const [linkCampagna, setLinkCampagna] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const promoLink = () => {
+    const params = new URLSearchParams({ ref: m.slug || '', fonte: linkFonte });
+    if (linkCampagna.trim()) params.set('campagna', linkCampagna.trim());
+    return `${window.location.origin}/?${params.toString()}`;
+  };
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(promoLink()); setCopied(true); toast.success('Link copiato'); setTimeout(() => setCopied(false), 1800); }
+    catch { toast.error('Impossibile copiare'); }
+  };
 
   useEffect(() => { admGetCategories().then((d) => setCats(d.items || [])); }, []);
   useEffect(() => {
@@ -189,6 +202,19 @@ export default function ModelEditor() {
           <Toggle checked={m.conferma_maggiorenne} onChange={(v) => set('conferma_maggiorenne', v)} />
         </div>
       </SectionCard>
+
+      {id && m.slug && (
+        <SectionCard title="Crea link promozionale" desc="Genera un link con attribuzione da dare alla creator per i suoi social. Gli eventi (visite, Lato Segreto, click OnlyFans) verranno attribuiti a questa fonte/campagna.">
+          <div className="grid sm:grid-cols-2 gap-x-4">
+            <Field label="Fonte"><SelectInput value={linkFonte} onChange={(e) => setLinkFonte(e.target.value)}>{['instagram', 'tiktok', 'facebook', 'telegram', 'x', 'altro'].map((f) => <option key={f} value={f}>{f}</option>)}</SelectInput></Field>
+            <Field label="Campagna (facoltativa)"><TextInput value={linkCampagna} onChange={(e) => setLinkCampagna(e.target.value)} placeholder="es. settembre" /></Field>
+          </div>
+          <div className="flex items-center gap-2 p-3 rounded-lg border border-border/60 bg-background">
+            <span className="flex-1 text-xs font-mono break-all" data-testid="promo-link">{promoLink()}</span>
+            <Btn onClick={copyLink} variant="ghost" data-testid="copy-promo-link">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Copia</Btn>
+          </div>
+        </SectionCard>
+      )}
 
       <div className="flex justify-end pb-10"><Btn onClick={save} disabled={busy}>{busy ? 'Salvataggio…' : 'Salva'}</Btn></div>
     </div>
