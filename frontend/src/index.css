@@ -165,3 +165,57 @@
 
 .secret-tile { box-shadow: 0 0 0 1px hsl(var(--primary) / 0.35), 0 0 34px hsl(var(--accent) / 0.35); animation: ls-glow 4.5s ease-in-out infinite; }
 .secret-sheen { position: absolute; top: -30%; bottom: -30%; width: 40%; pointer-events: none; background: linear-gradient(90deg, transparent, hsl(40 65% 85% / 0.22), transparent); animation: ls-sheen 6.5s linear infinite; }
+
+/* ===== Pellicola "IN MOVIMENTO" ===== */
+@keyframes ls-marquee-left { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
+@keyframes ls-marquee-right { from { transform: translate3d(-50%,0,0); } to { transform: translate3d(0,0,0); } }
+
+.ls-strip-track {
+  display: flex;
+  gap: 12px;
+  width: max-content;
+  will-change: transform;
+  animation: ls-marquee-left var(--strip-dur, 40s) linear infinite;
+}
+.ls-strip-track.rev { animation-name: ls-marquee-right; }
+/* slow-down (touch/hover) instead of hard stop when configured */
+.ls-strip-track.slow { animation-duration: calc(var(--strip-dur, 40s) * 3.2); }
+.ls-strip-track.paused { animation-play-state: paused; }
+
+.ls-tile {
+  position: relative;
+  flex: 0 0 auto;
+  border-radius: 1rem;
+  overflow: hidden;
+  aspect-ratio: 9 / 16;
+  background: hsl(var(--muted) / 0.5);
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+.ls-tile .ls-poster,
+.ls-tile .ls-video {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  object-position: center 22%;
+}
+.ls-tile .ls-video { opacity: 0; transition: opacity 400ms ease; }
+.ls-tile .ls-video.ready { opacity: 1; }
+.ls-tile:hover, .ls-tile:focus-visible, .ls-tile.touched { transform: scale(1.035); z-index: 2; }
+.ls-tile:focus-visible { outline: 2px solid hsl(var(--primary)); outline-offset: 2px; }
+.ls-tile .ls-grade { position: absolute; inset: 0; pointer-events: none; transition: opacity 500ms ease, background 500ms ease; }
+/* secret cinematic grade */
+.ls-tile.secret { border: 1px solid hsl(var(--primary) / 0.45); box-shadow: 0 0 26px hsl(var(--accent) / 0.35); }
+.ls-tile.secret .ls-video, .ls-tile.secret .ls-poster { filter: saturate(0.85) contrast(1.06) brightness(0.9) sepia(0.14) hue-rotate(-10deg); }
+.ls-tile.secret .ls-grade {
+  background:
+    linear-gradient(115deg, transparent 40%, hsl(40 60% 75% / 0.12) 50%, transparent 60%),
+    radial-gradient(120% 90% at 50% 120%, hsl(350 55% 22% / 0.55), transparent 60%),
+    radial-gradient(140% 120% at 50% 50%, transparent 55%, rgba(0,0,0,0.55) 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ls-strip-track { animation: none !important; width: 100%; overflow-x: auto; }
+}
+

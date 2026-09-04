@@ -192,6 +192,55 @@ class LatoSegretoTester:
         }
         self.test("Track secret_activate event", "POST", "track", 200, data=track_secret)
 
+        # NEW: Pellicola endpoint
+        success, resp = self.test("Get pellicola config and items", "GET", "pellicola", 200,
+                                   check_response=lambda r: "config" in r and "items" in r)
+        if success:
+            config = resp.get("config", {})
+            items = resp.get("items", [])
+            self.log(f"Pellicola config: attiva={config.get('attiva')}, max_video_attivi={config.get('max_video_attivi')}, items={len(items)}", "INFO")
+            
+            # Validate config structure
+            if not isinstance(config.get("attiva"), bool):
+                self.log("Pellicola config.attiva should be boolean", "WARN")
+            if not isinstance(config.get("max_video_attivi"), int) or config.get("max_video_attivi", 0) < 4:
+                self.log("Pellicola config.max_video_attivi should be int >= 4", "WARN")
+            
+            # Validate items structure
+            for idx, item in enumerate(items[:3]):  # Check first 3 items
+                if not item.get("slug"):
+                    self.log(f"Pellicola item {idx} missing slug", "WARN")
+                if not item.get("pubblico", {}).get("video_url") and not item.get("pubblico", {}).get("poster_url"):
+                    self.log(f"Pellicola item {idx} missing pubblico video/poster", "WARN")
+                if not item.get("segreto", {}).get("video_url") and not item.get("segreto", {}).get("poster_url"):
+                    self.log(f"Pellicola item {idx} missing segreto video/poster", "WARN")
+
+        # NEW: Track pellicola events
+        track_pellicola_impression = {
+            "tipo": "pellicola_impression",
+            "session_id": "test-session-123",
+            "cta_source": "pubblico",
+            "meta": {"count": 10}
+        }
+        self.test("Track pellicola_impression event", "POST", "track", 200, data=track_pellicola_impression)
+
+        track_pellicola_video = {
+            "tipo": "pellicola_video_view",
+            "model_slug": self.test_model_slug or "test",
+            "session_id": "test-session-123",
+            "cta_source": "pubblico"
+        }
+        self.test("Track pellicola_video_view event", "POST", "track", 200, data=track_pellicola_video)
+
+        track_pellicola_click = {
+            "tipo": "pellicola_click_profilo",
+            "model_slug": self.test_model_slug or "test",
+            "session_id": "test-session-123",
+            "cta_source": "segreto",
+            "meta": {"posizione": 0, "modalita": "segreto"}
+        }
+        self.test("Track pellicola_click_profilo event", "POST", "track", 200, data=track_pellicola_click)
+
     def test_admin_auth(self):
         self.log("\n--- ADMIN AUTHENTICATION ---", "INFO")
 
@@ -388,6 +437,19 @@ class LatoSegretoTester:
                   check_response=lambda r: "items" in r and "range" in r)
         self.test("Analytics campaigns (7g)", "GET", "admin/analytics/campaigns?range=7g", 200)
         self.test("Analytics campaigns (oggi)", "GET", "admin/analytics/campaigns?range=oggi", 200)
+
+        # NEW: Pellicola analytics
+        success, resp = self.test("Analytics pellicola (30g)", "GET", "admin/analytics/pellicola?range=30g", 200,
+                                   check_response=lambda r: "impression" in r and "video_view" in r and "click" in r)
+        if success:
+            self.log(f"Pellicola analytics: impression={resp.get('impression')}, video_view={resp.get('video_view')}, click={resp.get('click')}, ctr={resp.get('ctr')}%", "INFO")
+            if "per_modalita" in resp:
+                self.log(f"Per modalità: {resp['per_modalita']}", "INFO")
+            if "per_modella" in resp and len(resp["per_modella"]) > 0:
+                self.log(f"Top modella: {resp['per_modella'][0].get('modella')} with {resp['per_modella'][0].get('click')} clicks", "INFO")
+
+        self.test("Analytics pellicola (7g)", "GET", "admin/analytics/pellicola?range=7g", 200)
+        self.test("Analytics pellicola (oggi)", "GET", "admin/analytics/pellicola?range=oggi", 200)
 
         # Model detail (if we have a model)
         if self.test_model_slug:

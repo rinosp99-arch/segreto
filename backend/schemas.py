@@ -54,6 +54,22 @@ class SeoFields(BaseModel):
     og_image: str = ''
 
 
+class PellicolaSide(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+    video_url: str = ''
+    poster_url: str = ''
+
+
+class PellicolaHome(BaseModel):
+    """Per-model configuration for the HOME 'IN MOVIMENTO' film strip."""
+    model_config = ConfigDict(extra='ignore')
+    attiva: bool = True
+    priorita: int = 5  # 1-10
+    ordine: Optional[int] = None  # manual override, null -> use priorita
+    pubblico: PellicolaSide = Field(default_factory=PellicolaSide)
+    segreto: PellicolaSide = Field(default_factory=PellicolaSide)
+
+
 class ModelIn(BaseModel):
     model_config = ConfigDict(extra='ignore')
     nome: str
@@ -82,6 +98,7 @@ class ModelIn(BaseModel):
     regia: Dict[str, Any] = {}
     cta_temporizzata: Dict[str, Any] = {}
     social: Dict[str, Any] = {}
+    pellicola_home: PellicolaHome = Field(default_factory=PellicolaHome)
     stato: str = 'bozza'  # bozza | pubblicata | disattivata
     ordine: int = 0
     conferma_maggiorenne: bool = False
@@ -134,6 +151,7 @@ class SettingsIn(BaseModel):
     site_description: Optional[str] = None
     footer_contatti: Optional[str] = None
     global_switch_default: Optional[str] = None
+    home_pellicola: Optional[Dict[str, Any]] = None
 
 
 class TrackEventIn(BaseModel):

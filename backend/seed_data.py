@@ -54,6 +54,18 @@ REGIA_PRESETS = {
     'cosplay': {"preset": "INTENSO", "fumo": 45, "luci": 50, "glow": 55, "movimento": 35, "effetto_sonoro": "cinematografico", "ambiente_sonoro": {"attivo": False, "preset": "dark_room", "volume": 12}},
 }
 
+DEFAULT_PELLICOLA = {
+    "attiva": True,
+    "titolo": "IN MOVIMENTO",
+    "sottotitolo": "Una foto non racconta tutto.",
+    "velocita": 6,               # seconds per tile (higher = slower)
+    "max_video_attivi": 8,       # 6-10
+    "seconda_fila": False,       # prepared but OFF by default
+    "pausa_su_touch": True,
+    "nomi_sempre_visibili": False,
+    "inserisci_dopo_n": 10,      # insert strip after N cards (8-12)
+}
+
 # name, artistico, slug, frase, categorie, tag, badge, badge_tipo, preset, of_slug
 SPECS = [
     ("Francesca", "Francesca Rossi", "francesca-rossi", "Dolce finch\u00e9 non premi.",
@@ -203,6 +215,19 @@ def build_model(i, spec, order):
             "telegram": f"https://t.me/{of_slug}",
             "custom": [],
         } if i < 4 else {"instagram": f"https://instagram.com/{of_slug}", "custom": []}),
+        "pellicola_home": {
+            "attiva": True,
+            "priorita": ((i * 3) % 10) + 1,
+            "ordine": None,
+            "pubblico": {
+                "video_url": f"/media/{vpub[0]}.mp4",
+                "poster_url": f"/media/{vpub[0]}.jpg",
+            },
+            "segreto": {
+                "video_url": f"/media/{vsec[0]}.mp4",
+                "poster_url": f"/media/{vsec[0]}.jpg",
+            },
+        },
         "stato": "pubblicata",
         "ordine": order,
         "conferma_maggiorenne": True,
@@ -235,8 +260,14 @@ async def seed_all(force=False):
             "auto_publish_articles": False,
             "footer_contatti": "contatti@latosegreto.it",
             "global_switch_default": "public",
+            "home_pellicola": DEFAULT_PELLICOLA,
             "created_at": now_iso(),
         })
+    else:
+        # backfill pellicola settings if missing (non-destructive)
+        s = await settings_col.find_one({"id": "global"})
+        if not s.get("home_pellicola"):
+            await settings_col.update_one({"id": "global"}, {"$set": {"home_pellicola": DEFAULT_PELLICOLA}})
 
     # Categories
     if force:

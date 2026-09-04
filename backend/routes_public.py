@@ -202,6 +202,81 @@ async def public_settings():
     }
 
 
+DEFAULT_PELLICOLA_CFG = {
+    "attiva": True,
+    "titolo": "IN MOVIMENTO",
+    "sottotitolo": "Una foto non racconta tutto.",
+    "velocita": 6,
+    "max_video_attivi": 8,
+    "seconda_fila": False,
+    "pausa_su_touch": True,
+    "nomi_sempre_visibili": False,
+    "inserisci_dopo_n": 10,
+}
+
+
+def _first_pair_video(doc, side):
+    """Fallback: first video pair's public/secret url + poster."""
+    for pr in doc.get("media_pairs", []):
+        if pr.get("tipo") == "video":
+            m = pr.get(side) or {}
+            return m.get("url", ""), m.get("poster", "")
+    return "", ""
+
+
+@public_router.get("/pellicola")
+async def get_pellicola():
+    """HOME 'IN MOVIMENTO' film strip: global config + ordered items."""
+    s = await settings_col.find_one({"id": "global"}, {"_id": 0}) or {}
+    cfg = {**DEFAULT_PELLICOLA_CFG, **(s.get("home_pellicola") or {})}
+    # clamp bounds
+    try:
+        cfg["max_video_attivi"] = max(4, min(12, int(cfg.get("max_video_attivi", 8))))
+    except Exception:
+        cfg["max_video_attivi"] = 8
+
+    docs = await models_col.find({"stato": "pubblicata"}, {"_id": 0}).to_list(500)
+    items = []
+    for d in docs:
+        ph = d.get("pellicola_home") or {}
+        if not ph.get("attiva", True):
+            continue
+        pub = ph.get("pubblico") or {}
+        seg = ph.get("segreto") or {}
+        pub_vid, pub_pos = pub.get("video_url", ""), pub.get("poster_url", "")
+        seg_vid, seg_pos = seg.get("video_url", ""), seg.get("poster_url", "")
+        # fallbacks from media pairs
+        if not pub_vid:
+            pub_vid, pp = _first_pair_video(d, "pubblico")
+            pub_pos = pub_pos or pp
+        if not seg_vid:
+            seg_vid, sp = _first_pair_video(d, "segreto")
+            seg_pos = seg_pos or sp
+        # posters fall back to card images if still missing
+        pub_pos = pub_pos or d.get("foto_card", "")
+        seg_pos = seg_pos or d.get("foto_card_teaser", "") or pub_pos
+        if not pub_vid and not seg_vid:
+            continue  # nothing to show
+        items.append({
+            "slug": d.get("slug"),
+            "nome_artistico": d.get("nome_artistico") or d.get("nome"),
+            "foto_card": d.get("foto_card", ""),
+            "priorita": ph.get("priorita", 5),
+            "ordine_manuale": ph.get("ordine"),
+            "ordine": d.get("ordine", 0),
+            "pubblico": {"video_url": pub_vid, "poster_url": pub_pos},
+            "segreto": {"video_url": seg_vid or pub_vid, "poster_url": seg_pos},
+        })
+
+    def sort_key(x):
+        manual = x["ordine_manuale"]
+        has_manual = 0 if manual is not None else 1
+        return (has_manual, manual if manual is not None else 0, -int(x.get("priorita") or 0), x.get("ordine", 0))
+
+    items.sort(key=sort_key)
+    return {"config": cfg, "items": items}
+
+
 @public_router.post("/track")
 async def track_event(ev: TrackEventIn, request: Request):
     doc = ev.model_dump()

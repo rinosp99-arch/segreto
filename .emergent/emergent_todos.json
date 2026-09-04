@@ -1,42 +1,50 @@
 [
   {
-    "content": "Phase 1: Foundations - DB models + Admin JWT auth + demo seed data",
+    "content": "Backend: extend schemas (ModelIn pellicola_home + SettingsIn home_pellicola)",
     "status": "completed"
   },
   {
-    "content": "Phase 1: Object storage upload integration + media serving",
+    "content": "Backend: seed per-model pellicola config + global home_pellicola defaults + reseed",
     "status": "completed"
   },
   {
-    "content": "Frontend setup: dual-theme tokens, fonts, libs, routing, age gate, header/footer",
+    "content": "Backend: public GET /api/pellicola endpoint",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Home (grid, filters, search, Sorprendimi, card interactions, discovered state, global switch)",
+    "content": "Backend: analytics GET /api/admin/analytics/pellicola aggregation",
     "status": "completed"
   },
   {
-    "content": "Phase 3+4: Profile Lato Pubblico + Lato Segreto cinematic transformation (SIGNATURE)",
+    "content": "Regenerate demo teasers to seamless ~12s boomerang clips",
     "status": "completed"
   },
   {
-    "content": "Phase 5: Conversion (CTA tracking, 35s envelope, sticky CTA)",
+    "content": "Frontend: rewrite FilmStrip",
     "status": "completed"
   },
   {
-    "content": "Phase 6: Admin full (CRUD, media pairs, categories, badges, themes, SEO, editorial)",
+    "content": "Frontend: add getPellicola to api.js + CSS additions",
     "status": "completed"
   },
   {
-    "content": "Phase 7: Analytics dashboard (KPIs, funnel, leaderboard, charts)",
+    "content": "Frontend: integrate FilmStrip into Home after ~10 models",
     "status": "completed"
   },
   {
-    "content": "Phase 8: SEO (dynamic meta, category pages, articles, sitemap/robots, webhook), legal, 404, cookie banner",
+    "content": "Admin: ModelEditor + AdminSettings + analytics card",
     "status": "completed"
   },
   {
-    "content": "Phase 9-10: Mobile/perf verification + end-to-end testing + fixes",
+    "content": "Build + esbuild check + fix errors",
+    "status": "completed"
+  },
+  {
+    "content": "Visual screenshot verification (public + secret)",
+    "status": "completed"
+  },
+  {
+    "content": "End-to-end testing via testing_agent_v3 incl mobile 390x844",
     "status": "completed"
   }
 ]

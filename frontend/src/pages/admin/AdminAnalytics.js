@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { anOverview, anFunnel, anModels, anTimeseries } from '@/lib/adminApi';
+import { anOverview, anFunnel, anModels, anTimeseries, anPellicola } from '@/lib/adminApi';
 import { SectionCard } from '@/pages/admin/ui';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
@@ -11,12 +11,14 @@ export default function AdminAnalytics() {
   const [funnel, setFunnel] = useState(null);
   const [rows, setRows] = useState([]);
   const [ts, setTs] = useState([]);
+  const [pel, setPel] = useState(null);
 
   useEffect(() => {
     anOverview(range).then(setOv).catch(() => {});
     anFunnel(range).then((d) => setFunnel(d.steps || [])).catch(() => {});
     anModels(range).then((d) => setRows(d.items || [])).catch(() => {});
     anTimeseries(range).then((d) => setTs(d.items || [])).catch(() => {});
+    anPellicola(range).then(setPel).catch(() => {});
   }, [range]);
 
   const axis = { stroke: 'hsl(var(--muted-foreground))', fontSize: 11 };
@@ -66,6 +68,27 @@ export default function AdminAnalytics() {
           </div>
         </SectionCard>
       </div>
+
+      <SectionCard title="Pellicola «IN MOVIMENTO»" desc="Impression, visualizzazioni video e click verso i profili dalla fascia in Home.">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          {[['Impression', pel?.impression], ['Video visti', pel?.video_view], ['Click profilo', pel?.click], ['CTR', (pel?.ctr ?? 0) + '%']].map(([l, v], i) => (
+            <div key={i} className="rounded-2xl border border-border/60 bg-card p-4" data-testid="pellicola-kpi-card"><div className="caps-label text-muted-foreground mb-1">{l}</div><div className="text-3xl font-serif">{v ?? '—'}</div></div>
+          ))}
+        </div>
+        <div className="text-xs text-muted-foreground mb-3">Click per modalità — Pubblico: <span className="text-foreground">{pel?.per_modalita?.pubblico ?? 0}</span> · Segreto: <span className="gold-text">{pel?.per_modalita?.segreto ?? 0}</span></div>
+        {(pel?.per_modella || []).length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-muted-foreground caps-label text-[10px]"><th className="py-2">Modella</th><th>Video visti</th><th>Click profilo</th></tr></thead>
+              <tbody>
+                {(pel?.per_modella || []).map((r) => (
+                  <tr key={r.slug} className="border-t border-border/50"><td className="py-2.5 font-serif text-base">{r.modella}</td><td>{r.video_view}</td><td className="gold-text font-semibold">{r.click}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
 
       <SectionCard title="Classifica modelle">
         <div className="overflow-x-auto">

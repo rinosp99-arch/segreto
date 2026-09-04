@@ -231,3 +231,67 @@ async def article_stats(range: str = "30g", admin=Depends(get_current_admin)):
     rows = [{**a, "visite": counts.get(a["id"], 0)} for a in arts]
     rows.sort(key=lambda r: r["visite"], reverse=True)
     return {"items": rows}
+
+
+
+@analytics_router.get("/pellicola")
+async def pellicola_stats(range: str = "30g", admin=Depends(get_current_admin)):
+    """Analytics for the HOME 'IN MOVIMENTO' film strip.
+    Events: pellicola_impression, pellicola_video_view, pellicola_click_profilo.
+    """
+    cut = cutoff_for(range)
+    match = {"timestamp": {"$gte": cut}} if cut else {}
+
+    c = await counts_by_type(match)
+    impression = c.get("pellicola_impression", 0)
+    video_view = c.get("pellicola_video_view", 0)
+    click = c.get("pellicola_click_profilo", 0)
+
+    # breakdown by mode (cta_source = pubblico|segreto)
+    by_mode = {"pubblico": 0, "segreto": 0}
+    async for row in events_col.aggregate([
+        {"$match": {**match, "tipo": "pellicola_click_profilo"}},
+        {"$group": {"_id": "$cta_source", "n": {"$sum": 1}}},
+    ]):
+        key = row["_id"] or "pubblico"
+        by_mode[key] = by_mode.get(key, 0) + row["n"]
+
+    # per-model clicks + video views
+    names = {}
+    async for m in models_col.find({}, {"_id": 0, "slug": 1, "nome_artistico": 1}):
+        names[m["slug"]] = m["nome_artistico"]
+
+    per_model = {}
+    for tipo in ("pellicola_click_profilo", "pellicola_video_view"):
+        async for row in events_col.aggregate([
+            {"$match": {**match, "tipo": tipo}},
+            {"$group": {"_id": "$model_slug", "n": {"$sum": 1}}},
+        ]):
+            slug = row["_id"]
+            if not slug:
+                continue
+            per_model.setdefault(slug, {"click": 0, "video_view": 0})
+            if tipo == "pellicola_click_profilo":
+                per_model[slug]["click"] = row["n"]
+            else:
+                per_model[slug]["video_view"] = row["n"]
+
+    rows = []
+    for slug, v in per_model.items():
+        rows.append({
+            "slug": slug,
+            "modella": names.get(slug, slug),
+            "click": v["click"],
+            "video_view": v["video_view"],
+        })
+    rows.sort(key=lambda r: r["click"], reverse=True)
+
+    return {
+        "range": range,
+        "impression": impression,
+        "video_view": video_view,
+        "click": click,
+        "ctr": round(click / impression * 100, 1) if impression else 0,
+        "per_modalita": by_mode,
+        "per_modella": rows,
+    }

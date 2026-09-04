@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { getModels } from '@/lib/api';
+import { getModels, getPellicola } from '@/lib/api';
 import { ModelCard } from '@/components/ModelCard';
+import FilmStrip from '@/components/FilmStrip';
 import { useTheme } from '@/lib/themeContext';
 import { setSeo, SITE } from '@/lib/seo';
 import { SearchX } from 'lucide-react';
@@ -23,6 +24,7 @@ export default function Home() {
   const [filtro, setFiltro] = useState('tutte');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [pellicola, setPellicola] = useState(null);
 
   useEffect(() => {
     setSeo({
@@ -50,7 +52,20 @@ export default function Home() {
       .finally(() => setLoading(false));
   }, [filtro]);
 
+  useEffect(() => {
+    getPellicola().then(setPellicola).catch(() => setPellicola(null));
+  }, []);
+
   const secret = homeMode === 'secret';
+
+  const pelliconaAttiva = pellicola && pellicola.config && pellicola.config.attiva !== false
+    && (pellicola.items || []).length > 0;
+  const desiredAfter = Math.max(4, (pellicola && pellicola.config && pellicola.config.inserisci_dopo_n) || 10);
+  // ensure at least a couple of cards remain after the strip so the grid visibly continues
+  const insertAfter = Math.min(desiredAfter, Math.max(4, items.length - 2));
+  const showStrip = pelliconaAttiva && filtro === 'tutte' && items.length > insertAfter;
+  const firstChunk = showStrip ? items.slice(0, insertAfter) : items;
+  const restChunk = showStrip ? items.slice(insertAfter) : [];
 
   return (
     <div className="max-w-6xl mx-auto px-4 lg:px-8">
@@ -97,9 +112,22 @@ export default function Home() {
           <p className="text-sm text-muted-foreground">Prova a cambiare filtro.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5 pb-10" data-testid="models-grid">
-          {items.map((m, i) => <ModelCard key={m.slug} model={m} index={i} teaser={secret} />)}
-        </div>
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5" data-testid="models-grid">
+            {firstChunk.map((m, i) => <ModelCard key={m.slug} model={m} index={i} teaser={secret} />)}
+          </div>
+
+          {showStrip && (
+            <FilmStrip items={pellicola.items} config={pellicola.config} secret={secret} />
+          )}
+
+          {restChunk.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5 pb-10" data-testid="models-grid-rest">
+              {restChunk.map((m, i) => <ModelCard key={m.slug} model={m} index={insertAfter + i} teaser={secret} />)}
+            </div>
+          )}
+          {!showStrip && <div className="pb-10" />}
+        </>
       )}
     </div>
   );

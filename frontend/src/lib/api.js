@@ -34,6 +34,7 @@ export const getCategory = (slug) => api.get(`/categories/${slug}`).then((r) => 
 export const getArticles = () => api.get('/articles').then((r) => r.data);
 export const getArticle = (slug) => api.get(`/articles/${slug}`).then((r) => r.data);
 export const getPublicSettings = () => api.get('/settings').then((r) => r.data);
+export const getPellicola = () => api.get('/pellicola').then((r) => r.data);
 
 // ---- tracking ----
 export function track(evt) {

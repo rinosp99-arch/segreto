@@ -21,6 +21,7 @@ const emptyModel = () => ({
   cta_temporizzata: { attivo: true, ritardo: 10, testo_intro: 'Vuoi vedere dove continua?', testo_pulsante: 'CONTINUA CON ME' },
   social: { instagram: '', tiktok: '', x: '', telegram: '', youtube: '', facebook: '', threads: '', snapchat: '', sito: '', custom: [] },
   seo: { title: '', meta_description: '', alt_default: '', og_image: '' },
+  pellicola_home: { attiva: true, priorita: 5, ordine: null, pubblico: { video_url: '', poster_url: '' }, segreto: { video_url: '', poster_url: '' } },
   teaser_copy: 'Qui posso mostrarti solo fino a questo punto.',
   stato: 'bozza', ordine: 0, conferma_maggiorenne: false,
 });
@@ -60,6 +61,8 @@ export default function ModelEditor() {
   const setAmb = (k, v) => setM((p) => ({ ...p, regia: { ...p.regia, ambiente_sonoro: { ...p.regia.ambiente_sonoro, [k]: v } } }));
   const setCtaT = (k, v) => setM((p) => ({ ...p, cta_temporizzata: { ...p.cta_temporizzata, [k]: v } }));
   const setSocial = (k, v) => setM((p) => ({ ...p, social: { ...p.social, [k]: v } }));
+  const setPelli = (k, v) => setM((p) => ({ ...p, pellicola_home: { ...(p.pellicola_home || {}), [k]: v } }));
+  const setPelliSide = (side, k, v) => setM((p) => ({ ...p, pellicola_home: { ...(p.pellicola_home || {}), [side]: { ...((p.pellicola_home || {})[side] || {}), [k]: v } } }));
   const REGIA_PRESETS = { DELICATO: { fumo: 20, luci: 60, glow: 30, movimento: 15 }, SENSUALE: { fumo: 35, luci: 55, glow: 40, movimento: 25 }, INTENSO: { fumo: 60, luci: 50, glow: 65, movimento: 45 } };
   const applyRegiaPreset = (name) => setM((p) => ({ ...p, regia: { ...p.regia, preset: name, ...REGIA_PRESETS[name] } }));
 
@@ -218,6 +221,32 @@ export default function ModelEditor() {
           {[['instagram', 'Instagram'], ['tiktok', 'TikTok'], ['x', 'X'], ['telegram', 'Telegram'], ['youtube', 'YouTube'], ['facebook', 'Facebook'], ['threads', 'Threads'], ['snapchat', 'Snapchat'], ['sito', 'Sito personale']].map(([k, label]) => (
             <Field key={k} label={label}><TextInput value={m.social[k] || ''} onChange={(e) => setSocial(k, e.target.value)} placeholder="https://…" data-testid={`social-input-${k}`} /></Field>
           ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="PELLICOLA HOME (IN MOVIMENTO)" desc="Configura la presenza di questa modella nella fascia cinematografica della Home. Consigliati teaser verticali 10–15s. Se i video non sono impostati, viene usato il primo video delle coppie di contenuti.">
+        <div className="flex items-center gap-6 mb-3">
+          <Toggle checked={(m.pellicola_home || {}).attiva !== false} onChange={(v) => setPelli('attiva', v)} label="Mostra nella pellicola" />
+        </div>
+        <div className="grid sm:grid-cols-2 gap-x-4">
+          <Field label="Priorità (1–10)" hint="Più alta = più in evidenza">
+            <TextInput type="number" min="1" max="10" value={(m.pellicola_home || {}).priorita ?? 5} onChange={(e) => setPelli('priorita', Math.max(1, Math.min(10, parseInt(e.target.value || '5', 10))))} data-testid="pellicola-priorita" />
+          </Field>
+          <Field label="Ordine manuale (opzionale)" hint="Lascia vuoto per usare la priorità">
+            <TextInput type="number" value={(m.pellicola_home || {}).ordine ?? ''} onChange={(e) => setPelli('ordine', e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+          </Field>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4 mt-1">
+          <div className="rounded-xl border border-border/60 p-3">
+            <div className="caps-label text-muted-foreground mb-2">Versione pubblica</div>
+            <UploadField label="Video pubblico" value={(m.pellicola_home || {}).pubblico?.video_url} onChange={(v) => setPelliSide('pubblico', 'video_url', v)} accept="video/*" />
+            <UploadField label="Poster pubblico" value={(m.pellicola_home || {}).pubblico?.poster_url} onChange={(v) => setPelliSide('pubblico', 'poster_url', v)} accept="image/*" />
+          </div>
+          <div className="rounded-xl border border-border/60 p-3">
+            <div className="caps-label text-muted-foreground mb-2">Versione segreta</div>
+            <UploadField label="Video segreto" value={(m.pellicola_home || {}).segreto?.video_url} onChange={(v) => setPelliSide('segreto', 'video_url', v)} accept="video/*" />
+            <UploadField label="Poster segreto" value={(m.pellicola_home || {}).segreto?.poster_url} onChange={(v) => setPelliSide('segreto', 'poster_url', v)} accept="image/*" />
+          </div>
         </div>
       </SectionCard>
 
