@@ -9,7 +9,7 @@ import { SearchX } from 'lucide-react';
 const FILTERS = [
   { key: 'tutte', label: 'Tutte' },
   { key: 'nuove', label: 'Nuove' },
-  { key: 'piu-viste', label: 'Pi\u00f9 viste' },
+  { key: 'piu-viste', label: 'Più viste' },
   { key: 'in-tendenza', label: 'In tendenza' },
 ];
 
@@ -57,14 +57,14 @@ export default function Home() {
       {/* intro */}
       <section className="pt-8 pb-6 sm:pt-12">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-          <div className="caps-label gold-text mb-3">{secret ? 'Modalit\u00e0 anteprima segreta' : 'Collezione riservata'}</div>
+          <div className="caps-label gold-text mb-3">{secret ? 'Modalità anteprima segreta' : 'Collezione riservata'}</div>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl leading-[0.95] mb-3 text-balance">
-            {secret ? 'Un assaggio di ci\u00f2 che nascondono.' : 'Ognuna ha un lato che non hai ancora visto.'}
+            {secret ? 'Un assaggio di ciò che nascondono.' : 'Ognuna ha un lato che non hai ancora visto.'}
           </h1>
           <p className="text-muted-foreground max-w-xl text-sm sm:text-base">
             {secret
-              ? 'Questa \u00e8 solo l\u2019atmosfera. Il vero Lato Segreto si sblocca dentro il profilo di ogni creator.'
-              : 'Scegli una creator, esplora il suo lato pubblico\u2026 e poi decidi se premere.'}
+              ? 'Questa è solo l’atmosfera. Il vero Lato Segreto si sblocca dentro il profilo di ogni creator.'
+              : 'Scegli una creator, esplora il suo lato pubblico… e poi decidi se premere.'}
           </p>
         </motion.div>
       </section>

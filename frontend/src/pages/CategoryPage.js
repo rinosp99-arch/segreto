@@ -22,7 +22,7 @@ export default function CategoryPage() {
         jsonLd: {
           '@context': 'https://schema.org', '@type': 'BreadcrumbList',
           itemListElement: [
-            { '@type': 'ListItem', position: 1, name: 'Home', item: window.location.origin },
+            { '@type': 'ListItem', position: 1, name: 'Inizio', item: window.location.origin },
             { '@type': 'ListItem', position: 2, name: c.nome, item: window.location.href },
           ],
         },
@@ -42,7 +42,7 @@ export default function CategoryPage() {
   return (
     <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6">
       <nav className="text-sm text-muted-foreground mb-4 flex items-center gap-2">
-        <Link to="/" className="hover:text-foreground inline-flex items-center gap-1"><ArrowLeft className="h-4 w-4" />Home</Link>
+        <Link to="/" className="hover:text-foreground inline-flex items-center gap-1"><ArrowLeft className="h-4 w-4" />Inizio</Link>
         <span>/</span><span className="text-foreground">{categoria.nome}</span>
       </nav>
       <h1 className="text-4xl sm:text-5xl font-serif mb-3">{categoria.nome}</h1>

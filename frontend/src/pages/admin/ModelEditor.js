@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { admGetModel, admCreateModel, admUpdateModel, admGetCategories } from '@/lib/adminApi';
+import { mediaUrl } from '@/lib/api';
 import { SectionCard, Field, TextInput, TextArea, SelectInput, Toggle, Btn, UploadField } from '@/pages/admin/ui';
 import { Plus, Trash2, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
@@ -28,6 +29,7 @@ export default function ModelEditor() {
   const [cats, setCats] = useState([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(!!id);
+  const [previewSecret, setPreviewSecret] = useState(false);
 
   useEffect(() => { admGetCategories().then((d) => setCats(d.items || [])); }, []);
   useEffect(() => {
@@ -88,11 +90,30 @@ export default function ModelEditor() {
         </div>
       </SectionCard>
 
-      <SectionCard title="Coppie di contenuti (trasformazione)" desc="Associa un contenuto pubblico al corrispondente segreto. Prima coppia = hero. Stesso formato consigliato.">
+      <SectionCard title="Coppie di contenuti (trasformazione)" desc="Ogni posizione della griglia ha una versione pubblica e una segreta. Consigliato: 3 foto + 2 video. Stesso formato per evitare salti.">
+        <div className="mb-4 flex items-center justify-between">
+          <span className="caps-label text-muted-foreground">Anteprima</span>
+          <div className="flex gap-1 bg-background border border-border/60 rounded-full p-1">
+            <button type="button" onClick={() => setPreviewSecret(false)} className={`px-3 py-1 text-xs rounded-full ${!previewSecret ? 'bg-primary/20 text-foreground' : 'text-muted-foreground'}`}>Pubblico</button>
+            <button type="button" onClick={() => setPreviewSecret(true)} className={`px-3 py-1 text-xs rounded-full ${previewSecret ? 'bg-primary/20 text-foreground' : 'text-muted-foreground'}`}>Segreto</button>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2 mb-5" data-testid="transform-preview">
+          {m.media_pairs.map((p, i) => {
+            const url = previewSecret ? p.segreto?.url : p.pubblico?.url;
+            const isVid = p.tipo === 'video';
+            return (
+              <div key={`prev-${i}`} className="relative rounded-lg overflow-hidden border border-border/60 bg-muted/40" style={{ aspectRatio: '3/4' }}>
+                {url ? (isVid ? <video src={mediaUrl(url)} muted className="h-full w-full object-cover" style={previewSecret ? { filter: 'saturate(0.82) hue-rotate(-12deg)' } : {}} /> : <img src={mediaUrl(url)} alt="" className="h-full w-full object-cover" style={previewSecret ? { filter: 'saturate(0.82) hue-rotate(-12deg)' } : {}} />) : <div className="h-full w-full flex items-center justify-center text-[10px] text-muted-foreground">vuoto</div>}
+                <span className="absolute bottom-1 left-1 text-[9px] px-1.5 py-0.5 rounded bg-black/60">{isVid ? 'Video' : 'Foto'} {i + 1}</span>
+              </div>
+            );
+          })}
+        </div>
         {m.media_pairs.map((p, i) => (
           <div key={p.id || i} className="rounded-xl border border-border/60 p-3 mb-3">
             <div className="flex items-center justify-between mb-2">
-              <span className="caps-label text-muted-foreground">{i === 0 ? 'Hero' : `Coppia ${i}`} · {p.tipo}</span>
+              <span className="caps-label text-muted-foreground">Posizione {i + 1} · {p.tipo === 'video' ? 'video' : 'foto'}</span>
               <button onClick={() => delPair(i)} className="text-red-300"><Trash2 className="h-4 w-4" /></button>
             </div>
             <div className="grid sm:grid-cols-2 gap-4">

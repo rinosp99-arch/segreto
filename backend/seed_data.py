@@ -100,35 +100,34 @@ def build_model(i, spec, order):
     (nome, artistico, slug, frase, categorie, tag, badge, badge_tipo, preset, of_slug) = spec
     prim, sec = PRESETS[preset]
     base = i * 2
-    # public media
-    hero_pub = u(base)
-    card_pub = u(base)
-    gal_pub = [u(base + 1), u(base + 2), u(base + 3)]
-    # secret media
-    hero_sec = p(base)
-    gal_sec = [p(base + 1), p(base + 2), p(base + 3)]
-    vpub = VID[i % len(VID)]
-    vsec = SVID[i % len(SVID)]
+    # public media (3 photos)
+    pub_imgs = [u(base), u(base + 1), u(base + 2)]
+    sec_imgs = [p(base), p(base + 1), p(base + 2)]
+    # videos (2)
+    vpub = [VID[i % len(VID)], VID[(i + 1) % len(VID)]]
+    vsec = [SVID[i % len(SVID)], SVID[(i + 1) % len(SVID)]]
 
     def mi(url, tipo='image', poster='', alt=''):
         return {"tipo": tipo, "url": url, "poster": poster, "alt": alt}
 
-    media_pairs = [
-        {"id": str(uuid.uuid4()), "tipo": "image",
-         "pubblico": mi(hero_pub, 'image', '', f"{artistico} ritratto elegante"),
-         "segreto": mi(hero_sec, 'image', '', f"{artistico} lato segreto")},
-    ]
+    # media pairs = 3 photo positions + 2 video positions (same grid slots)
+    media_pairs = []
     for k in range(3):
         media_pairs.append({
             "id": str(uuid.uuid4()), "tipo": "image",
-            "pubblico": mi(gal_pub[k], 'image', '', f"{artistico} foto pubblica {k+1}"),
-            "segreto": mi(gal_sec[k], 'image', '', f"{artistico} foto segreta {k+1}"),
+            "pubblico": mi(pub_imgs[k], 'image', '', f"{artistico} foto pubblica {k+1}"),
+            "segreto": mi(sec_imgs[k], 'image', '', f"{artistico} foto segreta {k+1}"),
         })
-    media_pairs.append({
-        "id": str(uuid.uuid4()), "tipo": "video",
-        "pubblico": mi(f"/media/{vpub}.mp4", 'video', f"/media/{vpub}.jpg", f"{artistico} teaser pubblico"),
-        "segreto": mi(f"/media/{vsec}.mp4", 'video', f"/media/{vsec}.jpg", f"{artistico} teaser segreto"),
-    })
+    for k in range(2):
+        media_pairs.append({
+            "id": str(uuid.uuid4()), "tipo": "video",
+            "pubblico": mi(f"/media/{vpub[k]}.mp4", 'video', f"/media/{vpub[k]}.jpg", f"{artistico} video pubblico {k+1}"),
+            "segreto": mi(f"/media/{vsec[k]}.mp4", 'video', f"/media/{vsec[k]}.jpg", f"{artistico} video segreto {k+1}"),
+        })
+
+    hero_pub = pub_imgs[0]
+    hero_sec = sec_imgs[0]
+    gal_pub = pub_imgs
 
     bio = (f"{artistico} \u00e8 una creator dallo stile {tag[0]}. Nel suo lato pubblico trovi "
            f"ritratti curati, outfit ricercati e un'atmosfera raffinata. Una presenza magnetica "
@@ -146,11 +145,11 @@ def build_model(i, spec, order):
         "bio": bio,
         "bio_segreta": bio_seg,
         "foto_copertina": hero_pub,
-        "foto_card": card_pub,
+        "foto_card": hero_pub,
         "foto_card_teaser": hero_sec,
         "foto_segreta_hero": hero_sec,
         "galleria_pubblica": [mi(g, 'image', '', f"{artistico} lifestyle") for g in gal_pub],
-        "galleria_segreta": [mi(g, 'image', '', f"{artistico} boudoir") for g in gal_sec],
+        "galleria_segreta": [mi(g, 'image', '', f"{artistico} boudoir") for g in sec_imgs],
         "media_pairs": media_pairs,
         "categorie": categorie,
         "tag": tag,
@@ -181,7 +180,7 @@ def build_model(i, spec, order):
             "title": f"{artistico} | LATO SEGRETO",
             "meta_description": f"Scopri {artistico}: ritratti, stile e un lato segreto tutto da svelare. Premi e lasciati sorprendere.",
             "alt_default": f"{artistico} - creator LATO SEGRETO",
-            "og_image": card_pub,
+            "og_image": hero_pub,
         },
         "teaser_copy": "Qui posso mostrarti solo fino a questo punto.",
         "stato": "pubblicata",
