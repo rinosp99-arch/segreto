@@ -128,6 +128,16 @@ class AudioController {
 
   setMuted(m) { this.muted = !!m; if (this.muted) this.stopAmbient(500); }
 
+  // Immediate hard stop (no fade): return to public / model change / leave page.
+  stopImmediate() {
+    this._token++;
+    try { if (this.source) this.source.stop(0); } catch (e) { /* noop */ }
+    try { if (this.source) this.source.disconnect(); if (this.gain) this.gain.disconnect(); } catch (e) { /* noop */ }
+    this.source = null; this.gain = null;
+    const a = this.fallbackEl;
+    if (a) { try { a.pause(); a.currentTime = 0; } catch (e) { /* noop */ } }
+  }
+
   cleanup() {
     this._token++;
     try { if (this.source) this.source.stop(); } catch (e) { /* noop */ }

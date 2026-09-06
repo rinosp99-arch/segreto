@@ -176,7 +176,7 @@ export default function ModelProfile() {
     track({ tipo: 'secret_return', model_slug: slug, session_id: getSessionId() });
     if (msgTimer.current) clearTimeout(msgTimer.current);
     if (ctaTimer.current) clearTimeout(ctaTimer.current);
-    getAudio()?.stopAmbient(1600);
+    getAudio()?.stopImmediate();
     setEnvelopeVisible(false); setEnvelopeOpen(false); setCtaTimed(false);
     if (reduced) { applyTheme(false); setSecret(false); return; }
     setTransforming(true);
