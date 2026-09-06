@@ -7,6 +7,7 @@ import { MediaMorph } from '@/components/MediaMorph';
 import { ModelCard } from '@/components/ModelCard';
 import { setSeo, SITE } from '@/lib/seo';
 import { getAudio } from '@/lib/sound';
+import { urlsForAudioCfg } from '@/lib/tracks';
 import { Instagram, Music2, Send, Youtube, Facebook, Globe, Twitter, Link2 } from 'lucide-react';
 import {
   getSessionId, markDiscovered, messageShownFor, markMessageShown,
@@ -118,29 +119,27 @@ export default function ModelProfile() {
     const a = (secretData && secretData.regia && secretData.regia.audio) || {};
     return {
       ambiente: a.ambiente !== false,
-      traccia: a.traccia || 'sensuale',
-      volAmb: Math.max(0, Math.min(1, (a.volume_ambiente ?? 20) / 100)),
-      volEff: Math.max(0, Math.min(1, (a.volume_effetto ?? 60) / 100)),
+      urls: urlsForAudioCfg(a),
+      volAmb: Math.max(0, Math.min(1, (a.volume_ambiente ?? 22) / 100)),
     };
   };
 
   const activate = async () => {
     if (transforming || secret) return;
+    const audio = getAudio();
+    // Unlock audio SYNCHRONOUSLY within the user gesture (critical for iOS Safari)
+    if (soundOn && audio) { audio.unlock(); audio.playActivation(0.6); }
     let sd = secretData;
     if (!sd) { try { sd = await getModelSecret(slug); setSecretData(sd); } catch { return; } }
     setTransforming(true);
     const elapsed = Math.round((Date.now() - pageLoadedAt.current) / 1000);
-    const audio = getAudio();
     const acfg = {
       ambiente: (sd?.regia?.audio?.ambiente) !== false,
-      traccia: sd?.regia?.audio?.traccia || 'sensuale',
-      volAmb: Math.max(0, Math.min(1, (sd?.regia?.audio?.volume_ambiente ?? 20) / 100)),
-      volEff: Math.max(0, Math.min(1, (sd?.regia?.audio?.volume_effetto ?? 60) / 100)),
+      urls: urlsForAudioCfg(sd?.regia?.audio),
+      volAmb: Math.max(0, Math.min(1, (sd?.regia?.audio?.volume_ambiente ?? 22) / 100)),
     };
-    // Unlock + soft activation sound INSIDE the user gesture (critical for iOS Safari)
-    if (soundOn && audio) { audio.unlock(); audio.playActivation(acfg.volEff); }
 
-    const startAmb = () => { if (soundOn && audio && acfg.ambiente) audio.startAmbient(acfg.traccia, acfg.volAmb, 2400); };
+    const startAmb = () => { if (soundOn && audio && acfg.ambiente) audio.startAmbient(acfg.urls, acfg.volAmb, 2200); };
 
     if (reduced) {
       applyTheme(true); setSecret(true);
@@ -196,7 +195,7 @@ export default function ModelProfile() {
       const audio = getAudio();
       if (audio) {
         audio.setMuted(!next);
-        if (next && secret) { const c = audioCfg(); if (c.ambiente) audio.startAmbient(c.traccia, c.volAmb, 1200); }
+        if (next && secret) { const c = audioCfg(); if (c.ambiente) audio.startAmbient(c.urls, c.volAmb, 1200); }
       }
       return next;
     });
@@ -312,7 +311,7 @@ export default function ModelProfile() {
         <div className="flex justify-center mb-6">
           {!secret ? (
             <div className="text-center w-full sm:w-auto">
-              <motion.button onClick={activate} disabled={transforming} data-testid="secret-trigger-button"
+              <motion.button onClick={activate} onPointerDown={() => { const a = getAudio(); if (soundOn && a) a.unlock(); }} disabled={transforming} data-testid="secret-trigger-button"
                 whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.94, y: 2 }}
                 className="group relative inline-flex items-center gap-3 rounded-2xl px-8 sm:px-10 py-5 overflow-hidden w-full sm:w-auto justify-center"
                 style={{ background: 'linear-gradient(180deg, hsl(var(--card)), hsl(var(--secondary)))', border: '1px solid hsl(var(--primary) / 0.55)', boxShadow: '0 0 0 1px hsl(var(--primary)/0.15), 0 0 40px hsl(var(--primary)/0.28), inset 0 1px 0 hsl(40 40% 80% / 0.15)' }}>

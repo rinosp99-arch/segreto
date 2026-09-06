@@ -1,16 +1,11 @@
-// Secret Side audio — single protagonist track "Velluto Nero".
+// Secret Side audio — plays a selectable ambient track (default "Velluto Nero").
 // Web Audio API for a truly GAPLESS loop + reliable iOS/Safari unlock inside the user gesture.
 // Falls back to HTMLAudioElement if Web Audio/decode is unavailable.
-// Source: AAC/M4A primary (mobile-friendly) with MP3 fallback.
 
-const BASE = '/audio/';
-const TRACK_M4A = BASE + 'velluto-nero.m4a';
-const TRACK_MP3 = BASE + 'velluto-nero.mp3';
-// kept for API compatibility (admin selector shows a single track now)
 export const AUDIO_PRESETS = ['velluto-nero'];
 
-let _sharedBuffer = null;      // decoded AudioBuffer (shared across models — same track)
-let _bufferPromise = null;
+const _buffers = {};        // url -> decoded AudioBuffer
+const _bufferPromises = {}; // url -> promise
 
 class AudioController {
   constructor() {
@@ -21,7 +16,6 @@ class AudioController {
     this.vol = 0.22;
     this.unlocked = false;
     this._token = 0;
-    // HTMLAudio fallback
     this.fallbackEl = null;
     this.useFallback = false;
   }
@@ -34,19 +28,20 @@ class AudioController {
     return this.ctx;
   }
 
-  _loadBuffer() {
-    if (_sharedBuffer) return Promise.resolve(_sharedBuffer);
-    if (_bufferPromise) return _bufferPromise;
+  _loadBuffer(urls) {
+    const key = urls.m4a || urls.mp3;
+    if (_buffers[key]) return Promise.resolve(_buffers[key]);
+    if (_bufferPromises[key]) return _bufferPromises[key];
     const ctx = this.ctx;
     const decode = (url) => fetch(url).then((r) => r.arrayBuffer()).then((ab) => new Promise((res, rej) => {
       const p = ctx.decodeAudioData(ab, res, rej);
       if (p && p.then) p.then(res).catch(rej);
     }));
-    _bufferPromise = decode(TRACK_M4A)
-      .catch(() => decode(TRACK_MP3))
-      .then((buf) => { _sharedBuffer = buf; return buf; })
+    _bufferPromises[key] = decode(urls.m4a || urls.mp3)
+      .catch(() => decode(urls.mp3 || urls.m4a))
+      .then((buf) => { _buffers[key] = buf; return buf; })
       .catch(() => { this.useFallback = true; return null; });
-    return _bufferPromise;
+    return _bufferPromises[key];
   }
 
   // MUST run synchronously inside a user gesture (tap on "NON DOVRESTI PREMERLO").
@@ -57,20 +52,19 @@ class AudioController {
     if (!ctx) return;
     try {
       if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-      // silent 1-frame buffer to fully unlock iOS audio
       const b = ctx.createBuffer(1, 1, ctx.sampleRate);
       const s = ctx.createBufferSource();
       s.buffer = b; s.connect(ctx.destination); s.start(0);
     } catch (e) { /* noop */ }
-    this._loadBuffer(); // begin fetching/decoding immediately
   }
 
-  // Extremely discreet micro-click at the press (optional). NOT the invasive old design.
+  // Extremely discreet micro-click at the press (optional).
   playActivation(volume = 0.6) {
     if (this.muted) return;
     const ctx = this._ensureCtx();
     if (!ctx) return;
     try {
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
       const t = ctx.currentTime;
       const o = ctx.createOscillator();
       const g = ctx.createGain();
@@ -86,58 +80,53 @@ class AudioController {
     } catch (e) { /* noop */ }
   }
 
-  _rampGain(target, ms) {
-    if (!this.gain || !this.ctx) return;
-    const now = this.ctx.currentTime;
-    const g = this.gain.gain;
+  _rampGainOn(gainNode, ctx, target, ms) {
+    if (!gainNode || !ctx) return;
+    const now = ctx.currentTime;
     try {
-      g.cancelScheduledValues(now);
-      g.setValueAtTime(Math.max(0.0001, g.value), now);
-      g.linearRampToValueAtTime(Math.max(0.0001, target), now + Math.max(0.02, ms / 1000));
+      gainNode.gain.cancelScheduledValues(now);
+      gainNode.gain.setValueAtTime(Math.max(0.0001, gainNode.gain.value), now);
+      gainNode.gain.linearRampToValueAtTime(Math.max(0.0001, target), now + Math.max(0.02, ms / 1000));
     } catch (e) { /* noop */ }
   }
 
-  // Start the Velluto Nero loop with a gentle fade-in (gapless via AudioBufferSourceNode.loop).
-  async startAmbient(_preset, volume = 0.22, fadeMs = 2000) {
+  async startAmbient(urls, volume = 0.22, fadeMs = 2000) {
     if (this.muted) return;
     this.vol = Math.max(0, Math.min(1, volume));
+    this.currentUrls = urls;
     const ctx = this._ensureCtx();
-    if (!ctx || this.useFallback) return this._fallbackStart(this.vol, fadeMs);
+    if (!ctx || this.useFallback) return this._fallbackStart(urls, this.vol, fadeMs);
     if (ctx.state === 'suspended') { try { await ctx.resume(); } catch (e) { /* noop */ } }
     const token = ++this._token;
-    const buf = await this._loadBuffer();
-    if (token !== this._token) return undefined; // superseded (stopped / model changed)
-    if (this.useFallback || !buf) return this._fallbackStart(this.vol, fadeMs);
-    // already playing -> just adjust volume
-    if (this.source) { this._rampGain(this.vol, fadeMs); return undefined; }
+    const buf = await this._loadBuffer(urls);
+    if (token !== this._token) return undefined;
+    if (this.useFallback || !buf) return this._fallbackStart(urls, this.vol, fadeMs);
+    if (this.source) { this._rampGainOn(this.gain, this.ctx, this.vol, fadeMs); return undefined; }
     try {
       const src = ctx.createBufferSource();
-      src.buffer = buf; src.loop = true; // sample-accurate gapless loop
+      src.buffer = buf; src.loop = true;
       const g = ctx.createGain(); g.gain.value = 0.0001;
       src.connect(g).connect(ctx.destination);
       src.start(0);
       this.source = src; this.gain = g;
-      this._rampGain(this.vol, fadeMs);
-    } catch (e) { return this._fallbackStart(this.vol, fadeMs); }
+      this._rampGainOn(g, ctx, this.vol, fadeMs);
+    } catch (e) { return this._fallbackStart(urls, this.vol, fadeMs); }
     return undefined;
   }
 
   stopAmbient(fadeMs = 1500) {
-    this._token++; // cancel any pending start
+    this._token++;
     if (this.useFallback) return this._fallbackStop(fadeMs);
     if (!this.source || !this.gain || !this.ctx) return;
-    const src = this.source; const g = this.gain;
+    const src = this.source; const g = this.gain; const ctx = this.ctx;
     this.source = null; this.gain = null;
-    this._rampGain.call({ ctx: this.ctx, gain: g }, 0, fadeMs);
-    const stopAt = this.ctx.currentTime + Math.max(0.05, fadeMs / 1000) + 0.05;
+    this._rampGainOn(g, ctx, 0, fadeMs);
+    const stopAt = ctx.currentTime + Math.max(0.05, fadeMs / 1000) + 0.05;
     try { src.stop(stopAt); } catch (e) { /* noop */ }
     setTimeout(() => { try { src.disconnect(); g.disconnect(); } catch (e) { /* noop */ } }, fadeMs + 120);
   }
 
-  setMuted(m) {
-    this.muted = !!m;
-    if (this.muted) this.stopAmbient(500);
-  }
+  setMuted(m) { this.muted = !!m; if (this.muted) this.stopAmbient(500); }
 
   cleanup() {
     this._token++;
@@ -148,14 +137,13 @@ class AudioController {
     this.unlocked = false;
   }
 
-  // ---- HTMLAudioElement fallback (loop attribute) ----
-  _fallbackStart(volume, fadeMs) {
+  _fallbackStart(urls, volume, fadeMs) {
     try {
       if (!this.fallbackEl) {
         const a = new Audio();
-        a.src = TRACK_M4A; a.loop = true; a.preload = 'auto';
+        a.src = urls.m4a || urls.mp3; a.loop = true; a.preload = 'auto';
         a.setAttribute('playsinline', ''); a.playsInline = true;
-        a.onerror = () => { if (a.src.indexOf('.mp3') === -1) { a.src = TRACK_MP3; a.play().catch(() => {}); } };
+        a.onerror = () => { if (urls.mp3 && a.src.indexOf(urls.mp3) === -1) { a.src = urls.mp3; a.play().catch(() => {}); } };
         document.body.appendChild(a); a.style.display = 'none';
         this.fallbackEl = a;
       }
@@ -177,11 +165,11 @@ class AudioController {
     requestAnimationFrame(step);
   }
 
-  // Admin-only preview (desktop): play the track briefly with fade in/out.
-  preview(_preset, volume = 0.5, seconds = 10) {
+  // Admin-only preview (desktop): play a track briefly with fade in/out.
+  preview(urls, volume = 0.5, seconds = 10) {
     const a = new Audio();
-    a.src = TRACK_M4A; a.loop = true; a.preload = 'auto';
-    a.onerror = () => { if (a.src.indexOf('.mp3') === -1) { a.src = TRACK_MP3; a.play().catch(() => {}); } };
+    a.src = urls.m4a || urls.mp3; a.loop = true; a.preload = 'auto';
+    a.onerror = () => { if (urls.mp3 && a.src.indexOf(urls.mp3) === -1) { a.src = urls.mp3; a.play().catch(() => {}); } };
     a.volume = 0.0001;
     const p = a.play(); if (p && p.catch) p.catch(() => {});
     const t0 = performance.now();

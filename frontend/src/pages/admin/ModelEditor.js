@@ -5,6 +5,7 @@ import { mediaUrl } from '@/lib/api';
 import { SectionCard, Field, TextInput, TextArea, SelectInput, Toggle, Btn, UploadField } from '@/pages/admin/ui';
 import ImportRapido from '@/components/admin/ImportRapido';
 import { getAudio } from '@/lib/sound';
+import { TRACKS, urlsForAudioCfg } from '@/lib/tracks';
 import { Plus, Trash2, ArrowLeft, Copy, Check, Eye, Upload, CheckCircle2, AlertTriangle, XCircle, Play, Square } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -103,10 +104,10 @@ export default function ModelEditor() {
   const previewAudio = () => {
     const audio = getAudio(); if (!audio) return;
     if (previewing && previewRef.current) { previewRef.current.stop(); previewRef.current = null; setPreviewing(false); return; }
-    const vol = ((m.regia.audio || {}).volume_ambiente ?? 20) / 100;
-    previewRef.current = audio.preview((m.regia.audio || {}).traccia || 'sensuale', Math.max(0.15, vol), 10);
+    const vol = ((m.regia.audio || {}).volume_ambiente ?? 22) / 100;
+    previewRef.current = audio.preview(urlsForAudioCfg(m.regia.audio), Math.max(0.15, vol), 12);
     setPreviewing(true);
-    setTimeout(() => setPreviewing(false), 10000);
+    setTimeout(() => setPreviewing(false), 12000);
   };
   const doCopyConfig = async () => {
     if (!copySource) { toast.error('Seleziona una modella'); return; }
@@ -332,15 +333,16 @@ export default function ModelEditor() {
           <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Traccia (atmosfera)">
               <div className="flex gap-2 items-center">
-                <div className="flex-1 rounded-lg bg-background border border-border px-3 py-2 text-sm flex items-center gap-2" data-testid="regia-audio-traccia">
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'hsl(var(--primary))' }} /> Velluto Nero
-                </div>
+                <SelectInput value={(m.regia.audio || {}).traccia || 'velluto-nero'} onChange={(e) => setAudio('traccia', e.target.value)} data-testid="regia-audio-traccia">
+                  {TRACKS.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+                </SelectInput>
                 <button type="button" onClick={previewAudio} data-testid="regia-audio-preview"
                   className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm hover:border-primary/60 transition-colors">
                   {previewing ? <Square className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />} {previewing ? 'Stop' : 'Ascolta'}
                 </button>
               </div>
             </Field>
+            <UploadField label="Melodia personalizzata (opzionale)" hint="Carica un tuo file audio: se presente, sostituisce la traccia selezionata" value={(m.regia.audio || {}).custom_url} onChange={(v) => setAudio('custom_url', v)} accept="audio/*" />
             <div />
             <Field label={`Volume ambiente — ${(m.regia.audio || {}).volume_ambiente ?? 20}%`}>
               <input type="range" min="0" max="100" value={(m.regia.audio || {}).volume_ambiente ?? 20} onChange={(e) => setAudio('volume_ambiente', parseInt(e.target.value, 10))} data-testid="regia-audio-vol-amb" className="w-full accent-[hsl(var(--primary))]" />

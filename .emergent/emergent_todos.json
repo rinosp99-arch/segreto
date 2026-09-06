@@ -1,18 +1,22 @@
 [
   {
-    "content": "Download Velluto Nero m4a + create MP3 fallback into /public/audio",
+    "content": "Fix iOS: unlock AudioContext synchronously in gesture (before await) + onPointerDown on trigger",
     "status": "completed"
   },
   {
-    "content": "Rewrite sound.js: Web Audio gapless loop of Velluto Nero + iOS unlock, HTMLAudio fallback, discreet micro-click, fades, toggle, cleanup",
+    "content": "Multi-track library (tracks.js) + per-track URL loading in sound.js",
     "status": "completed"
   },
   {
-    "content": "ModelEditor Regista: single-track UI (Velluto Nero) + preview",
+    "content": "ModelProfile: use resolved track URLs for ambient/toggle",
     "status": "completed"
   },
   {
-    "content": "Build + serve check",
+    "content": "ModelEditor Regista: track selector + custom upload + preview of selected track",
+    "status": "completed"
+  },
+  {
+    "content": "Seed default track = Velluto Nero + build/serve check",
     "status": "completed"
   },
   {

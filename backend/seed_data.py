@@ -47,11 +47,11 @@ PRESETS = {
 }
 
 REGIA_PRESETS = {
-    'bordeaux': {"preset": "SENSUALE", "fumo": 35, "luci": 55, "glow": 40, "movimento": 25, "audio": {"ambiente": True, "traccia": "sensuale", "volume_ambiente": 20, "volume_effetto": 60}},
-    'tattoo': {"preset": "INTENSO", "fumo": 55, "luci": 45, "glow": 60, "movimento": 40, "audio": {"ambiente": True, "traccia": "intenso", "volume_ambiente": 22, "volume_effetto": 65}},
-    'dolce': {"preset": "DELICATO", "fumo": 20, "luci": 60, "glow": 30, "movimento": 15, "audio": {"ambiente": True, "traccia": "intimo", "volume_ambiente": 18, "volume_effetto": 55}},
-    'sportiva': {"preset": "SENSUALE", "fumo": 25, "luci": 65, "glow": 35, "movimento": 45, "audio": {"ambiente": True, "traccia": "lusso", "volume_ambiente": 20, "volume_effetto": 60}},
-    'cosplay': {"preset": "INTENSO", "fumo": 45, "luci": 50, "glow": 55, "movimento": 35, "audio": {"ambiente": True, "traccia": "notturno", "volume_ambiente": 22, "volume_effetto": 62}},
+    'bordeaux': {"preset": "SENSUALE", "fumo": 35, "luci": 55, "glow": 40, "movimento": 25, "audio": {"ambiente": True, "traccia": "velluto-nero", "volume_ambiente": 20, "volume_effetto": 60}},
+    'tattoo': {"preset": "INTENSO", "fumo": 55, "luci": 45, "glow": 60, "movimento": 40, "audio": {"ambiente": True, "traccia": "velluto-nero", "volume_ambiente": 22, "volume_effetto": 65}},
+    'dolce': {"preset": "DELICATO", "fumo": 20, "luci": 60, "glow": 30, "movimento": 15, "audio": {"ambiente": True, "traccia": "velluto-nero", "volume_ambiente": 18, "volume_effetto": 55}},
+    'sportiva': {"preset": "SENSUALE", "fumo": 25, "luci": 65, "glow": 35, "movimento": 45, "audio": {"ambiente": True, "traccia": "velluto-nero", "volume_ambiente": 20, "volume_effetto": 60}},
+    'cosplay': {"preset": "INTENSO", "fumo": 45, "luci": 50, "glow": 55, "movimento": 35, "audio": {"ambiente": True, "traccia": "velluto-nero", "volume_ambiente": 22, "volume_effetto": 62}},
 }
 
 DEFAULT_PELLICOLA = {
