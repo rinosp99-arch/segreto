@@ -9,10 +9,11 @@ import { toast } from 'sonner';
 
 export function Header() {
   const { homeMode, setHomeMode } = useTheme();
-  const toggleHomeMode = () => {
+  const toggleHomeMode = (source = 'desktop') => {
     const next = homeMode === 'public' ? 'secret' : 'public';
     setHomeMode(next);
     track({ tipo: next === 'secret' ? 'home_toggle_secret_on' : 'home_toggle_secret_off', session_id: getSessionId() });
+    if (source === 'mobile') track({ tipo: next === 'secret' ? 'home_mobile_toggle_secret' : 'home_mobile_toggle_public', session_id: getSessionId() });
   };
   const navigate = useNavigate();
   const location = useLocation();
@@ -21,6 +22,7 @@ export function Header() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [cats, setCats] = useState([]);
+  const lastSurprise = useState({ slug: null })[0];
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -30,9 +32,15 @@ export function Header() {
 
   useEffect(() => { getCategories().then((d) => setCats(d.items || [])).catch(() => {}); }, []);
 
-  const surprise = async () => {
-    try { const m = await getSurprise(); navigate(`/modelle/${m.slug}`); }
-    catch { toast.error('Nessuna modella disponibile'); }
+  const surprise = async (source = 'desktop') => {
+    track({ tipo: 'home_surprise_click', session_id: getSessionId(), meta: { source } });
+    try {
+      let m = await getSurprise();
+      if (m && m.slug && m.slug === lastSurprise.slug) { try { m = await getSurprise(); } catch (e) { /* keep */ } }
+      lastSurprise.slug = m.slug;
+      track({ tipo: 'home_surprise_profile_open', model_slug: m.slug, session_id: getSessionId(), meta: { source } });
+      navigate(`/modelle/${m.slug}`);
+    } catch { toast.error('Nessuna modella disponibile'); }
   };
 
   return (
@@ -40,8 +48,8 @@ export function Header() {
       <header className={`sticky top-0 z-40 transition-all duration-300 ${scrolled ? 'glass' : 'bg-transparent'}`}>
         <div className="max-w-6xl mx-auto px-4 lg:px-8">
           <div className={`flex items-center justify-between gap-3 transition-all ${scrolled ? 'h-14' : 'h-16'}`}>
-            <Link to="/" className="flex items-center gap-2 shrink-0">
-              <span className="font-serif text-xl md:text-2xl tracking-tight">LATO <span className="gold-text">SEGRETO</span></span>
+            <Link to="/" className="flex items-center gap-2 min-w-0 mr-1">
+              <span className="font-serif text-lg sm:text-xl md:text-2xl tracking-tight truncate">LATO <span className="gold-text">SEGRETO</span></span>
             </Link>
 
             <nav className="hidden md:flex items-center gap-1 text-sm">
@@ -54,9 +62,26 @@ export function Header() {
               <Link to="/articoli" className="px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors">Rivista</Link>
             </nav>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
               {isHome && (
-                <button onClick={toggleHomeMode}
+                <>
+                  {/* MOBILE compact pills (top-right) */}
+                  <button onClick={() => toggleHomeMode('mobile')} data-testid="header-mode-switch-mobile"
+                    className="sm:hidden flex items-center gap-1 text-[10px] caps-label px-2 py-1.5 rounded-full border transition-colors whitespace-nowrap"
+                    style={{ borderColor: homeMode === 'secret' ? 'hsl(var(--primary) / 0.55)' : 'hsl(var(--border))', color: homeMode === 'secret' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))', boxShadow: homeMode === 'secret' ? '0 0 10px hsl(var(--primary) / 0.25)' : 'none' }}
+                    aria-label="Cambia lato Home">
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: homeMode === 'secret' ? 'hsl(var(--primary))' : 'currentColor', opacity: homeMode === 'secret' ? 1 : 0.5 }} />
+                    {homeMode === 'secret' ? 'Pubblico' : 'Segreto'}
+                  </button>
+                  <button onClick={() => surprise('mobile')} data-testid="header-surprise-mobile"
+                    className="sm:hidden flex items-center gap-1 text-[10px] caps-label px-2 py-1.5 rounded-full border border-border text-muted-foreground whitespace-nowrap"
+                    aria-label="Sorprendimi">
+                    <Shuffle className="h-3.5 w-3.5" /> Sorprendimi
+                  </button>
+                </>
+              )}
+              {isHome && (
+                <button onClick={() => toggleHomeMode('desktop')}
                   data-testid="header-mode-switch"
                   className="hidden sm:flex items-center gap-2 text-[11px] caps-label px-3 py-2 rounded-full border transition-colors"
                   style={{ borderColor: homeMode === 'secret' ? 'hsl(var(--primary) / 0.5)' : 'hsl(var(--border))', color: homeMode === 'secret' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))' }}>
@@ -65,14 +90,14 @@ export function Header() {
                 </button>
               )}
               <button onClick={() => setSearchOpen(true)} data-testid="header-search-button"
-                className="h-9 w-9 flex items-center justify-center rounded-full hover:bg-muted/50 transition-colors" aria-label="Cerca">
+                className="h-9 w-9 flex items-center justify-center rounded-full hover:bg-muted/50 transition-colors shrink-0" aria-label="Cerca">
                 <Search className="h-[18px] w-[18px]" />
               </button>
-              <button onClick={surprise} data-testid="header-surprise-button"
+              <button onClick={() => surprise('desktop')} data-testid="header-surprise-button"
                 className="hidden sm:flex items-center gap-1.5 btn-gold rounded-full px-4 py-2 text-xs">
                 <Shuffle className="h-4 w-4" /> Sorprendimi
               </button>
-              <button onClick={() => setMenuOpen(true)} className="md:hidden h-9 w-9 flex items-center justify-center rounded-full hover:bg-muted/50" aria-label="Menu">
+              <button onClick={() => setMenuOpen(true)} className="md:hidden h-9 w-9 flex items-center justify-center rounded-full hover:bg-muted/50 shrink-0" aria-label="Menu">
                 <Menu className="h-5 w-5" />
               </button>
             </div>

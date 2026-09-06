@@ -1,0 +1,43 @@
+{
+  "summary": "Completed comprehensive testing of mobile header controls (toggle and surprise buttons) on Home page. All features working correctly across mobile and desktop viewports.",
+  "backend_issues": {
+    "critical_bugs": [],
+    "flaky_endpoints": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Mobile (390x844): Two pills (header-mode-switch-mobile, header-surprise-mobile) visible in top-right header without scroll",
+    "Mobile: No horizontal overflow detected (scrollWidth=390, windowWidth=390)",
+    "Mobile: No overlap with search button or menu button",
+    "Mobile toggle: Switches between 'SEGRETO' and 'PUBBLICO' modes correctly",
+    "Mobile toggle: Content changes (heading, atmosphere, palette) without page reload",
+    "Mobile toggle: URL stays at '/' (no navigation)",
+    "Mobile toggle: No scroll jump detected (scroll position maintained)",
+    "Mobile surprise: Navigates to random model profile (/modelle/[slug])",
+    "Desktop (1280x800): Mobile pills correctly HIDDEN (sm:hidden working)",
+    "Desktop: Desktop controls (header-mode-switch, header-surprise-button) VISIBLE",
+    "Desktop toggle: Works correctly, switches between 'LATO PUBBLICO' and 'LATO SEGRETO'",
+    "Analytics: 'home_mobile_toggle_secret' event tracked on toggle to secret mode",
+    "Analytics: 'home_mobile_toggle_public' event tracked on toggle to public mode",
+    "Analytics: 'home_surprise_click' event tracked on surprise button click",
+    "Analytics: 'home_surprise_profile_open' event tracked when profile opens",
+    "Atmosphere overlay: Opacity changes correctly (1 for secret, 0 for public)",
+    "No regressions: Model grid, filters, navigation all working",
+    "No JavaScript errors or console errors detected",
+    "Filters working correctly (tested 'Nuove' filter)",
+    "Model card navigation working (click navigates to profile)"
+  ],
+  "test_report_links": [],
+  "action_item_for_main_agent": "",
+  "updated_files": [],
+  "success_percentage": {
+    "frontend": "100%",
+    "backend": "N/A (frontend-only testing)"
+  },
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_test_itself": false
+}
