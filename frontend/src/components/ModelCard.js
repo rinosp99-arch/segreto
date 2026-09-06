@@ -26,14 +26,30 @@ export function ModelCard({ model, index = 0, teaser = false }) {
       <Link to={`/modelle/${model.slug}`} data-testid="model-card"
         className="group relative block rounded-2xl overflow-hidden border border-border/60 bg-card card-elev hover:card-elev-2 transition-shadow">
         <div className="relative" style={{ aspectRatio: '3 / 4' }}>
+          {/* PUBLIC image */}
           <MediaImage src={model.foto_card} alt={model.seo?.alt_default || model.nome_artistico}
-            className="h-full w-full transition-transform duration-500 group-hover:scale-[1.04]" />
+            className="absolute inset-0 h-full w-full transition-all duration-500 group-hover:scale-[1.04]"
+            style={{ opacity: teaser ? 0 : 1 }} />
 
-          {/* secret teaser blurred layer */}
-          {(teaser || model.foto_card_teaser) && (
+          {/* SECRET image (crossfades in when Home is in Lato Segreto) */}
+          <div className="absolute inset-0 transition-opacity duration-[600ms] group-hover:scale-[1.04]"
+            style={{ opacity: teaser ? 1 : 0 }} aria-hidden={!teaser}>
+            <MediaImage src={model.foto_card_teaser || model.foto_card} alt=""
+              className="h-full w-full"
+              style={{ filter: 'saturate(1.1) contrast(1.04) brightness(0.9)' }} />
+            <div className="absolute inset-0" style={{ background: 'radial-gradient(120% 100% at 50% 120%, hsl(350 55% 16% / 0.55), transparent 62%)' }} />
+            {!model.foto_card_teaser && (
+              <div className="absolute bottom-14 left-3 caps-label text-[9px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(0,0,0,0.5)', color: 'hsl(38 60% 78%)', border: '1px solid hsl(38 60% 78% / 0.3)' }}>
+                variante soft
+              </div>
+            )}
+          </div>
+
+          {/* hover peek of the secret side (only in PUBLIC mode) */}
+          {!teaser && model.foto_card_teaser && (
             <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
               <MediaImage src={model.foto_card_teaser} alt="" className="h-full w-full"
-                style={{ filter: 'blur(18px) brightness(0.6) saturate(1.1)', transform: 'scale(1.1)' }} />
+                style={{ filter: 'blur(16px) brightness(0.62) saturate(1.1)', transform: 'scale(1.1)' }} />
               <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(20,0,8,0.7), rgba(0,0,0,0.15))' }} />
             </div>
           )}

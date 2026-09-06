@@ -2,12 +2,18 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Search, Shuffle, Menu, X } from 'lucide-react';
 import { useTheme } from '@/lib/themeContext';
-import { getSurprise, getCategories } from '@/lib/api';
+import { getSurprise, getCategories, track } from '@/lib/api';
+import { getSessionId } from '@/lib/session';
 import SearchOverlay from '@/components/layout/SearchOverlay';
 import { toast } from 'sonner';
 
 export function Header() {
   const { homeMode, setHomeMode } = useTheme();
+  const toggleHomeMode = () => {
+    const next = homeMode === 'public' ? 'secret' : 'public';
+    setHomeMode(next);
+    track({ tipo: next === 'secret' ? 'home_toggle_secret_on' : 'home_toggle_secret_off', session_id: getSessionId() });
+  };
   const navigate = useNavigate();
   const location = useLocation();
   const isHome = location.pathname === '/';
@@ -50,7 +56,7 @@ export function Header() {
 
             <div className="flex items-center gap-1.5">
               {isHome && (
-                <button onClick={() => setHomeMode(homeMode === 'public' ? 'secret' : 'public')}
+                <button onClick={toggleHomeMode}
                   data-testid="header-mode-switch"
                   className="hidden sm:flex items-center gap-2 text-[11px] caps-label px-3 py-2 rounded-full border transition-colors"
                   style={{ borderColor: homeMode === 'secret' ? 'hsl(var(--primary) / 0.5)' : 'hsl(var(--border))', color: homeMode === 'secret' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))' }}>

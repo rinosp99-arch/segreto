@@ -1,0 +1,71 @@
+{
+  "summary": "Completed comprehensive frontend testing of Home page toggle functionality and video playback fix. The WebM+MP4 dual-source approach successfully resolved the headless Chromium codec issue. All 7 videos in the FilmStrip section now load and play correctly with readyState=4 (HAVE_ENOUGH_DATA). NO 'DEMUXER_ERROR_NO_SUPPORTED_STREAMS' errors detected. Toggle functionality (Lato Pubblico ↔ Lato Segreto) works flawlessly: card image crossfade, atmosphere overlay, hero text changes, video switching (pub↔sec), and analytics tracking all functioning correctly. No page reload, no scroll jump, no horizontal overflow on any device. Responsive design verified on desktop (1920x1080), tablet (640x844), and mobile (390x844). All regression tests passed: filters, profile navigation, no JavaScript errors.",
+
+  "backend_issues": {
+    "critical_bugs": [],
+    "flaky_endpoints": []
+  },
+
+  "frontend_issues": {
+    "critical_bugs": [],
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+
+  "passed_tests": [
+    "VIDEO PLAYBACK FIX (PRIMARY OBJECTIVE): All 7 videos in FilmStrip load and play successfully",
+    "Video sources: Each video has 2 <source> tags (WebM first, MP4 fallback) as implemented",
+    "Browser uses WebM sources in headless Chromium (currentSrc shows .webm files)",
+    "All videos readyState=4 (HAVE_ENOUGH_DATA - fully loaded and playing)",
+    "NO 'DEMUXER_ERROR_NO_SUPPORTED_STREAMS' errors in console",
+    "WebM files accessible: /media/pub1.webm and /media/sec1.webm return 200",
+    "Toggle button found and functional (data-testid='header-mode-switch')",
+    "Toggle text changes correctly: 'LATO PUBBLICO' ↔ 'LATO SEGRETO'",
+    "Card image crossfade working: opacity transitions smoothly between public and secret images",
+    "Atmosphere overlay appears in SECRET mode (opacity 0 → ~0.06) with warm/dark gradient",
+    "Hero text changes correctly between modes",
+    "Videos switch correctly on toggle: pub4.webm → sec3.webm → pub3.webm (public↔secret variants)",
+    "Analytics tracking working: POST /api/track with 'home_toggle_secret_on' and 'home_toggle_secret_off'",
+    "No page reload when toggling (URL unchanged)",
+    "No significant scroll jump when toggling",
+    "MOBILE (390x844): No horizontal overflow (body width = viewport width = 390px)",
+    "MOBILE: Toggle button correctly hidden (<640px breakpoint)",
+    "MOBILE: Model cards visible and clickable (10 cards)",
+    "MOBILE: FilmStrip section visible with videos (3 videos found)",
+    "MOBILE: Card click navigation works (opens /modelle/{slug})",
+    "TABLET (640x844): No horizontal overflow",
+    "TABLET: Toggle button correctly visible (>=640px breakpoint)",
+    "TABLET: Toggle functionality working on tablet",
+    "TABLET: Cards and FilmStrip visible",
+    "REGRESSION: All filters working (Tutte, Nuove, Più viste, In tendenza)",
+    "REGRESSION: Profile page navigation working",
+    "REGRESSION: No JavaScript errors or ReferenceError detected"
+  ],
+
+  "test_report_links": [
+    "/root/.emergent/automation_output/20260906_220853/console_20260906_220853.log",
+    "/root/.emergent/automation_output/20260906_221121/console_20260906_221121.log",
+    "/root/.emergent/automation_output/20260906_221209/console_20260906_221209.log",
+    "/root/.emergent/automation_output/20260906_221236/console_20260906_221236.log",
+    "/root/.emergent/automation_output/20260906_221304/console_20260906_221304.log"
+  ],
+
+  "success_percentage": {
+    "frontend_video_playback": "100%",
+    "frontend_toggle_functionality": "100%",
+    "frontend_card_crossfade": "100%",
+    "frontend_atmosphere_overlay": "100%",
+    "frontend_analytics": "100%",
+    "frontend_responsive_design": "100%",
+    "frontend_regression_tests": "100%",
+    "overall": "100%"
+  },
+
+  "action_item_for_main_agent": "",
+
+  "updated_files": [],
+
+  "should_call_test_agent_after_fix": "false",
+  "should_main_agent_test_itself": "false"
+}

@@ -98,7 +98,6 @@ function Tile({ item, secret, index, tileW, mgr, sectionInView, reduced, onOpen,
         <video
           ref={vidRef}
           className={`ls-video ${ready ? 'ready' : ''}`}
-          src={vsrc}
           poster={poster}
           muted
           loop
@@ -109,7 +108,10 @@ function Tile({ item, secret, index, tileW, mgr, sectionInView, reduced, onOpen,
           onCanPlay={() => setReady(true)}
           onPlaying={() => setReady(true)}
           onError={() => setReady(false)}
-        />
+        >
+          {vsrc.endsWith('.mp4') ? <source src={vsrc.replace('.mp4', '.webm')} type="video/webm" /> : null}
+          <source src={vsrc} type="video/mp4" />
+        </video>
       ) : null}
 
       <div className="ls-grade" />

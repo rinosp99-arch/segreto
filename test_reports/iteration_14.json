@@ -1,0 +1,77 @@
+{
+  "summary": "Completed frontend testing of Home page toggle functionality (Lato Pubblico ↔ Lato Segreto). Card image crossfade, atmosphere overlay, hero text changes, and analytics tracking are all working correctly. Toggle is properly hidden/shown based on viewport size. No page reload, no scroll jump, no horizontal overflow on any device. CRITICAL ISSUE: All FilmStrip videos (both public and secret) fail to load due to corrupted/invalid video files - browser reports 'FFmpegDemuxer: no supported streams'. However, poster images display correctly as fallback, so no black videos appear.",
+  
+  "backend_issues": {
+    "critical_bugs": []
+  },
+  
+  "frontend_issues": {
+    "critical_bugs": [
+      {
+        "component": "FilmStrip videos",
+        "issue": "All video files (pub1.mp4, pub2.mp4, pub3.mp4, sec1.mp4, sec2.mp4, sec3.mp4, sec4.mp4) fail to load with error: 'PipelineStatus::DEMUXER_ERROR_NO_SUPPORTED_STREAMS: FFmpegDemuxer: no supported streams'",
+        "root_cause": "Video files are corrupted or improperly encoded - browser cannot find valid video/audio streams",
+        "impact": "Videos do not play in FilmStrip section. Poster images display as fallback, so no black frames appear, but the intended video playback functionality is broken",
+        "fix_priority": "CRITICAL",
+        "fix_required": "Re-encode or replace all video files in /app/frontend/public/media/ with valid MP4 files (H.264 video codec, AAC audio codec recommended for browser compatibility)",
+        "files_affected": [
+          "/app/frontend/public/media/pub1.mp4",
+          "/app/frontend/public/media/pub2.mp4", 
+          "/app/frontend/public/media/pub3.mp4",
+          "/app/frontend/public/media/pub4.mp4",
+          "/app/frontend/public/media/sec1.mp4",
+          "/app/frontend/public/media/sec2.mp4",
+          "/app/frontend/public/media/sec3.mp4",
+          "/app/frontend/public/media/sec4.mp4"
+        ],
+        "verification": "Files exist and are downloadable via curl, but browser FFmpeg demuxer cannot parse them. Error occurs in both PUBLIC and SECRET modes after 5+ seconds of load time."
+      }
+    ],
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  
+  "passed_tests": [
+    "Desktop (1920x1080): Toggle button found and functional",
+    "Toggle text changes correctly: 'LATO PUBBLICO' ↔ 'LATO SEGRETO'",
+    "Hero text changes when toggling modes",
+    "Card image crossfade working perfectly: public image (opacity 1→0) and secret image (opacity 0→1) with 600ms transition",
+    "Different images used for public vs secret modes (verified via DOM inspection)",
+    "Atmosphere overlay appears with full opacity in secret mode (warmer bordeaux/purple gradient)",
+    "No page reload when toggling (URL remains unchanged)",
+    "Analytics events tracked correctly: 'home_toggle_secret_on' and 'home_toggle_secret_off' sent to POST /api/track",
+    "No scroll jump when toggling mid-page (24px difference is within acceptable range)",
+    "Tablet (640x844): Toggle button visible and functional",
+    "Tablet: No horizontal overflow in either mode",
+    "Tablet: Card click navigates to profile page correctly",
+    "Mobile (390x844): Toggle button properly hidden (as expected per design)",
+    "Mobile: No horizontal overflow",
+    "Mobile: Cards render correctly",
+    "Mobile: FilmStrip section present and doesn't cause page overflow",
+    "FilmStrip poster images display correctly as fallback (no black frames)",
+    "FilmStrip animation/marquee continues smoothly in both modes"
+  ],
+  
+  "test_report_links": [
+    "/root/.emergent/automation_output/20260906_215918/console_20260906_215918.log",
+    "/root/.emergent/automation_output/20260906_220150/console_20260906_220150.log",
+    "/root/.emergent/automation_output/20260906_220333/console_20260906_220333.log"
+  ],
+  
+  "success_percentage": {
+    "frontend_toggle_functionality": "100%",
+    "frontend_card_crossfade": "100%",
+    "frontend_atmosphere_overlay": "100%",
+    "frontend_analytics": "100%",
+    "frontend_responsive_design": "100%",
+    "frontend_video_playback": "0%"
+  },
+  
+  "action_item_for_main_agent": "CRITICAL: Replace all video files in /app/frontend/public/media/ with properly encoded MP4 files. Current files are corrupted/invalid and cannot be played by browser (FFmpegDemuxer error: no supported streams). Recommended encoding: H.264 video codec, AAC audio codec, MP4 container. All other toggle functionality is working perfectly - this is purely a media file issue.",
+  
+  "updated_files": [],
+  
+  "should_call_test_agent_after_fix": "true",
+  "should_main_agent_test_itself": "false"
+}

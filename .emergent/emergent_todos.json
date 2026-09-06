@@ -1,26 +1,26 @@
 [
   {
-    "content": "Fix iOS: unlock AudioContext synchronously in gesture (before await) + onPointerDown on trigger",
+    "content": "ModelCard: crossfade public↔secret card image in Home secret mode",
     "status": "completed"
   },
   {
-    "content": "Multi-track library (tracks.js) + per-track URL loading in sound.js",
+    "content": "Home: secret atmosphere wash overlay",
     "status": "completed"
   },
   {
-    "content": "ModelProfile: use resolved track URLs for ambient/toggle",
+    "content": "Header: analytics home_toggle_secret_on/off",
     "status": "completed"
   },
   {
-    "content": "ModelEditor Regista: track selector + custom upload + preview of selected track",
+    "content": "Fix pellicola video decode: WebM(VP9) + <source> fallback",
     "status": "completed"
   },
   {
-    "content": "Seed default track = Velluto Nero + build/serve check",
+    "content": "Build + serve check",
     "status": "completed"
   },
   {
-    "content": "Testing agent verification",
+    "content": "Re-test with testing agent",
     "status": "completed"
   }
 ]

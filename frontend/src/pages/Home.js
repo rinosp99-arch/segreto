@@ -68,7 +68,14 @@ export default function Home() {
   const restChunk = showStrip ? items.slice(insertAfter) : [];
 
   return (
-    <div className="max-w-6xl mx-auto px-4 lg:px-8">
+    <div className="max-w-6xl mx-auto px-4 lg:px-8 relative">
+      {/* Secret-mode atmosphere wash for the whole Home (fades in/out smoothly, no reload) */}
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0 transition-opacity duration-700"
+        style={{
+          opacity: secret ? 1 : 0,
+          background: 'radial-gradient(90% 60% at 50% -10%, hsl(340 55% 20% / 0.5), transparent 60%), radial-gradient(70% 50% at 100% 20%, hsl(280 45% 22% / 0.35), transparent 60%), linear-gradient(180deg, hsl(350 45% 6% / 0.55), transparent 40%)',
+        }} />
+      <div className="relative z-[1]">
       {/* intro */}
       <section className="pt-8 pb-6 sm:pt-12">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
@@ -129,6 +136,7 @@ export default function Home() {
           {!showStrip && <div className="pb-10" />}
         </>
       )}
+      </div>
     </div>
   );
 }
