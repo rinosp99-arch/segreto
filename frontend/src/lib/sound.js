@@ -1,93 +1,205 @@
-// Minimal cinematic sound design via Web Audio API (no asset files).
-let ctx = null;
-function ac() {
+// Secret Side audio — single protagonist track "Velluto Nero".
+// Web Audio API for a truly GAPLESS loop + reliable iOS/Safari unlock inside the user gesture.
+// Falls back to HTMLAudioElement if Web Audio/decode is unavailable.
+// Source: AAC/M4A primary (mobile-friendly) with MP3 fallback.
+
+const BASE = '/audio/';
+const TRACK_M4A = BASE + 'velluto-nero.m4a';
+const TRACK_MP3 = BASE + 'velluto-nero.mp3';
+// kept for API compatibility (admin selector shows a single track now)
+export const AUDIO_PRESETS = ['velluto-nero'];
+
+let _sharedBuffer = null;      // decoded AudioBuffer (shared across models — same track)
+let _bufferPromise = null;
+
+class AudioController {
+  constructor() {
+    this.ctx = null;
+    this.gain = null;
+    this.source = null;
+    this.muted = false;
+    this.vol = 0.22;
+    this.unlocked = false;
+    this._token = 0;
+    // HTMLAudio fallback
+    this.fallbackEl = null;
+    this.useFallback = false;
+  }
+
+  _ensureCtx() {
+    if (this.ctx) return this.ctx;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { this.useFallback = true; return null; }
+    try { this.ctx = new AC(); } catch (e) { this.useFallback = true; return null; }
+    return this.ctx;
+  }
+
+  _loadBuffer() {
+    if (_sharedBuffer) return Promise.resolve(_sharedBuffer);
+    if (_bufferPromise) return _bufferPromise;
+    const ctx = this.ctx;
+    const decode = (url) => fetch(url).then((r) => r.arrayBuffer()).then((ab) => new Promise((res, rej) => {
+      const p = ctx.decodeAudioData(ab, res, rej);
+      if (p && p.then) p.then(res).catch(rej);
+    }));
+    _bufferPromise = decode(TRACK_M4A)
+      .catch(() => decode(TRACK_MP3))
+      .then((buf) => { _sharedBuffer = buf; return buf; })
+      .catch(() => { this.useFallback = true; return null; });
+    return _bufferPromise;
+  }
+
+  // MUST run synchronously inside a user gesture (tap on "NON DOVRESTI PREMERLO").
+  unlock() {
+    if (this.unlocked) return;
+    this.unlocked = true;
+    const ctx = this._ensureCtx();
+    if (!ctx) return;
+    try {
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      // silent 1-frame buffer to fully unlock iOS audio
+      const b = ctx.createBuffer(1, 1, ctx.sampleRate);
+      const s = ctx.createBufferSource();
+      s.buffer = b; s.connect(ctx.destination); s.start(0);
+    } catch (e) { /* noop */ }
+    this._loadBuffer(); // begin fetching/decoding immediately
+  }
+
+  // Extremely discreet micro-click at the press (optional). NOT the invasive old design.
+  playActivation(volume = 0.6) {
+    if (this.muted) return;
+    const ctx = this._ensureCtx();
+    if (!ctx) return;
+    try {
+      const t = ctx.currentTime;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = 520;
+      o.type = 'sine'; o.frequency.setValueAtTime(420, t);
+      const peak = Math.max(0.01, Math.min(0.06, 0.05 * volume));
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(peak, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+      o.connect(lp).connect(g).connect(ctx.destination);
+      o.start(t); o.stop(t + 0.16);
+    } catch (e) { /* noop */ }
+  }
+
+  _rampGain(target, ms) {
+    if (!this.gain || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    const g = this.gain.gain;
+    try {
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(Math.max(0.0001, g.value), now);
+      g.linearRampToValueAtTime(Math.max(0.0001, target), now + Math.max(0.02, ms / 1000));
+    } catch (e) { /* noop */ }
+  }
+
+  // Start the Velluto Nero loop with a gentle fade-in (gapless via AudioBufferSourceNode.loop).
+  async startAmbient(_preset, volume = 0.22, fadeMs = 2000) {
+    if (this.muted) return;
+    this.vol = Math.max(0, Math.min(1, volume));
+    const ctx = this._ensureCtx();
+    if (!ctx || this.useFallback) return this._fallbackStart(this.vol, fadeMs);
+    if (ctx.state === 'suspended') { try { await ctx.resume(); } catch (e) { /* noop */ } }
+    const token = ++this._token;
+    const buf = await this._loadBuffer();
+    if (token !== this._token) return undefined; // superseded (stopped / model changed)
+    if (this.useFallback || !buf) return this._fallbackStart(this.vol, fadeMs);
+    // already playing -> just adjust volume
+    if (this.source) { this._rampGain(this.vol, fadeMs); return undefined; }
+    try {
+      const src = ctx.createBufferSource();
+      src.buffer = buf; src.loop = true; // sample-accurate gapless loop
+      const g = ctx.createGain(); g.gain.value = 0.0001;
+      src.connect(g).connect(ctx.destination);
+      src.start(0);
+      this.source = src; this.gain = g;
+      this._rampGain(this.vol, fadeMs);
+    } catch (e) { return this._fallbackStart(this.vol, fadeMs); }
+    return undefined;
+  }
+
+  stopAmbient(fadeMs = 1500) {
+    this._token++; // cancel any pending start
+    if (this.useFallback) return this._fallbackStop(fadeMs);
+    if (!this.source || !this.gain || !this.ctx) return;
+    const src = this.source; const g = this.gain;
+    this.source = null; this.gain = null;
+    this._rampGain.call({ ctx: this.ctx, gain: g }, 0, fadeMs);
+    const stopAt = this.ctx.currentTime + Math.max(0.05, fadeMs / 1000) + 0.05;
+    try { src.stop(stopAt); } catch (e) { /* noop */ }
+    setTimeout(() => { try { src.disconnect(); g.disconnect(); } catch (e) { /* noop */ } }, fadeMs + 120);
+  }
+
+  setMuted(m) {
+    this.muted = !!m;
+    if (this.muted) this.stopAmbient(500);
+  }
+
+  cleanup() {
+    this._token++;
+    try { if (this.source) this.source.stop(); } catch (e) { /* noop */ }
+    try { if (this.source) this.source.disconnect(); if (this.gain) this.gain.disconnect(); } catch (e) { /* noop */ }
+    this.source = null; this.gain = null;
+    this._fallbackStop(0);
+    this.unlocked = false;
+  }
+
+  // ---- HTMLAudioElement fallback (loop attribute) ----
+  _fallbackStart(volume, fadeMs) {
+    try {
+      if (!this.fallbackEl) {
+        const a = new Audio();
+        a.src = TRACK_M4A; a.loop = true; a.preload = 'auto';
+        a.setAttribute('playsinline', ''); a.playsInline = true;
+        a.onerror = () => { if (a.src.indexOf('.mp3') === -1) { a.src = TRACK_MP3; a.play().catch(() => {}); } };
+        document.body.appendChild(a); a.style.display = 'none';
+        this.fallbackEl = a;
+      }
+      const a = this.fallbackEl;
+      a.volume = 0.0001;
+      const p = a.play(); if (p && p.catch) p.catch(() => {});
+      const t0 = performance.now(); const target = Math.max(0, Math.min(1, volume));
+      const step = (now) => { const k = Math.min(1, (now - t0) / Math.max(1, fadeMs)); a.volume = Math.max(0, Math.min(1, target * k)); if (k < 1) requestAnimationFrame(step); };
+      requestAnimationFrame(step);
+    } catch (e) { /* noop */ }
+    return undefined;
+  }
+
+  _fallbackStop(fadeMs) {
+    const a = this.fallbackEl; if (!a) return;
+    const t0 = performance.now(); const sv = a.volume;
+    const step = (now) => { const k = Math.min(1, (now - t0) / Math.max(1, fadeMs)); a.volume = Math.max(0, sv * (1 - k)); if (k < 1) requestAnimationFrame(step); else { try { a.pause(); a.currentTime = 0; } catch (e) { /* noop */ } } };
+    if (fadeMs <= 0) { try { a.pause(); a.currentTime = 0; a.removeAttribute('src'); a.remove && a.remove(); } catch (e) { /* noop */ } this.fallbackEl = null; return; }
+    requestAnimationFrame(step);
+  }
+
+  // Admin-only preview (desktop): play the track briefly with fade in/out.
+  preview(_preset, volume = 0.5, seconds = 10) {
+    const a = new Audio();
+    a.src = TRACK_M4A; a.loop = true; a.preload = 'auto';
+    a.onerror = () => { if (a.src.indexOf('.mp3') === -1) { a.src = TRACK_MP3; a.play().catch(() => {}); } };
+    a.volume = 0.0001;
+    const p = a.play(); if (p && p.catch) p.catch(() => {});
+    const t0 = performance.now();
+    const fin = (now) => { const k = Math.min(1, (now - t0) / 800); a.volume = Math.min(volume, volume * k); if (k < 1) requestAnimationFrame(fin); };
+    requestAnimationFrame(fin);
+    const stop = () => {
+      const s0 = performance.now(); const sv = a.volume;
+      const fo = (now) => { const k = Math.min(1, (now - s0) / 800); a.volume = Math.max(0, sv * (1 - k)); if (k < 1) requestAnimationFrame(fo); else { try { a.pause(); a.removeAttribute('src'); } catch (e) { /* noop */ } } };
+      requestAnimationFrame(fo);
+    };
+    const to = setTimeout(stop, seconds * 1000);
+    return { stop: () => { clearTimeout(to); stop(); }, el: a };
+  }
+}
+
+let _ctrl = null;
+export function getAudio() {
   if (typeof window === 'undefined') return null;
-  if (!ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) ctx = new AC(); }
-  if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
-  return ctx;
-}
-
-// short mechanical switch click
-export function playSwitch() {
-  const c = ac(); if (!c) return;
-  const t = c.currentTime;
-  const o = c.createOscillator();
-  const g = c.createGain();
-  o.type = 'square';
-  o.frequency.setValueAtTime(180, t);
-  o.frequency.exponentialRampToValueAtTime(70, t + 0.05);
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(0.25, t + 0.005);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
-  o.connect(g).connect(c.destination);
-  o.start(t); o.stop(t + 0.1);
-}
-
-// warm, sensual whoosh (low filtered noise sweep with soft tail)
-export function playWhoosh() {
-  const c = ac(); if (!c) return;
-  const t = c.currentTime;
-  const dur = 0.85;
-  const buffer = c.createBuffer(1, c.sampleRate * dur, c.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
-  const src = c.createBufferSource(); src.buffer = buffer;
-  const filter = c.createBiquadFilter(); filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(240, t);
-  filter.frequency.exponentialRampToValueAtTime(1400, t + dur * 0.6);
-  filter.frequency.exponentialRampToValueAtTime(300, t + dur);
-  filter.Q.value = 1.2;
-  const g = c.createGain();
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(0.16, t + 0.15);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  src.connect(filter).connect(g).connect(c.destination);
-  src.start(t); src.stop(t + dur);
-  // sultry low sine underlay
-  const o = c.createOscillator(); const og = c.createGain();
-  o.type = 'sine'; o.frequency.setValueAtTime(90, t); o.frequency.exponentialRampToValueAtTime(60, t + dur);
-  og.gain.setValueAtTime(0.0001, t); og.gain.exponentialRampToValueAtTime(0.12, t + 0.2); og.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(og).connect(c.destination); o.start(t); o.stop(t + dur);
-}
-
-// warm impact + soft shimmer (two detuned sines)
-export function playImpact() {
-  const c = ac(); if (!c) return;
-  const t = c.currentTime;
-  [110, 55].forEach((f, i) => {
-    const o = c.createOscillator(); const g = c.createGain();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(f * (i ? 1 : 1.5), t);
-    o.frequency.exponentialRampToValueAtTime(f * 0.5, t + 0.45);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(i ? 0.32 : 0.2, t + 0.03);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
-    o.connect(g).connect(c.destination); o.start(t); o.stop(t + 0.52);
-  });
-  // brief warm shimmer
-  const s = c.createOscillator(); const sg = c.createGain();
-  s.type = 'triangle'; s.frequency.setValueAtTime(900, t + 0.05); s.frequency.exponentialRampToValueAtTime(1500, t + 0.35);
-  sg.gain.setValueAtTime(0.0001, t + 0.05); sg.gain.exponentialRampToValueAtTime(0.06, t + 0.12); sg.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
-  s.connect(sg).connect(c.destination); s.start(t + 0.05); s.stop(t + 0.42);
-}
-
-// discreet ambient loop (starts only after activation)
-let _amb = null;
-export function startAmbient(volume = 0.12) {
-  const c = ac(); if (!c || _amb) return;
-  const o = c.createOscillator(); const o2 = c.createOscillator();
-  const g = c.createGain(); const lp = c.createBiquadFilter();
-  lp.type = 'lowpass'; lp.frequency.value = 320;
-  o.type = 'sine'; o.frequency.value = 58; o2.type = 'sine'; o2.frequency.value = 87;
-  g.gain.setValueAtTime(0.0001, c.currentTime);
-  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume), c.currentTime + 1.2);
-  o.connect(lp); o2.connect(lp); lp.connect(g).connect(c.destination);
-  o.start(); o2.start();
-  _amb = { o, o2, g, c };
-}
-export function stopAmbient() {
-  if (!_amb) return;
-  const { o, o2, g, c } = _amb;
-  try { g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.5); o.stop(c.currentTime + 0.6); o2.stop(c.currentTime + 0.6); } catch (e) {}
-  _amb = null;
+  if (!_ctrl) _ctrl = new AudioController();
+  return _ctrl;
 }

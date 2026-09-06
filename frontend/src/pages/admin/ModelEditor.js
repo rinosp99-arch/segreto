@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { admGetModel, admCreateModel, admUpdateModel, admGetCategories, admGetModels, admCopyConfig } from '@/lib/adminApi';
 import { mediaUrl } from '@/lib/api';
 import { SectionCard, Field, TextInput, TextArea, SelectInput, Toggle, Btn, UploadField } from '@/pages/admin/ui';
 import ImportRapido from '@/components/admin/ImportRapido';
-import { Plus, Trash2, ArrowLeft, Copy, Check, Eye, Upload, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
+import { getAudio } from '@/lib/sound';
+import { Plus, Trash2, ArrowLeft, Copy, Check, Eye, Upload, CheckCircle2, AlertTriangle, XCircle, Play, Square } from 'lucide-react';
 import { toast } from 'sonner';
 
 const PRESETS = ['bordeaux', 'tattoo', 'dolce', 'sportiva', 'cosplay'];
@@ -18,7 +19,7 @@ const emptyModel = () => ({
   onlyfans_url: '', cta_testo: 'CONTINUA CON ME',
   tema: { preset: 'bordeaux', colore_primario: '40 55% 60%', colore_secondario: '350 45% 30%', grain: 0.08, glow: true, sfondo_stile: 'vignetta', frase_attivazione: 'NON DOVRESTI PREMERLO', testo_dopo_click: "Te l'avevamo detto.", effetti_touch: true },
   messaggio_35s: { attivo: true, timer: 35, testo: '', foto: '', video: '', cta_testo: 'CONTINUA CON ME' },
-  regia: { preset: 'SENSUALE', fumo: 35, luci: 55, glow: 40, movimento: 25, effetto_sonoro: 'sensuale_01', ambiente_sonoro: { attivo: false, preset: 'warm_room', volume: 12 } },
+  regia: { preset: 'SENSUALE', fumo: 35, luci: 55, glow: 40, movimento: 25, audio: { ambiente: true, traccia: 'sensuale', volume_ambiente: 20, volume_effetto: 60 } },
   cta_temporizzata: { attivo: true, ritardo: 10, testo_intro: 'Vuoi vedere dove continua?', testo_pulsante: 'CONTINUA CON ME' },
   social: { instagram: '', tiktok: '', x: '', telegram: '', youtube: '', facebook: '', threads: '', snapchat: '', sito: '', custom: [] },
   seo: { title: '', meta_description: '', alt_default: '', og_image: '' },
@@ -43,6 +44,8 @@ export default function ModelEditor() {
   const [importOpen, setImportOpen] = useState(false);
   const [allModels, setAllModels] = useState([]);
   const [copySource, setCopySource] = useState('');
+  const [previewing, setPreviewing] = useState(false);
+  const previewRef = useRef(null);
 
   const promoLink = () => {
     const params = new URLSearchParams({ ref: m.slug || '', fonte: linkFonte });
@@ -64,7 +67,7 @@ export default function ModelEditor() {
   const setMsg = (k, v) => setM((p) => ({ ...p, messaggio_35s: { ...p.messaggio_35s, [k]: v } }));
   const setSeoF = (k, v) => setM((p) => ({ ...p, seo: { ...p.seo, [k]: v } }));
   const setRegia = (k, v) => setM((p) => ({ ...p, regia: { ...p.regia, [k]: v } }));
-  const setAmb = (k, v) => setM((p) => ({ ...p, regia: { ...p.regia, ambiente_sonoro: { ...p.regia.ambiente_sonoro, [k]: v } } }));
+  const setAudio = (k, v) => setM((p) => ({ ...p, regia: { ...p.regia, audio: { ...(p.regia.audio || {}), [k]: v } } }));
   const setCtaT = (k, v) => setM((p) => ({ ...p, cta_temporizzata: { ...p.cta_temporizzata, [k]: v } }));
   const setSocial = (k, v) => setM((p) => ({ ...p, social: { ...p.social, [k]: v } }));
   const setPelli = (k, v) => setM((p) => ({ ...p, pellicola_home: { ...(p.pellicola_home || {}), [k]: v } }));
@@ -97,6 +100,14 @@ export default function ModelEditor() {
   });
 
   const openPreview = () => { if (m.slug) window.open(`/modelle/${m.slug}?anteprima=1`, '_blank', 'noopener'); };
+  const previewAudio = () => {
+    const audio = getAudio(); if (!audio) return;
+    if (previewing && previewRef.current) { previewRef.current.stop(); previewRef.current = null; setPreviewing(false); return; }
+    const vol = ((m.regia.audio || {}).volume_ambiente ?? 20) / 100;
+    previewRef.current = audio.preview((m.regia.audio || {}).traccia || 'sensuale', Math.max(0.15, vol), 10);
+    setPreviewing(true);
+    setTimeout(() => setPreviewing(false), 10000);
+  };
   const doCopyConfig = async () => {
     if (!copySource) { toast.error('Seleziona una modella'); return; }
     try { const fresh = await admCopyConfig(id, copySource); setM({ ...emptyModel(), ...fresh }); toast.success('Impostazioni copiate'); }
@@ -312,12 +323,34 @@ export default function ModelEditor() {
             <input type="range" min="0" max="100" value={m.regia[k]} onChange={(e) => setRegia(k, parseInt(e.target.value, 10))} data-testid={`regia-${k}`} className="w-full accent-[hsl(var(--primary))]" />
           </label>
         ))}
-        <div className="grid sm:grid-cols-2 gap-x-4 mt-2">
-          <Field label="Effetto trasformazione (suono)"><SelectInput value={m.regia.effetto_sonoro} onChange={(e) => setRegia('effetto_sonoro', e.target.value)}>{['sensuale_01', 'sensuale_02', 'cinematografico', 'soft'].map((s) => <option key={s} value={s}>{s}</option>)}</SelectInput></Field>
-          <Field label="Volume ambiente sonoro"><input type="range" min="0" max="100" value={m.regia.ambiente_sonoro.volume} onChange={(e) => setAmb('volume', parseInt(e.target.value, 10))} className="w-full accent-[hsl(var(--primary))]" /></Field>
+        <div className="mt-4 rounded-xl border border-border/60 p-4">
+          <div className="caps-label gold-text mb-1">Audio</div>
+          <p className="text-xs text-muted-foreground mb-3">Ambiente musicale sensuale che entra in dissolvenza dopo l'attivazione (parte solo dopo il tap dell'utente). Volume di sottofondo.</p>
+          <div className="flex items-center gap-6 mb-3">
+            <Toggle checked={(m.regia.audio || {}).ambiente !== false} onChange={(v) => setAudio('ambiente', v)} label="Ambiente sonoro attivo" />
+          </div>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Field label="Traccia (atmosfera)">
+              <div className="flex gap-2 items-center">
+                <div className="flex-1 rounded-lg bg-background border border-border px-3 py-2 text-sm flex items-center gap-2" data-testid="regia-audio-traccia">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'hsl(var(--primary))' }} /> Velluto Nero
+                </div>
+                <button type="button" onClick={previewAudio} data-testid="regia-audio-preview"
+                  className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm hover:border-primary/60 transition-colors">
+                  {previewing ? <Square className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />} {previewing ? 'Stop' : 'Ascolta'}
+                </button>
+              </div>
+            </Field>
+            <div />
+            <Field label={`Volume ambiente — ${(m.regia.audio || {}).volume_ambiente ?? 20}%`}>
+              <input type="range" min="0" max="100" value={(m.regia.audio || {}).volume_ambiente ?? 20} onChange={(e) => setAudio('volume_ambiente', parseInt(e.target.value, 10))} data-testid="regia-audio-vol-amb" className="w-full accent-[hsl(var(--primary))]" />
+            </Field>
+            <Field label={`Volume click attivazione — ${(m.regia.audio || {}).volume_effetto ?? 60}%`}>
+              <input type="range" min="0" max="100" value={(m.regia.audio || {}).volume_effetto ?? 60} onChange={(e) => setAudio('volume_effetto', parseInt(e.target.value, 10))} data-testid="regia-audio-vol-eff" className="w-full accent-[hsl(var(--primary))]" />
+            </Field>
+          </div>
         </div>
-        <div className="flex items-center gap-6"><Toggle checked={m.regia.ambiente_sonoro.attivo} onChange={(v) => setAmb('attivo', v)} label="Ambiente sonoro (parte solo dopo l'attivazione)" /></div>
-        {id && m.slug && <a href={`/modelle/${m.slug}`} target="_blank" rel="noreferrer" className="inline-block mt-4 text-sm gold-text underline">Apri anteprima reale del Lato Segreto →</a>}
+        {id && m.slug && <a href={`/modelle/${m.slug}?anteprima=1`} target="_blank" rel="noreferrer" className="inline-block mt-4 text-sm gold-text underline">Apri anteprima reale del Lato Segreto →</a>}
       </SectionCard>
 
       <SectionCard title="CTA temporizzata" desc="Compare dal basso dopo un ritardo configurabile (default 10s), senza popup aggressivo.">

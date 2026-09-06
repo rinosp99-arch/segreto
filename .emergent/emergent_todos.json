@@ -1,34 +1,22 @@
 [
   {
-    "content": "Backend: readiness split (profile vs pellicola) in content_status",
+    "content": "Download Velluto Nero m4a + create MP3 fallback into /public/audio",
     "status": "completed"
   },
   {
-    "content": "Backend: auto-bozza / auto-pellicola-off on PUT of published model + audit + _auto flag",
+    "content": "Rewrite sound.js: Web Audio gapless loop of Velluto Nero + iOS unlock, HTMLAudio fallback, discreet micro-click, fades, toggle, cleanup",
     "status": "completed"
   },
   {
-    "content": "Backend: bulk copy-config endpoint (sections, targets, audit)",
+    "content": "ModelEditor Regista: single-track UI (Velluto Nero) + preview",
     "status": "completed"
   },
   {
-    "content": "adminApi: admCopyConfigBulk",
+    "content": "Build + serve check",
     "status": "completed"
   },
   {
-    "content": "ModelEditor: auto-bozza/pellicola-off toast on save",
-    "status": "completed"
-  },
-  {
-    "content": "AdminModels: multi-select checkboxes + bulk bar + bulk apply modal",
-    "status": "completed"
-  },
-  {
-    "content": "Build + backend curl verification",
-    "status": "completed"
-  },
-  {
-    "content": "End-to-end testing agent (auto-bozza, pellicola-off, bulk copy)",
+    "content": "Testing agent verification",
     "status": "completed"
   }
 ]

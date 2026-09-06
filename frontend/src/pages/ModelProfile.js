@@ -6,7 +6,7 @@ import { getModel, getModelSecret, getRelated, track, mediaUrl } from '@/lib/api
 import { MediaMorph } from '@/components/MediaMorph';
 import { ModelCard } from '@/components/ModelCard';
 import { setSeo, SITE } from '@/lib/seo';
-import { playSwitch, playWhoosh, playImpact, startAmbient, stopAmbient } from '@/lib/sound';
+import { getAudio } from '@/lib/sound';
 import { Instagram, Music2, Send, Youtube, Facebook, Globe, Twitter, Link2 } from 'lucide-react';
 import {
   getSessionId, markDiscovered, messageShownFor, markMessageShown,
@@ -80,7 +80,7 @@ export default function ModelProfile() {
       alive = false;
       if (msgTimer.current) clearTimeout(msgTimer.current);
       if (ctaTimer.current) clearTimeout(ctaTimer.current);
-      stopAmbient();
+      getAudio()?.cleanup();
       if (secretEnteredAt.current) {
         const secs = Math.round((Date.now() - secretEnteredAt.current) / 1000);
         track({ tipo: 'secret_time', model_slug: slug, session_id: getSessionId(), valore: secs, _beacon: true });
@@ -91,9 +91,6 @@ export default function ModelProfile() {
   }, [slug]);
 
   const startEnvelopeTimer = useCallback(() => {
-    // ambient sound (only after activation, discreet, opt-in per model)
-    const amb = secretData?.regia?.ambiente_sonoro;
-    if (soundOn && amb?.attivo) startAmbient((amb.volume || 12) / 100);
     // timed CTA (default 10s)
     const ct = secretData?.cta_temporizzata;
     if (ct?.attivo !== false && !ofClickedFor(slug)) {
@@ -117,25 +114,47 @@ export default function ModelProfile() {
     if (on) root.classList.add('theme-secret'); else root.classList.remove('theme-secret');
   };
 
+  const audioCfg = () => {
+    const a = (secretData && secretData.regia && secretData.regia.audio) || {};
+    return {
+      ambiente: a.ambiente !== false,
+      traccia: a.traccia || 'sensuale',
+      volAmb: Math.max(0, Math.min(1, (a.volume_ambiente ?? 20) / 100)),
+      volEff: Math.max(0, Math.min(1, (a.volume_effetto ?? 60) / 100)),
+    };
+  };
+
   const activate = async () => {
     if (transforming || secret) return;
-    if (!secretData) { try { const s = await getModelSecret(slug); setSecretData(s); } catch { return; } }
+    let sd = secretData;
+    if (!sd) { try { sd = await getModelSecret(slug); setSecretData(sd); } catch { return; } }
     setTransforming(true);
     const elapsed = Math.round((Date.now() - pageLoadedAt.current) / 1000);
-    if (soundOn) playSwitch();
+    const audio = getAudio();
+    const acfg = {
+      ambiente: (sd?.regia?.audio?.ambiente) !== false,
+      traccia: sd?.regia?.audio?.traccia || 'sensuale',
+      volAmb: Math.max(0, Math.min(1, (sd?.regia?.audio?.volume_ambiente ?? 20) / 100)),
+      volEff: Math.max(0, Math.min(1, (sd?.regia?.audio?.volume_effetto ?? 60) / 100)),
+    };
+    // Unlock + soft activation sound INSIDE the user gesture (critical for iOS Safari)
+    if (soundOn && audio) { audio.unlock(); audio.playActivation(acfg.volEff); }
+
+    const startAmb = () => { if (soundOn && audio && acfg.ambiente) audio.startAmbient(acfg.traccia, acfg.volAmb, 2400); };
 
     if (reduced) {
       applyTheme(true); setSecret(true);
       secretEnteredAt.current = Date.now();
+      startAmb();
       track({ tipo: 'secret_activate', model_slug: slug, session_id: getSessionId(), valore: elapsed });
       markDiscovered(slug); startEnvelopeTimer(); setTransforming(false); return;
     }
 
     setPhase('blackout');
-    if (soundOn) setTimeout(playWhoosh, 60);
     await wait(300);
     applyTheme(true); setSecret(true);
-    if (soundOn) playImpact();
+    // ambient music enters gradually, accompanying the longer photo dissolve
+    setTimeout(startAmb, 500);
     setPhase('flash');
     await wait(110);
     setPhase('reveal');
@@ -158,7 +177,7 @@ export default function ModelProfile() {
     track({ tipo: 'secret_return', model_slug: slug, session_id: getSessionId() });
     if (msgTimer.current) clearTimeout(msgTimer.current);
     if (ctaTimer.current) clearTimeout(ctaTimer.current);
-    stopAmbient();
+    getAudio()?.stopAmbient(1600);
     setEnvelopeVisible(false); setEnvelopeOpen(false); setCtaTimed(false);
     if (reduced) { applyTheme(false); setSecret(false); return; }
     setTransforming(true);
@@ -169,6 +188,18 @@ export default function ModelProfile() {
     await wait(140);
     setPhase('idle');
     setTransforming(false);
+  };
+
+  const toggleSound = () => {
+    setSoundOn((v) => {
+      const next = !v;
+      const audio = getAudio();
+      if (audio) {
+        audio.setMuted(!next);
+        if (next && secret) { const c = audioCfg(); if (c.ambiente) audio.startAmbient(c.traccia, c.volAmb, 1200); }
+      }
+      return next;
+    });
   };
 
   const registerInteraction = () => {
@@ -255,7 +286,7 @@ export default function ModelProfile() {
       <div className="relative z-10 max-w-5xl mx-auto px-4 lg:px-8 pt-4 pb-16">
         <div className="flex items-center justify-between mb-4">
           <Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"><ArrowLeft className="h-4 w-4" /> Tutte le modelle</Link>
-          <button onClick={() => setSoundOn((v) => !v)} data-testid="sound-toggle" className="h-9 w-9 flex items-center justify-center rounded-full border border-border text-muted-foreground hover:text-foreground transition-colors" aria-label="Audio">
+          <button onClick={toggleSound} data-testid="sound-toggle" className="h-9 w-9 flex items-center justify-center rounded-full border border-border text-muted-foreground hover:text-foreground transition-colors" aria-label="Audio">
             {soundOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
           </button>
         </div>
