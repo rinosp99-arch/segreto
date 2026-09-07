@@ -166,21 +166,18 @@
 .secret-tile { box-shadow: 0 0 0 1px hsl(var(--primary) / 0.35), 0 0 34px hsl(var(--accent) / 0.35); animation: ls-glow 4.5s ease-in-out infinite; }
 .secret-sheen { position: absolute; top: -30%; bottom: -30%; width: 40%; pointer-events: none; background: linear-gradient(90deg, transparent, hsl(40 65% 85% / 0.22), transparent); animation: ls-sheen 6.5s linear infinite; }
 
-/* ===== Pellicola "IN MOVIMENTO" ===== */
-@keyframes ls-marquee-left { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
-@keyframes ls-marquee-right { from { transform: translate3d(-50%,0,0); } to { transform: translate3d(0,0,0); } }
-
+/* ===== Pellicola "IN MOVIMENTO" — motore rAF (JS), NON CSS animation ===== */
+/* Il track viene mosso da requestAnimationFrame via transform: translate3d(),
+   così iOS Low Power Mode / prefers-reduced-motion non possono trasformarlo in
+   uno scroll manuale né metterlo in pausa. */
 .ls-strip-track {
   display: flex;
   gap: 12px;
   width: max-content;
   will-change: transform;
-  animation: ls-marquee-left var(--strip-dur, 40s) linear infinite;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
 }
-.ls-strip-track.rev { animation-name: ls-marquee-right; }
-/* slow-down (touch/hover) instead of hard stop when configured */
-.ls-strip-track.slow { animation-duration: calc(var(--strip-dur, 40s) * 3.2); }
-.ls-strip-track.paused { animation-play-state: paused; }
 
 .ls-tile {
   position: relative;
@@ -213,9 +210,5 @@
     linear-gradient(115deg, transparent 40%, hsl(40 60% 75% / 0.12) 50%, transparent 60%),
     radial-gradient(120% 90% at 50% 120%, hsl(350 55% 22% / 0.55), transparent 60%),
     radial-gradient(140% 120% at 50% 50%, transparent 55%, rgba(0,0,0,0.55) 100%);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ls-strip-track { animation: none !important; width: 100%; overflow-x: auto; }
 }
 

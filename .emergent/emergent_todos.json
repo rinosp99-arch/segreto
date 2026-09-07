@@ -1,26 +1,26 @@
 [
   {
-    "content": "Extend MediaMorph: children overlay + onTime callback + fixed-ratio contain (grid) vs adaptRatio",
+    "content": "FilmStrip: decouple video mount/play from reduced-motion (videos always play, muted-before-play)",
     "status": "completed"
   },
   {
-    "content": "Rebuild ModelProfile media as symmetric 2x3 grid (FOTO1|FOTO2 / VIDEO1|FOTO3 / VIDEO2|VIDEO3), staggered morph, videos contain",
+    "content": "FilmStrip: MP4-priority sources for Safari/iOS (WebM only if canPlayType supports it)",
     "status": "completed"
   },
   {
-    "content": "Special slot 6 (VIDEO3): near-end 'Il resto non e qui.' overlay -> tap scrolls to CTA block",
+    "content": "FilmStrip: replace CSS-animation marquee with rAF translate3d engine (viewport+track), remove overflow-x scroll",
     "status": "completed"
   },
   {
-    "content": "Seed: add 3rd video pair (3 foto + 3 video) + tweak admin hint text",
+    "content": "index.css: remove CSS marquee animation + reduced-motion overflow-x fallback",
     "status": "completed"
   },
   {
-    "content": "esbuild + screenshot 390x844 (public + secret sequence)",
+    "content": "esbuild + differential 390x844 vs desktop test (video currentTime T2>T1, track X2<X1, no interaction)",
     "status": "completed"
   },
   {
-    "content": "testing_agent_v3 verification",
+    "content": "testing_agent_v3 differential desktop vs mobile verification",
     "status": "completed"
   }
 ]

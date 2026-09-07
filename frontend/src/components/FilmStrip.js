@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { mediaUrl, track } from '@/lib/api';
 import { getSessionId } from '@/lib/session';
 
-/* Detect reduced motion preference */
+/* Detect reduced motion (diagnostic only — it must NOT turn videos into posters
+   nor stop the marquee; the rAF engine below runs regardless). */
 function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(false);
   useEffect(() => {
@@ -16,8 +17,18 @@ function usePrefersReducedMotion() {
   return reduced;
 }
 
+/* Does THIS browser really support WebM? Safari/iOS returns '' -> use MP4.
+   Chromium (incl. headless) returns 'maybe'/'probably' -> WebM first (H.264 may be
+   undecodable in headless). This keeps MP4 as the priority source on Safari/iOS. */
+const SUPPORTS_WEBM = (() => {
+  try {
+    const v = document.createElement('video');
+    return v.canPlayType('video/webm; codecs="vp8, vp9"') !== '';
+  } catch { return false; }
+})();
+
 /* ---------------- Tile ---------------- */
-function Tile({ item, secret, index, tileW, mgr, sectionInView, reduced, onOpen, onVideoView, namesAlways }) {
+function Tile({ item, secret, index, tileW, mgr, sectionInView, onOpen, onVideoView, namesAlways }) {
   const key = `${item.slug}-${index}`;
   const tileRef = useRef(null);
   const vidRef = useRef(null);
@@ -29,34 +40,37 @@ function Tile({ item, secret, index, tileW, mgr, sectionInView, reduced, onOpen,
   const vsrc = mediaUrl(side?.video_url || '');
   const poster = mediaUrl(side?.poster_url || item.foto_card || '');
 
-  // iOS Safari frequently rejects/suspends autoplay -> retry aggressively
+  // iOS Safari: muted/playsInline MUST be set (as properties) BEFORE play()
   const tryPlay = useCallback(() => {
     const v = vidRef.current;
     if (!v) return;
+    try { v.muted = true; v.defaultMuted = true; v.playsInline = true; } catch { /* noop */ }
     const p = v.play?.();
     if (p && p.catch) p.catch(() => {});
   }, []);
 
-  // Horizontal visibility -> request/release a play slot (capped)
+  // Horizontal visibility -> request/release a play slot (capped).
+  // NOTE: video playback is intentionally DECOUPLED from prefers-reduced-motion
+  // (videos are muted; reduced motion must never turn them into permanent posters).
   useEffect(() => {
     const el = tileRef.current;
     if (!el) return undefined;
     const io = new IntersectionObserver(
       (entries) => {
         const vis = entries[0].isIntersecting;
-        if (vis && sectionInView && !reduced) {
+        if (vis && sectionInView) {
           if (mgr.acquire(key)) setPlaying(true);
         } else {
           mgr.release(key);
           setPlaying(false);
         }
       },
-      { root: null, rootMargin: '120px 260px', threshold: 0.05 },
+      { root: null, rootMargin: '120px 300px', threshold: 0.02 },
     );
     io.observe(el);
     return () => { io.disconnect(); mgr.release(key); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, sectionInView, reduced]);
+  }, [key, sectionInView]);
 
   // Section out of viewport -> hard pause everything
   useEffect(() => {
@@ -89,7 +103,7 @@ function Tile({ item, secret, index, tileW, mgr, sectionInView, reduced, onOpen,
     setReady(false);
     const v = vidRef.current;
     if (!v || !playing) return;
-    try { v.load(); const p = v.play?.(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* noop */ }
+    try { v.load(); tryPlay(); } catch (e) { /* noop */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secret]);
 
@@ -105,7 +119,7 @@ function Tile({ item, secret, index, tileW, mgr, sectionInView, reduced, onOpen,
       className={`ls-tile card-elev group ${secret ? 'secret' : ''} ${touched ? 'touched' : ''}`}
       style={{ width: tileW }}
     >
-      {/* poster fallback (always present, never a black frame) */}
+      {/* poster fallback (behind the video, only visible during loading — never a black frame) */}
       <img className="ls-poster" src={poster} alt={item.nome_artistico} loading="lazy" draggable="false" />
 
       {playing && vsrc ? (
@@ -120,11 +134,13 @@ function Tile({ item, secret, index, tileW, mgr, sectionInView, reduced, onOpen,
           preload="auto"
           draggable="false"
           onCanPlay={() => { setReady(true); tryPlay(); }}
+          onLoadedData={() => { setReady(true); tryPlay(); }}
           onLoadedMetadata={() => tryPlay()}
           onPlaying={() => setReady(true)}
           onError={() => setReady(false)}
         >
-          {vsrc.endsWith('.mp4') ? <source src={vsrc.replace('.mp4', '.webm')} type="video/webm" /> : null}
+          {/* MP4 priority for Safari/iOS; WebM first only where the browser supports it */}
+          {SUPPORTS_WEBM && vsrc.endsWith('.mp4') ? <source src={vsrc.replace('.mp4', '.webm')} type="video/webm" /> : null}
           <source src={vsrc} type="video/mp4" />
         </video>
       ) : null}
@@ -145,10 +161,20 @@ function Tile({ item, secret, index, tileW, mgr, sectionInView, reduced, onOpen,
   );
 }
 
-/* ---------------- Row (one seamless marquee track) ---------------- */
-function Row({ items, secret, tileW, reps, velocita, direction, mgr, sectionInView, reduced, pausaTouch, namesAlways, onOpen, onVideoView }) {
+/* ---------------- Row (one seamless rAF marquee track) ---------------- */
+function Row({ items, secret, tileW, reps, velocita, direction, mgr, sectionInView, pausaTouch, namesAlways, onOpen, onVideoView }) {
   const [slowed, setSlowed] = useState(false);
   const resumeTimer = useRef(null);
+  const trackRef = useRef(null);
+  const posRef = useRef(0);
+  const halfRef = useRef(0);
+  const rafRef = useRef(0);
+  const lastRef = useRef(0);
+  const slowedRef = useRef(false);
+  const inViewRef = useRef(sectionInView);
+
+  useEffect(() => { slowedRef.current = slowed; }, [slowed]);
+  useEffect(() => { inViewRef.current = sectionInView; }, [sectionInView]);
 
   // temporary slow-down on press/hover; ALWAYS auto-resumes so it can never get stuck
   const slowNow = useCallback(() => { if (resumeTimer.current) clearTimeout(resumeTimer.current); setSlowed(true); }, []);
@@ -158,7 +184,7 @@ function Row({ items, secret, tileW, reps, velocita, direction, mgr, sectionInVi
   }, []);
   useEffect(() => () => { if (resumeTimer.current) clearTimeout(resumeTimer.current); }, []);
 
-  // one "half" = items repeated `reps` times; track = [half, half] -> animate to -50% seamlessly
+  // one "half" = items repeated `reps` times; track = [half, half] -> wrap at -halfWidth (seamless)
   const half = useMemo(() => {
     const arr = [];
     for (let r = 0; r < reps; r += 1) arr.push(...items);
@@ -167,7 +193,55 @@ function Row({ items, secret, tileW, reps, velocita, direction, mgr, sectionInVi
   const loop = useMemo(() => [...half, ...half], [half]);
 
   const halfCount = half.length || 1;
-  const dur = Math.max(24, halfCount * velocita);
+  const durSeconds = Math.max(18, halfCount * velocita); // time to traverse one half
+
+  // measure exact half width (distance to the first child of the 2nd half) for a seamless wrap
+  useLayoutEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    const kids = el.children;
+    const n = half.length;
+    let hw = 0;
+    if (kids.length > n && kids[n]) hw = kids[n].offsetLeft - kids[0].offsetLeft;
+    if (!hw) hw = el.scrollWidth / 2;
+    halfRef.current = hw;
+    // keep current position within range; init right-direction offset
+    if (direction === 'right') { if (posRef.current === 0) posRef.current = -hw; }
+    if (posRef.current <= -hw) posRef.current = 0;
+    if (posRef.current > 0) posRef.current = -hw;
+    el.style.transform = `translate3d(${posRef.current}px,0,0)`;
+  }, [loop, tileW, reps, half.length, direction]);
+
+  // rAF engine — independent of CSS animation, prefers-reduced-motion and video state.
+  // Uses transform: translate3d (NOT scrollLeft) so iOS Low Power Mode can't turn it
+  // into a manual carousel.
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return undefined;
+    lastRef.current = 0;
+    const step = (ts) => {
+      if (!lastRef.current) lastRef.current = ts;
+      let dt = (ts - lastRef.current) / 1000;
+      lastRef.current = ts;
+      if (dt > 0.05) dt = 0.05; // clamp big gaps (tab throttle)
+      const hw = halfRef.current;
+      if (hw > 0 && inViewRef.current) {
+        const speed = hw / durSeconds; // px per second for a full half
+        const f = slowedRef.current ? 0.18 : 1;
+        if (direction === 'right') {
+          posRef.current += speed * f * dt;
+          if (posRef.current >= 0) posRef.current -= hw;
+        } else {
+          posRef.current -= speed * f * dt;
+          if (posRef.current <= -hw) posRef.current += hw;
+        }
+        el.style.transform = `translate3d(${posRef.current}px,0,0)`;
+      }
+      rafRef.current = requestAnimationFrame(step);
+    };
+    rafRef.current = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [durSeconds, direction]);
 
   // Pointer events cover both mouse and touch (incl. iOS Safari). Never a hard freeze.
   const hoverProps = pausaTouch
@@ -181,16 +255,9 @@ function Row({ items, secret, tileW, reps, velocita, direction, mgr, sectionInVi
       }
     : {};
 
-  const cls = [
-    'ls-strip-track',
-    direction === 'right' ? 'rev' : '',
-    slowed ? 'slow' : '',
-    !sectionInView ? 'paused' : '',
-  ].join(' ');
-
   return (
     <div className="relative z-10 overflow-hidden" {...hoverProps}>
-      <div className={cls} style={{ '--strip-dur': `${dur}s` }} data-testid="pellicola-track">
+      <div ref={trackRef} className="ls-strip-track" data-testid="pellicola-track" style={{ transform: 'translate3d(0,0,0)' }}>
         {loop.map((m, i) => (
           <Tile
             key={`${direction}-${m.slug}-${i}`}
@@ -200,7 +267,6 @@ function Row({ items, secret, tileW, reps, velocita, direction, mgr, sectionInVi
             tileW={tileW}
             mgr={mgr}
             sectionInView={sectionInView}
-            reduced={reduced}
             namesAlways={namesAlways}
             onOpen={onOpen}
             onVideoView={onVideoView}
@@ -263,13 +329,13 @@ export default function FilmStrip({ items, config, secret }) {
     return () => window.removeEventListener('resize', recalc);
   }, [items]);
 
-  // section visibility -> pause when off-screen
+  // section visibility -> pause the marquee & videos when off-screen
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return undefined;
     const io = new IntersectionObserver(
       (e) => setSectionInView(e[0].isIntersecting),
-      { threshold: 0.12 },
+      { threshold: 0.08 },
     );
     io.observe(el);
     return () => io.disconnect();
@@ -323,6 +389,7 @@ export default function FilmStrip({ items, config, secret }) {
     <section
       ref={wrapRef}
       data-testid="pellicola-section"
+      data-reduced-motion={reduced ? '1' : '0'}
       className="relative -mx-4 lg:-mx-8 my-12 sm:my-16 py-8 sm:py-10 overflow-hidden"
       style={secret ? { background: 'linear-gradient(180deg, hsl(350 45% 8% / 0.7), transparent 85%)' } : {}}
     >
@@ -348,7 +415,6 @@ export default function FilmStrip({ items, config, secret }) {
         direction="left"
         mgr={mgr.current}
         sectionInView={sectionInView}
-        reduced={reduced}
         pausaTouch={pausaTouch}
         namesAlways={namesAlways}
         onOpen={onOpen}
@@ -366,7 +432,6 @@ export default function FilmStrip({ items, config, secret }) {
             direction="right"
             mgr={mgr.current}
             sectionInView={sectionInView}
-            reduced={reduced}
             pausaTouch={pausaTouch}
             namesAlways={namesAlways}
             onOpen={onOpen}
