@@ -336,7 +336,7 @@ export default function ModelProfile() {
             ))}
             {wideTile && (
               <div className="col-span-2">
-                <MediaMorph pub={wideTile.pair.pubblico} sec={wideTile.pair.segreto} secret={secret} reduced={reduced} effect={wideTile.effect} delay={wideTile.delay} ambient={secret} ratio="16 / 9" className="rounded-2xl border border-border/60 card-elev" />
+                <MediaMorph pub={wideTile.pair.pubblico} sec={wideTile.pair.segreto} secret={secret} reduced={reduced} effect={wideTile.effect} delay={wideTile.delay} ambient={secret} fit="contain" maxVh={70} ratio="16 / 9" className="rounded-2xl border border-border/60 card-elev" />
               </div>
             )}
           </div>

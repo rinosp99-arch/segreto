@@ -1,41 +1,95 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { mediaUrl } from '@/lib/api';
 
-function Layer({ item, active, reduced, grade, visible, extraFilter }) {
+function Layer({ item, active, reduced, grade, visible, extraFilter, fit = 'cover', objPos = 'center 20%', onNatural }) {
   const videoRef = useRef(null);
-  useEffect(() => {
+
+  const tryPlay = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (active && visible) { v.play?.().catch(() => {}); } else { try { v.pause?.(); } catch {} }
-  }, [active, visible]);
+    const p = v.play?.();
+    if (p && p.catch) p.catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return undefined;
+    if (active && visible) { tryPlay(); } else { try { v.pause?.(); } catch { /* noop */ } }
+    return undefined;
+  }, [active, visible, tryPlay]);
+
+  // iOS Safari may suspend autoplay -> retry when tab becomes visible again
+  useEffect(() => {
+    if (item?.tipo !== 'video') return undefined;
+    const onVis = () => { if (document.visibilityState === 'visible' && active && visible) tryPlay(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [item, active, visible, tryPlay]);
+
+  // For videos, derive the native ratio from the poster image right away
+  // (video metadata can be slow / blocked, but the poster reflects the frame ratio)
+  useEffect(() => {
+    if (item?.tipo !== 'video' || !item?.poster || !onNatural) return undefined;
+    let alive = true;
+    const im = new Image();
+    im.onload = () => { if (alive && im.naturalWidth && im.naturalHeight) onNatural(im.naturalWidth, im.naturalHeight); };
+    im.src = mediaUrl(item.poster);
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item]);
 
   if (!item || !item.url) return null;
   const src = mediaUrl(item.url);
   const baseGrade = grade ? 'saturate(0.82) contrast(1.06) brightness(0.9) sepia(0.16) hue-rotate(-12deg)' : '';
   const common = {
-    className: 'absolute inset-0 h-full w-full object-cover',
+    className: `absolute inset-0 h-full w-full object-${fit}`,
     style: {
-      objectPosition: 'center 20%',
+      objectPosition: fit === 'contain' ? 'center' : objPos,
       opacity: active ? 1 : 0,
-      transform: active ? 'scale(1)' : 'scale(1.05)',
+      transform: active ? 'scale(1)' : (fit === 'contain' ? 'scale(1.02)' : 'scale(1.05)'),
       filter: `${baseGrade} ${extraFilter || ''}`.trim() || 'none',
       transition: reduced ? 'opacity 300ms ease' : 'opacity 900ms cubic-bezier(0.2,0.8,0.2,1), transform 1300ms cubic-bezier(0.2,0.8,0.2,1), filter 600ms ease',
     },
   };
   if (item.tipo === 'video') {
-    return <video ref={videoRef} src={src} poster={mediaUrl(item.poster)} autoPlay muted loop playsInline preload="metadata" {...common} />;
+    return (
+      <video
+        ref={videoRef}
+        src={src}
+        poster={mediaUrl(item.poster)}
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        onLoadedMetadata={(e) => { onNatural?.(e.target.videoWidth, e.target.videoHeight); if (active && visible) tryPlay(); }}
+        onCanPlay={() => { if (active && visible) tryPlay(); }}
+        {...common}
+      />
+    );
   }
-  return <img src={src} alt={item.alt || ''} loading="lazy" decoding="async" {...common} />;
+  return (
+    <img
+      src={src}
+      alt={item.alt || ''}
+      loading="lazy"
+      decoding="async"
+      onLoad={(e) => onNatural?.(e.target.naturalWidth, e.target.naturalHeight)}
+      {...common}
+    />
+  );
 }
 
-export function MediaMorph({ pub, sec, secret, reduced, effect = 'flash', delay = 0, ambient = false, className = '', ratio = '3 / 4' }) {
+export function MediaMorph({ pub, sec, secret, reduced, effect = 'flash', delay = 0, ambient = false, className = '', ratio = '3 / 4', fit = 'cover', maxVh = null }) {
   const wrapRef = useRef(null);
   const [visible, setVisible] = useState(false);
   const [shown, setShown] = useState(secret);
   const [fx, setFx] = useState(false);
+  const [pubRatio, setPubRatio] = useState(null);
+  const [secRatio, setSecRatio] = useState(null);
 
   useEffect(() => {
-    const el = wrapRef.current; if (!el) return;
+    const el = wrapRef.current; if (!el) return undefined;
     const io = new IntersectionObserver((e) => setVisible(e[0].isIntersecting), { threshold: 0.2 });
     io.observe(el);
     return () => io.disconnect();
@@ -54,10 +108,33 @@ export function MediaMorph({ pub, sec, secret, reduced, effect = 'flash', delay 
   const blurFilter = (fx && effect === 'blur') ? 'blur(14px)' : '';
   const glitch = (fx && effect === 'glitch') ? { transform: 'translateX(1.5px) skewX(-1deg)', filter: 'hue-rotate(20deg)' } : {};
 
+  // Ratio-aware container: when using object-contain, adopt the native ratio of the
+  // currently-shown media so nothing is cropped (bande scure ai lati/sopra-sotto).
+  const containerFit = fit === 'contain';
+  const activeRatio = showSec ? (secRatio || pubRatio) : (pubRatio || secRatio);
+  const effRatio = containerFit && activeRatio ? activeRatio : ratio;
+
+  const wrapStyle = {
+    aspectRatio: effRatio,
+    ...glitch,
+    transition: 'transform 120ms ease, filter 120ms ease, box-shadow 600ms ease, aspect-ratio 400ms ease',
+  };
+  if (containerFit) {
+    wrapStyle.background = '#050206';
+    if (maxVh) wrapStyle.maxHeight = `${maxVh}vh`;
+    wrapStyle.marginLeft = 'auto';
+    wrapStyle.marginRight = 'auto';
+  }
+
   return (
-    <div ref={wrapRef} className={`relative overflow-hidden bg-muted/40 ${showSec && ambient ? 'secret-tile' : ''} ${className}`} style={{ aspectRatio: ratio, ...glitch, transition: 'transform 120ms ease, filter 120ms ease, box-shadow 600ms ease' }} data-testid="media-tile">
-      <Layer item={pub} active={!showSec} reduced={reduced} visible={visible} />
-      {sec && sec.url && <Layer item={sec} active={showSec} reduced={reduced} grade visible={visible} extraFilter={showSec ? blurFilter : ''} />}
+    <div
+      ref={wrapRef}
+      className={`relative overflow-hidden ${containerFit ? '' : 'bg-muted/40'} ${showSec && ambient ? 'secret-tile' : ''} ${className}`}
+      style={wrapStyle}
+      data-testid="media-tile"
+    >
+      <Layer item={pub} active={!showSec} reduced={reduced} visible={visible} fit={fit} onNatural={(w, h) => { if (w && h) setPubRatio(`${w} / ${h}`); }} />
+      {sec && sec.url && <Layer item={sec} active={showSec} reduced={reduced} grade visible={visible} fit={fit} extraFilter={showSec ? blurFilter : ''} onNatural={(w, h) => { if (w && h) setSecRatio(`${w} / ${h}`); }} />}
 
       {/* persistent stage-light sheen on secret tiles */}
       {showSec && ambient && !reduced && <div className="secret-sheen" />}

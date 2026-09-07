@@ -29,6 +29,14 @@ function Tile({ item, secret, index, tileW, mgr, sectionInView, reduced, onOpen,
   const vsrc = mediaUrl(side?.video_url || '');
   const poster = mediaUrl(side?.poster_url || item.foto_card || '');
 
+  // iOS Safari frequently rejects/suspends autoplay -> retry aggressively
+  const tryPlay = useCallback(() => {
+    const v = vidRef.current;
+    if (!v) return;
+    const p = v.play?.();
+    if (p && p.catch) p.catch(() => {});
+  }, []);
+
   // Horizontal visibility -> request/release a play slot (capped)
   useEffect(() => {
     const el = tileRef.current;
@@ -61,14 +69,20 @@ function Tile({ item, secret, index, tileW, mgr, sectionInView, reduced, onOpen,
     const v = vidRef.current;
     if (!v) return;
     if (playing) {
-      const p = v.play?.();
-      if (p && p.catch) p.catch(() => {});
+      tryPlay();
       onVideoView?.(item.slug);
     } else {
       try { v.pause(); } catch (e) { /* noop */ }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing]);
+
+  // Retry playback when tab returns to foreground (Safari suspends on background)
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === 'visible' && playing) tryPlay(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [playing, tryPlay]);
 
   // Mode switch (public<->secret): reload source but keep playing & keep poster visible (no black)
   useEffect(() => {
@@ -105,7 +119,8 @@ function Tile({ item, secret, index, tileW, mgr, sectionInView, reduced, onOpen,
           autoPlay
           preload="auto"
           draggable="false"
-          onCanPlay={() => setReady(true)}
+          onCanPlay={() => { setReady(true); tryPlay(); }}
+          onLoadedMetadata={() => tryPlay()}
           onPlaying={() => setReady(true)}
           onError={() => setReady(false)}
         >
@@ -132,7 +147,16 @@ function Tile({ item, secret, index, tileW, mgr, sectionInView, reduced, onOpen,
 
 /* ---------------- Row (one seamless marquee track) ---------------- */
 function Row({ items, secret, tileW, reps, velocita, direction, mgr, sectionInView, reduced, pausaTouch, namesAlways, onOpen, onVideoView }) {
-  const [paused, setPaused] = useState(false);
+  const [slowed, setSlowed] = useState(false);
+  const resumeTimer = useRef(null);
+
+  // temporary slow-down on press/hover; ALWAYS auto-resumes so it can never get stuck
+  const slowNow = useCallback(() => { if (resumeTimer.current) clearTimeout(resumeTimer.current); setSlowed(true); }, []);
+  const resumeSoon = useCallback(() => {
+    if (resumeTimer.current) clearTimeout(resumeTimer.current);
+    resumeTimer.current = setTimeout(() => setSlowed(false), 450);
+  }, []);
+  useEffect(() => () => { if (resumeTimer.current) clearTimeout(resumeTimer.current); }, []);
 
   // one "half" = items repeated `reps` times; track = [half, half] -> animate to -50% seamlessly
   const half = useMemo(() => {
@@ -145,19 +169,23 @@ function Row({ items, secret, tileW, reps, velocita, direction, mgr, sectionInVi
   const halfCount = half.length || 1;
   const dur = Math.max(24, halfCount * velocita);
 
+  // Pointer events cover both mouse and touch (incl. iOS Safari). Never a hard freeze.
   const hoverProps = pausaTouch
     ? {
-        onMouseEnter: () => setPaused(true),
-        onMouseLeave: () => setPaused(false),
-        onTouchStart: () => setPaused(true),
-        onTouchEnd: () => setPaused(false),
+        onPointerDown: slowNow,
+        onPointerUp: resumeSoon,
+        onPointerCancel: resumeSoon,
+        onPointerLeave: resumeSoon,
+        onMouseEnter: slowNow,
+        onMouseLeave: resumeSoon,
       }
     : {};
 
   const cls = [
     'ls-strip-track',
     direction === 'right' ? 'rev' : '',
-    (paused || !sectionInView) ? 'paused' : '',
+    slowed ? 'slow' : '',
+    !sectionInView ? 'paused' : '',
   ].join(' ');
 
   return (

@@ -1,26 +1,22 @@
 [
   {
-    "content": "ModelCard: crossfade public↔secret card image in Home secret mode",
+    "content": "Fix #5 wide profile video: ratio-aware object-contain, dark bands, max ~70vh (MediaMorph + ModelProfile)",
     "status": "completed"
   },
   {
-    "content": "Home: secret atmosphere wash overlay",
+    "content": "Robust video autoplay in MediaMorph profile layers (iOS retry)",
     "status": "completed"
   },
   {
-    "content": "Header: analytics home_toggle_secret_on/off",
+    "content": "Fix FilmStrip iPhone: robust autoplay retry + continuous marquee + touch slow (no stuck)",
     "status": "completed"
   },
   {
-    "content": "Fix pellicola video decode: WebM(VP9) + <source> fallback",
+    "content": "esbuild compile check + screenshot 390x844 diagnosis",
     "status": "completed"
   },
   {
-    "content": "Build + serve check",
-    "status": "completed"
-  },
-  {
-    "content": "Re-test with testing agent",
+    "content": "Mandatory testing_agent_v3 verification of both fixes",
     "status": "completed"
   }
 ]
