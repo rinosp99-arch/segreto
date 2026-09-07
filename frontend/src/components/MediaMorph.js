@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { mediaUrl } from '@/lib/api';
 
-function Layer({ item, active, reduced, grade, visible, extraFilter, fit = 'cover', objPos = 'center 20%', onNatural }) {
+function Layer({ item, active, reduced, grade, visible, extraFilter, fit = 'cover', objPos = 'center 20%', onNatural, onTime }) {
   const videoRef = useRef(null);
 
   const tryPlay = useCallback(() => {
@@ -64,6 +64,7 @@ function Layer({ item, active, reduced, grade, visible, extraFilter, fit = 'cove
         preload="metadata"
         onLoadedMetadata={(e) => { onNatural?.(e.target.videoWidth, e.target.videoHeight); if (active && visible) tryPlay(); }}
         onCanPlay={() => { if (active && visible) tryPlay(); }}
+        onTimeUpdate={(e) => { if (active) onTime?.(e.target.currentTime, e.target.duration); }}
         {...common}
       />
     );
@@ -80,7 +81,7 @@ function Layer({ item, active, reduced, grade, visible, extraFilter, fit = 'cove
   );
 }
 
-export function MediaMorph({ pub, sec, secret, reduced, effect = 'flash', delay = 0, ambient = false, className = '', ratio = '3 / 4', fit = 'cover', maxVh = null }) {
+export function MediaMorph({ pub, sec, secret, reduced, effect = 'flash', delay = 0, ambient = false, className = '', ratio = '3 / 4', fit = 'cover', maxVh = null, adaptRatio = false, onTime, children }) {
   const wrapRef = useRef(null);
   const [visible, setVisible] = useState(false);
   const [shown, setShown] = useState(secret);
@@ -108,11 +109,11 @@ export function MediaMorph({ pub, sec, secret, reduced, effect = 'flash', delay 
   const blurFilter = (fx && effect === 'blur') ? 'blur(14px)' : '';
   const glitch = (fx && effect === 'glitch') ? { transform: 'translateX(1.5px) skewX(-1deg)', filter: 'hue-rotate(20deg)' } : {};
 
-  // Ratio-aware container: when using object-contain, adopt the native ratio of the
-  // currently-shown media so nothing is cropped (bande scure ai lati/sopra-sotto).
+  // object-fit: contain adds dark bands (no crop). By default the grid keeps a FIXED ratio
+  // (uniform tiles); only when adaptRatio=true the container adopts the media's native ratio.
   const containerFit = fit === 'contain';
   const activeRatio = showSec ? (secRatio || pubRatio) : (pubRatio || secRatio);
-  const effRatio = containerFit && activeRatio ? activeRatio : ratio;
+  const effRatio = (adaptRatio && containerFit && activeRatio) ? activeRatio : ratio;
 
   const wrapStyle = {
     aspectRatio: effRatio,
@@ -133,8 +134,8 @@ export function MediaMorph({ pub, sec, secret, reduced, effect = 'flash', delay 
       style={wrapStyle}
       data-testid="media-tile"
     >
-      <Layer item={pub} active={!showSec} reduced={reduced} visible={visible} fit={fit} onNatural={(w, h) => { if (w && h) setPubRatio(`${w} / ${h}`); }} />
-      {sec && sec.url && <Layer item={sec} active={showSec} reduced={reduced} grade visible={visible} fit={fit} extraFilter={showSec ? blurFilter : ''} onNatural={(w, h) => { if (w && h) setSecRatio(`${w} / ${h}`); }} />}
+      <Layer item={pub} active={!showSec} reduced={reduced} visible={visible} fit={fit} onTime={onTime} onNatural={(w, h) => { if (w && h) setPubRatio(`${w} / ${h}`); }} />
+      {sec && sec.url && <Layer item={sec} active={showSec} reduced={reduced} grade visible={visible} fit={fit} onTime={onTime} extraFilter={showSec ? blurFilter : ''} onNatural={(w, h) => { if (w && h) setSecRatio(`${w} / ${h}`); }} />}
 
       {/* persistent stage-light sheen on secret tiles */}
       {showSec && ambient && !reduced && <div className="secret-sheen" />}
@@ -153,6 +154,9 @@ export function MediaMorph({ pub, sec, secret, reduced, effect = 'flash', delay 
           <div style={{ position: 'absolute', top: '-30%', bottom: '-30%', width: '45%', transform: fx ? 'translateX(260%) rotate(8deg)' : 'translateX(-160%) rotate(8deg)', background: 'linear-gradient(90deg, transparent, hsl(40 60% 85% / 0.55), transparent)', transition: fx ? 'transform 480ms cubic-bezier(0.2,0.8,0.2,1)' : 'none', opacity: fx ? 1 : 0 }} />
         </div>
       )}
+
+      {/* custom overlay (e.g. teaser finale) */}
+      {children}
     </div>
   );
 }

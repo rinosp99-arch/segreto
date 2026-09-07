@@ -236,7 +236,7 @@ export default function ModelEditor() {
         </div>
       </SectionCard>
 
-      <SectionCard title="Coppie di contenuti (trasformazione)" desc="Ogni posizione della griglia ha una versione pubblica e una segreta. Consigliato: 3 foto + 2 video. Stesso formato per evitare salti.">
+      <SectionCard title="Coppie di contenuti (trasformazione)" desc="Griglia 2×3 simmetrica: 3 foto + 3 video, ognuno con versione pubblica e segreta. Ordine consigliato: FOTO 1 · FOTO 2 · VIDEO 1 · FOTO 3 · VIDEO 2 · VIDEO 3. I video usano 'contain' (nessun taglio, anche 9:16). L'ultimo video è il teaser finale (mostra 'Il resto non è qui.' verso la fine, apre la CTA).">
         <div className="mb-4 flex items-center justify-between">
           <span className="caps-label text-muted-foreground">Anteprima</span>
           <div className="flex gap-1 bg-background border border-border/60 rounded-full p-1">
@@ -250,7 +250,7 @@ export default function ModelEditor() {
             const isVid = p.tipo === 'video';
             return (
               <div key={`prev-${i}`} className="relative rounded-lg overflow-hidden border border-border/60 bg-muted/40" style={{ aspectRatio: '3/4' }}>
-                {url ? (isVid ? <video src={mediaUrl(url)} muted className="h-full w-full object-cover" style={previewSecret ? { filter: 'saturate(0.82) hue-rotate(-12deg)' } : {}} /> : <img src={mediaUrl(url)} alt="" className="h-full w-full object-cover" style={previewSecret ? { filter: 'saturate(0.82) hue-rotate(-12deg)' } : {}} />) : <div className="h-full w-full flex items-center justify-center text-[10px] text-muted-foreground">vuoto</div>}
+                {url ? (isVid ? <video src={mediaUrl(url)} muted className="h-full w-full object-contain" style={{ background: '#050206', ...(previewSecret ? { filter: 'saturate(0.82) hue-rotate(-12deg)' } : {}) }} /> : <img src={mediaUrl(url)} alt="" className="h-full w-full object-cover" style={previewSecret ? { filter: 'saturate(0.82) hue-rotate(-12deg)' } : {}} />) : <div className="h-full w-full flex items-center justify-center text-[10px] text-muted-foreground">vuoto</div>}
                 <span className="absolute bottom-1 left-1 text-[9px] px-1.5 py-0.5 rounded bg-black/60">{isVid ? 'Video' : 'Foto'} {i + 1}</span>
               </div>
             );

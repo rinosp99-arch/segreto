@@ -123,14 +123,14 @@ def build_model(i, spec, order):
     # public media (3 photos)
     pub_imgs = [u(base), u(base + 1), u(base + 2)]
     sec_imgs = [p(base), p(base + 1), p(base + 2)]
-    # videos (2)
-    vpub = [VID[i % len(VID)], VID[(i + 1) % len(VID)]]
-    vsec = [SVID[i % len(SVID)], SVID[(i + 1) % len(SVID)]]
+    # videos (3)
+    vpub = [VID[i % len(VID)], VID[(i + 1) % len(VID)], VID[(i + 2) % len(VID)]]
+    vsec = [SVID[i % len(SVID)], SVID[(i + 1) % len(SVID)], SVID[(i + 2) % len(SVID)]]
 
     def mi(url, tipo='image', poster='', alt=''):
         return {"tipo": tipo, "url": url, "poster": poster, "alt": alt}
 
-    # media pairs = 3 photo positions + 2 video positions (same grid slots)
+    # media pairs = 3 photo positions + 3 video positions (griglia 2×3)
     media_pairs = []
     for k in range(3):
         media_pairs.append({
@@ -138,7 +138,7 @@ def build_model(i, spec, order):
             "pubblico": mi(pub_imgs[k], 'image', '', f"{artistico} foto pubblica {k+1}"),
             "segreto": mi(sec_imgs[k], 'image', '', f"{artistico} foto segreta {k+1}"),
         })
-    for k in range(2):
+    for k in range(3):
         media_pairs.append({
             "id": str(uuid.uuid4()), "tipo": "video",
             "pubblico": mi(f"/media/{vpub[k]}.mp4", 'video', f"/media/{vpub[k]}.jpg", f"{artistico} video pubblico {k+1}"),

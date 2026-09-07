@@ -40,6 +40,7 @@ export default function ModelProfile() {
   const [envelopeVisible, setEnvelopeVisible] = useState(false);
   const [envelopeOpen, setEnvelopeOpen] = useState(false);
   const [ctaTimed, setCtaTimed] = useState(false);
+  const [teaserEnd, setTeaserEnd] = useState(false);
   const ctaTimer = useRef(null);
 
   const pageLoadedAt = useRef(Date.now());
@@ -47,6 +48,26 @@ export default function ModelProfile() {
   const interacted = useRef(false);
   const msgTimer = useRef(null);
   const gridRef = useRef(null);
+  const ctaRef = useRef(null);
+  const teaserFallback = useRef(null);
+
+  const goToCta = useCallback(() => {
+    track({ tipo: 'teaser_finale_click', model_slug: slug, session_id: getSessionId() });
+    const el = ctaRef.current;
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [slug]);
+
+  // Teaser finale (slot 6): reset on mode/slug change; fallback reveal if autoplay is blocked
+  useEffect(() => {
+    setTeaserEnd(false);
+    if (teaserFallback.current) clearTimeout(teaserFallback.current);
+    if (secret) teaserFallback.current = setTimeout(() => setTeaserEnd(true), 7000);
+    return () => { if (teaserFallback.current) clearTimeout(teaserFallback.current); };
+  }, [secret, slug]);
+
+  const onTeaserTime = useCallback((cur, dur) => {
+    if (dur > 0 && (dur - cur) <= Math.min(3, dur * 0.35)) setTeaserEnd(true);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -242,14 +263,17 @@ export default function ModelProfile() {
 
   const pairs = (secretData?.media_pairs?.length ? secretData.media_pairs : fallbackPairs(model));
   const imagePairs = pairs.filter((p) => p.tipo === 'image').slice(0, 3);
-  const videoPairs = pairs.filter((p) => p.tipo === 'video').slice(0, 2);
-  const topTiles = [
-    { pair: imagePairs[0], effect: 'flash', delay: 0 },
-    { pair: imagePairs[1], effect: 'blur', delay: 150 },
-    { pair: videoPairs[0], effect: 'glitch', delay: 300 },
-    { pair: imagePairs[2], effect: 'sweep', delay: 450 },
-  ].filter((t) => t.pair);
-  const wideTile = videoPairs[1] ? { pair: videoPairs[1], effect: 'fadeblack', delay: 600 } : null;
+  const videoPairs = pairs.filter((p) => p.tipo === 'video').slice(0, 3);
+  // Griglia simmetrica 2×3:  FOTO1 | FOTO2  /  VIDEO1 | FOTO3  /  VIDEO2 | VIDEO3
+  // I video usano object-fit: contain (nessun crop); l'ultimo (VIDEO3) è il teaser finale.
+  const slots = [
+    { pair: imagePairs[0], kind: 'image', effect: 'flash', delay: 0 },
+    { pair: imagePairs[1], kind: 'image', effect: 'blur', delay: 100 },
+    { pair: videoPairs[0], kind: 'video', effect: 'glitch', delay: 200 },
+    { pair: imagePairs[2], kind: 'image', effect: 'sweep', delay: 300 },
+    { pair: videoPairs[1], kind: 'video', effect: 'flash', delay: 400 },
+    { pair: videoPairs[2], kind: 'video', effect: 'fadeblack', delay: 500, finale: true },
+  ].filter((s) => s.pair);
   const tema = secretData?.tema || {};
   const regia = secretData?.regia || {};
   const inten = ((Number(regia.fumo ?? 35) + Number(regia.luci ?? 55) + Number(regia.glow ?? 40)) / 3) / 100;
@@ -328,17 +352,40 @@ export default function ModelProfile() {
           )}
         </div>
 
-        {/* MEDIA GRID (vetrina) */}
+        {/* MEDIA GRID (vetrina) — 2×3 simmetrica */}
         <div ref={gridRef} onMouseMove={onGridMove} onTouchMove={onGridMove} className="relative" data-testid="media-grid">
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
-            {topTiles.map((t, i) => (
-              <MediaMorph key={t.pair.id || i} pub={t.pair.pubblico} sec={t.pair.segreto} secret={secret} reduced={reduced} effect={t.effect} delay={t.delay} ambient={secret} ratio="3 / 4" className="rounded-2xl border border-border/60 card-elev" />
+            {slots.map((s, i) => (
+              <MediaMorph
+                key={s.pair.id || i}
+                pub={s.pair.pubblico}
+                sec={s.pair.segreto}
+                secret={secret}
+                reduced={reduced}
+                effect={s.effect}
+                delay={s.delay}
+                ambient={secret}
+                ratio="3 / 4"
+                fit={s.kind === 'video' ? 'contain' : 'cover'}
+                onTime={s.finale ? onTeaserTime : undefined}
+                className="rounded-2xl border border-border/60 card-elev"
+              >
+                {s.finale && secret && (
+                  <button
+                    type="button"
+                    onClick={goToCta}
+                    data-testid="teaser-finale"
+                    aria-label="Il resto non è qui — apri il mio profilo"
+                    className="absolute inset-0 flex items-end justify-center pb-6 sm:pb-8"
+                    style={{ opacity: teaserEnd ? 1 : 0, pointerEvents: teaserEnd ? 'auto' : 'none', transition: 'opacity 600ms ease', background: teaserEnd ? 'linear-gradient(to top, rgba(0,0,0,0.62), transparent 55%)' : 'transparent' }}
+                  >
+                    <span className="font-serif text-lg sm:text-xl tracking-wide drop-shadow" style={{ color: 'hsl(40 45% 88%)' }}>
+                      Il resto non è qui.
+                    </span>
+                  </button>
+                )}
+              </MediaMorph>
             ))}
-            {wideTile && (
-              <div className="col-span-2">
-                <MediaMorph pub={wideTile.pair.pubblico} sec={wideTile.pair.segreto} secret={secret} reduced={reduced} effect={wideTile.effect} delay={wideTile.delay} ambient={secret} fit="contain" maxVh={70} ratio="16 / 9" className="rounded-2xl border border-border/60 card-elev" />
-              </div>
-            )}
           </div>
           {secret && !reduced && (
             <div className="absolute inset-0 pointer-events-none rounded-2xl" style={{ background: 'radial-gradient(260px circle at var(--mx,50%) var(--my,40%), hsl(var(--primary)/0.15), transparent 60%)' }} />
@@ -360,7 +407,7 @@ export default function ModelProfile() {
 
         {/* CONVERSION (secret) */}
         {secret && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="text-center max-w-xl mx-auto">
+          <motion.div ref={ctaRef} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="text-center max-w-xl mx-auto scroll-mt-24">
             <div className="font-serif text-2xl sm:text-3xl mb-3">{secretData?.teaser_copy || 'Qui posso mostrarti solo fino a questo punto.'}</div>
             <p className="text-sm text-muted-foreground mb-6">Il resto — e molto altro — è solo sul mio profilo.</p>
             <button onClick={() => openOnlyFans('of_click_gallery')} data-testid="cta-gallery" className="btn-gold rounded-full px-8 py-4 text-sm inline-flex items-center gap-2">{ctaLabel} <ArrowRight className="h-4 w-4" /></button>

@@ -1,22 +1,26 @@
 [
   {
-    "content": "Fix #5 wide profile video: ratio-aware object-contain, dark bands, max ~70vh (MediaMorph + ModelProfile)",
+    "content": "Extend MediaMorph: children overlay + onTime callback + fixed-ratio contain (grid) vs adaptRatio",
     "status": "completed"
   },
   {
-    "content": "Robust video autoplay in MediaMorph profile layers (iOS retry)",
+    "content": "Rebuild ModelProfile media as symmetric 2x3 grid (FOTO1|FOTO2 / VIDEO1|FOTO3 / VIDEO2|VIDEO3), staggered morph, videos contain",
     "status": "completed"
   },
   {
-    "content": "Fix FilmStrip iPhone: robust autoplay retry + continuous marquee + touch slow (no stuck)",
+    "content": "Special slot 6 (VIDEO3): near-end 'Il resto non e qui.' overlay -> tap scrolls to CTA block",
     "status": "completed"
   },
   {
-    "content": "esbuild compile check + screenshot 390x844 diagnosis",
+    "content": "Seed: add 3rd video pair (3 foto + 3 video) + tweak admin hint text",
     "status": "completed"
   },
   {
-    "content": "Mandatory testing_agent_v3 verification of both fixes",
+    "content": "esbuild + screenshot 390x844 (public + secret sequence)",
+    "status": "completed"
+  },
+  {
+    "content": "testing_agent_v3 verification",
     "status": "completed"
   }
 ]
