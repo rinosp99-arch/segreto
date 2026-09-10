@@ -49,10 +49,10 @@ async def ai_config() -> dict:
     policy = {**DEFAULT_AI_POLICY, **(ai.get("policy") or {})}
     return {
         "enabled": flags.get("ai_api_enabled", True) and flags.get("ai_api", True),
-        "write_enabled": flags.get("ai_write_enabled", True),
+        "write_enabled": flags.get("ai_write_enabled", False),
         "batch_enabled": flags.get("ai_batch_enabled", True),
         "approval_enabled": flags.get("ai_approval_flow_enabled", True),
-        "mode": "FULL" if flags.get("ai_write_enabled", True) else "READ_ONLY",
+        "mode": "FULL" if flags.get("ai_write_enabled", False) else "READ_ONLY",
         "policy": policy,
         "rate_limit_per_min": max(MIN_AI_LIMIT, int(policy.get("rate_limit_per_min") or DEFAULT_LIMIT_AI)),
     }

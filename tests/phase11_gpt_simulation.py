@@ -13,6 +13,8 @@ import os, sys, json, uuid, time, hashlib, asyncio, requests
 
 B = os.environ.get("TEST_BACKEND", "http://localhost:8001")
 HOST = os.environ.get("TEST_PUBLIC_HOST", "secret-side.preview.emergentagent.com")
+REMOTE = os.environ.get("TEST_REMOTE", "0") == "1" or B.startswith("https://")   # production: no direct Mongo access -> API-based checks
+ADMIN_TOKEN = None
 ADMIN = {"email": "admin@latosegreto.it", "password": "LatoSegreto2025!"}
 BUSINESS = ["models", "files", "landings", "categories", "articles", "settings", "redirects"]
 OUT = "/app/test_reports/phase11_simulation.json"
@@ -33,7 +35,24 @@ def admin_token():
     return r.json()["token"]
 
 
+def api_hash():
+    """Remote (production) variant: hash of business data as seen through the admin API."""
+    A = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
+    out = {}
+    for name, path in (("models", "/api/v1/models?limit=500"), ("landings", "/api/v1/landings?limit=500"), ("files", "/api/v1/media?limit=1000"),
+                       ("categories", "/api/categories"), ("articles", "/api/admin/articles"), ("settings", "/api/admin/settings"), ("redirects", "/api/redirects/resolve?path=/x")):
+        try:
+            r = requests.get(f"{B}{path}", headers=A, timeout=60)
+            body = r.json() if r.status_code == 200 else {"status": r.status_code}
+        except Exception as e:
+            body = {"err": str(e)}
+        out[name] = hashlib.sha256(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()[:16]
+    return out
+
+
 async def db_hash():
+    if REMOTE:
+        return api_hash()
     from dotenv import load_dotenv; load_dotenv("/app/backend/.env")
     from motor.motor_asyncio import AsyncIOMotorClient
     c = AsyncIOMotorClient(os.environ["MONGO_URL"]); db = c[os.environ["DB_NAME"]]
@@ -45,6 +64,13 @@ async def db_hash():
 
 
 async def db_find(col, q):
+    if REMOTE:
+        A = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
+        if col == "ai_requests":
+            items = requests.get(f"{B}/api/v1/ai/control", headers=A, timeout=60).json().get("requests", [])
+        else:
+            items = requests.get(f"{B}/api/v1/ai/actions?limit=100", headers=A, timeout=60).json().get("data", {}).get("items", [])
+        return [i for i in items if all(i.get(k) == v for k, v in q.items())]
     from dotenv import load_dotenv; load_dotenv("/app/backend/.env")
     from motor.motor_asyncio import AsyncIOMotorClient
     c = AsyncIOMotorClient(os.environ["MONGO_URL"]); db = c[os.environ["DB_NAME"]]
@@ -52,6 +78,17 @@ async def db_find(col, q):
 
 
 async def db_scan_secret(raw):
+    if REMOTE:
+        # production: scan everything the API can return about keys/activity/config for the raw key
+        A = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
+        hits = []
+        for path in ("/api/v1/auth/keys", "/api/v1/ai/control", "/api/v1/ai/actions?limit=200", "/api/v1/config", "/api/v1/audit?limit=200", "/api/v1/health"):
+            try:
+                if raw in requests.get(f"{B}{path}", headers=A, timeout=60).text:
+                    hits.append(path)
+            except Exception:
+                pass
+        return hits
     from dotenv import load_dotenv; load_dotenv("/app/backend/.env")
     from motor.motor_asyncio import AsyncIOMotorClient
     c = AsyncIOMotorClient(os.environ["MONGO_URL"]); db = c[os.environ["DB_NAME"]]
@@ -64,7 +101,9 @@ async def db_scan_secret(raw):
 
 
 def main():
-    tok = admin_token()
+    global ADMIN_TOKEN
+    tok = admin_token(); ADMIN_TOKEN = tok
+    print(f"Target: {B} (remote={REMOTE})")
     A = {"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}
     HDR = {"Host": HOST, "X-Forwarded-Proto": "https"}
 
@@ -233,7 +272,7 @@ def main():
             logs += open(f, errors="ignore").read()[-2_000_000:]
         except Exception:
             pass
-    row("Chiave assente dai log supervisor", KEY not in logs, "backend/frontend out+err")
+    row("Chiave assente dai log supervisor", KEY not in logs, "backend/frontend out+err" if not REMOTE else "log locali (produzione: log non accessibili, verifica tramite API sopra)")
     # frontend bundle / docs
     docs = "".join(open(f, errors="ignore").read() for f in ("/app/CHATGPT_API.md", "/app/SUPER_API.md", "/app/plan.md") if os.path.exists(f))
     row("Chiave assente da docs", KEY not in docs, "CHATGPT_API.md, SUPER_API.md, plan.md")

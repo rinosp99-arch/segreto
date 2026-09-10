@@ -53,7 +53,7 @@ DEFAULT_CONFIG = {
     "flags": {
         "super_api": True, "seo_autopilot": True, "self_healing": True, "italy_engine": True, "landing_engine": True,
         "ab_testing": True, "ai_api": True, "webhooks": True, "public_landing_routes": False, "domain_it_migration": False,
-        "ai_api_enabled": True, "ai_write_enabled": True, "ai_batch_enabled": True, "ai_approval_flow_enabled": True,
+        "ai_api_enabled": True, "ai_write_enabled": False, "ai_batch_enabled": True, "ai_approval_flow_enabled": True,  # READ_ONLY by default: FULL is a human decision (Phase 11)
         "ssr_prerender": False, "search_console_sync": False, "ga4_production": False,
     },
     "created_at": None, "updated_at": None,
