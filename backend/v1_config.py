@@ -348,6 +348,8 @@ class ApiKeyIn(BaseModel):
     rate_limit_per_min: int = 300
     ip_allowlist: List[str] = []
     source: str = "ai"   # ai | api
+    capability_allow: Optional[List[str]] = None   # Phase 12A: if set, ONLY these capability ids (glob ok: "models.*")
+    capability_deny: Optional[List[str]] = None    # Phase 12A: always blocked for this key
 
 
 @auth_router.get("/keys")
@@ -374,6 +376,7 @@ async def create_key(body: ApiKeyIn, request: Request, principal=Depends(require
         raise HTTPException(status_code=400, detail={"message": f"Scope non consentiti per il ruolo {role}", "invalid": outside, "optional_allowed": ROLE_OPTIONAL_SCOPES.get(role, [])})
     doc = {"id": str(uuid.uuid4()), "name": body.name, "role": role, "scopes": scopes, "key_hash": hash_key(raw), "prefix": raw[:10],
            "expires_at": body.expires_at, "rate_limit_per_min": body.rate_limit_per_min, "ip_allowlist": body.ip_allowlist, "source": body.source,
+           "capability_allow": body.capability_allow, "capability_deny": body.capability_deny or [],
            "active": True, "uses": 0, "request_count": 0, "error_count": 0, "last_ip": None, "revoked_at": None, "disabled_at": None,
            "created_by": actor_of(principal), "created_at": now_iso(), "last_used_at": None}
     await api_keys_col.insert_one(doc)
@@ -419,6 +422,31 @@ async def rotate_key(key_id: str, request: Request, principal=Depends(require("k
     await api_keys_col.update_one({"id": key_id}, {"$set": {"key_hash": hash_key(raw), "prefix": raw[:10], "rotated_at": now_iso(), "rotated_by": actor_of(principal), "active": True, "disabled_at": None}})
     await audit_log(actor_of(principal), "rotate", "api_key", key_id, {}, request_id_of(request))
     return {"id": key_id, "name": rec["name"], "role": rec["role"], "scopes": rec.get("scopes"), "api_key": raw, "prefix": raw[:10], "note": "Nuova chiave mostrata SOLO ora. La precedente non funziona più."}
+
+
+class KeyCapabilitiesIn(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+    capability_allow: Optional[List[str]] = None   # None = no restriction (all capabilities the scopes permit)
+    capability_deny: List[str] = []
+
+
+@auth_router.patch("/keys/{key_id}/capabilities")
+async def patch_key_capabilities(key_id: str, body: KeyCapabilitiesIn, request: Request, principal=Depends(require("keys:manage"))):
+    """Phase 12A: per-key capability allow/deny (globs like 'models.*'). Deny always wins; allow can only restrict
+    (the scope check is still enforced by the dispatcher), never broaden."""
+    rec = await api_keys_col.find_one({"id": key_id, "revoked_at": None}, {"_id": 0, "id": 1})
+    if not rec:
+        raise HTTPException(status_code=404, detail="API key non trovata o revocata")
+    import re as _re
+    pat = _re.compile(r"^[a-z0-9_.*\-]+$")
+    bad = [p for p in ((body.capability_allow or []) + (body.capability_deny or [])) if not pat.match(p)]
+    if bad:
+        raise HTTPException(status_code=400, detail={"message": "Pattern capability non validi", "invalid": bad})
+    allow = [p.strip() for p in body.capability_allow] if body.capability_allow is not None else None
+    deny = [p.strip() for p in body.capability_deny or []]
+    await api_keys_col.update_one({"id": key_id}, {"$set": {"capability_allow": allow, "capability_deny": deny, "updated_at": now_iso()}})
+    await audit_log(actor_of(principal), "capabilities", "api_key", key_id, {"allow": allow, "deny": deny}, request_id_of(request))
+    return {"id": key_id, "capability_allow": allow, "capability_deny": deny}
 
 
 @auth_router.get("/keys/{key_id}/usage")

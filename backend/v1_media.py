@@ -257,11 +257,11 @@ def fetch_url_bytes(url: str) -> (bytes, str):
 
 
 # ---------------- association ----------------
-async def attach_to_model(doc: dict, *, url: str, slot: str, side: str = "pubblico", tipo: str = "image",
-                          alt: str = "", poster: str = "", pair_index: Optional[int] = None, pair_id: Optional[str] = None,
-                          principal: dict, request: Optional[Request], reason: str = "") -> dict:
-    """Place a media URL in a model slot. Returns patched model (enriched)."""
-    from v1_models import patch_model
+def slot_changes(doc: dict, *, url: str, slot: str, side: str = "pubblico", tipo: str = "image",
+                 alt: str = "", poster: str = "", pair_index: Optional[int] = None, pair_id: Optional[str] = None) -> Dict[str, Any]:
+    """PURE planner: the model `changes` that placing `url` in `slot` would produce. No I/O.
+    Shared by attach_to_model (execute) and by the AI dispatcher preview (Phase 12A): preview and execute
+    can never diverge because they build the change with this very function and validate it with patch_model."""
     if slot not in SLOTS:
         raise HTTPException(status_code=400, detail={"message": "Slot non valido", "slots": sorted(SLOTS)})
     if side not in ("pubblico", "segreto"):
@@ -316,6 +316,15 @@ async def attach_to_model(doc: dict, *, url: str, slot: str, side: str = "pubbli
         pairs[idx][side] = item
         pairs[idx]["tipo"] = tipo
         changes["media_pairs"] = pairs
+    return changes
+
+
+async def attach_to_model(doc: dict, *, url: str, slot: str, side: str = "pubblico", tipo: str = "image",
+                          alt: str = "", poster: str = "", pair_index: Optional[int] = None, pair_id: Optional[str] = None,
+                          principal: dict, request: Optional[Request], reason: str = "") -> dict:
+    """Place a media URL in a model slot. Returns patched model (enriched)."""
+    from v1_models import patch_model
+    changes = slot_changes(doc, url=url, slot=slot, side=side, tipo=tipo, alt=alt, poster=poster, pair_index=pair_index, pair_id=pair_id)
     return await patch_model(doc, changes, principal, request, reason or f"Media assegnato allo slot {slot} ({side})")
 
 

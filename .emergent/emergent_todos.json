@@ -1,34 +1,34 @@
 [
   {
-    "content": "Audit pre-connessione (prod/preview, TLS, endpoint, flag) - checklist PASS/FAIL",
+    "content": "Leggere PHASE12_AUDIT_MATRIX.md + v1_capabilities.py; aggiornare plan.md con acceptance criteria",
     "status": "completed"
   },
   {
-    "content": "OpenAPI Action-ready: /api/v1/ai/openapi-chatgpt.json (23 op, desc<=300, Bearer, validata)",
-    "status": "completed"
+    "content": "Refactor minimi service: v1_media.slot_changes (shared preview/execute), v1_ai.log_action session_id, ai_confirm CAPABILITY, PATCH key capabilities",
+    "status": "in_progress"
   },
   {
-    "content": "Dry-run con scope di lettura (minimum privilege) + preset chiave READ_ONLY nel pannello",
-    "status": "completed"
+    "content": "Riscrivere v1_capabilities.py: registry con binding verificati, dispatcher v2, 12 primitive, idempotency, allow/deny, CRITICAL, UNBOUND",
+    "status": "pending"
   },
   {
-    "content": "Test kill switch / READ_ONLY / dry-run zero-mutation con hash DB before/after",
-    "status": "completed"
+    "content": "OpenAPI v2 compatto separato + server.py wiring (middleware v2, startup verify_bindings)",
+    "status": "pending"
   },
   {
-    "content": "Simulazione GPT Action (Bearer) scenari A-I + negativi, request ID, attivita', metriche (42/42)",
-    "status": "completed"
+    "content": "Pannello admin Capacita ChatGPT in /admin/motore",
+    "status": "pending"
   },
   {
-    "content": "Docs: CHATGPT_INSTRUCTIONS.md, CHATGPT_API.md REAL GPT CONNECTION + troubleshooting",
-    "status": "completed"
+    "content": "Test pytest 12A + E2E TEST GIULIA + regressioni Phase 10/11",
+    "status": "pending"
   },
   {
-    "content": "Secret leak scan, screenshot admin senza secret, test connessione 13/13, deployment readiness PASS",
-    "status": "completed"
+    "content": "Testing agent + fix",
+    "status": "pending"
   },
   {
-    "content": "Report finale Phase 11 in italiano (MANUAL CHATGPT STEP REQUIRED)",
-    "status": "completed"
+    "content": "Docs + report finale Phase 12A",
+    "status": "pending"
   }
 ]

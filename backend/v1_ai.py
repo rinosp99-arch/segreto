@@ -52,7 +52,7 @@ def envelope(action: str, request: Request, summary: str, data: Any = None, warn
 
 async def log_action(principal: dict, request: Request, action: str, inp: Any, result_summary: str, ok: bool = True, target: Optional[dict] = None,
                      changes: Optional[List[dict]] = None, version_ids: Optional[List[str]] = None, started: Optional[float] = None, rollback_ref: Optional[str] = None,
-                     before: Any = None, after: Any = None, reason: str = ""):
+                     before: Any = None, after: Any = None, reason: str = "", session_id: Optional[str] = None, extra: Optional[dict] = None):
     inp_red = redact(inp if isinstance(inp, dict) else {"input": inp})
     if isinstance(inp_red, dict) and "base64_data" in inp_red:
         inp_red["base64_data"] = "<base64>"
@@ -60,7 +60,8 @@ async def log_action(principal: dict, request: Request, action: str, inp: Any, r
            "source": "chatgpt" if principal.get("type") == "api_key" else "admin-ai", "action": action, "target": target, "input": inp_red, "ok": ok, "status": "ok" if ok else "error",
            "summary": result_summary, "changes": changes or [], "version_ids": version_ids or [], "rollback_ref": rollback_ref or ((version_ids or [None])[-1]),
            "before": redact(before) if before is not None else None, "after": redact(after) if after is not None else None, "reason": reason or "",
-           "duration_ms": round((time.time() - started) * 1000) if started else None, "timestamp": now_iso()}
+           "session_id": session_id or (inp.get("session_id") if isinstance(inp, dict) else None),  # Phase 12A: session grouping for rollback.session
+           "duration_ms": round((time.time() - started) * 1000) if started else None, "timestamp": now_iso(), **(extra or {})}
     await ai_actions_col.insert_one(dict(doc))
     try:
         from v1_config import emit_event
@@ -676,6 +677,13 @@ async def ai_confirm(body: AIConfirm, request: Request, principal=Depends(ai_gua
     appr = await consume_approval(body.token, actor_of(principal))
     kind, payload = appr["type"], appr["payload"]
     bump("approvals_confirmed")
+    if kind == "CAPABILITY":
+        # Phase 12A: proposal prepared by the universal dispatcher -> re-run the SAME capability with approved=True
+        # (scopes, READ_ONLY, CRITICAL, target etag and idempotency are re-checked by run_capability itself)
+        from v1_capabilities import execute_approved_capability
+        res = await execute_approved_capability(appr, principal, request)
+        res["data"]["approval_id"] = appr["id"]
+        return res
     if kind == "MODEL_UPDATE":
         doc = await models_col.find_one({"id": payload["model_id"]}, {"_id": 0})
         if not doc:
@@ -721,19 +729,11 @@ async def _landing_out(doc: dict) -> dict:
     return out
 
 
-@ai_router.post("/landings", operation_id="createLanding", summary="Crea una landing (bozza) per una o più modelle")
-async def ai_landings_create(body: AILandingCreate, request: Request, principal=Depends(ai_guard("landing:create", write=True))):
-    t0 = time.time()
-    from v1_landings import create_landing, validate_landing_full
-    refs = body.models or ([body.model] if body.model else [])
-    slugs, names = [], []
-    for r in refs:
-        d = await resolve_model(r)
-        slugs.append(d["slug"])
-        names.append(d.get("nome_artistico") or d.get("nome"))
+def build_landing_data(body: "AILandingCreate", slugs: List[str], names: List[str]) -> dict:
+    """Single source of truth for the landing payload built from an AI request (shared with the Phase 12A dispatcher)."""
     titolo = body.titolo or body.h1 or body.title or (f"Il Lato Segreto di {names[0]}" if names else "Landing")
     headline = body.h1 or body.hero_text or titolo
-    data = {
+    return {
         "titolo": titolo, "slug": body.slug or "", "headline": headline, "subtitle": (body.hero_text if body.h1 else body.intro) or "",
         "intro": body.intro or "", "model_slugs": slugs,
         "cta": {"testo": body.cta_text or "SCOPRI IL LATO SEGRETO", "url": body.cta_url or (f"/modelle/{slugs[0]}" if slugs else "/"), "stile": "gold", "posizione": "hero"},
@@ -744,6 +744,20 @@ async def ai_landings_create(body: AILandingCreate, request: Request, principal=
         "targeting": {"editorial_location": body.location_targeting or "Italia", "geoblocking": False, "note": "Solo personalizzazione editoriale/SEO: nessun blocco geografico"},
         "stato": "bozza", "reason": body.reason or "Landing creata via ChatGPT",
     }
+
+
+@ai_router.post("/landings", operation_id="createLanding", summary="Crea una landing (bozza) per una o più modelle")
+async def ai_landings_create(body: AILandingCreate, request: Request, principal=Depends(ai_guard("landing:create", write=True))):
+    t0 = time.time()
+    from v1_landings import create_landing, validate_landing_full
+    refs = body.models or ([body.model] if body.model else [])
+    slugs, names = [], []
+    for r in refs:
+        d = await resolve_model(r)
+        slugs.append(d["slug"])
+        names.append(d.get("nome_artistico") or d.get("nome"))
+    data = build_landing_data(body, slugs, names)
+    titolo = data["titolo"]
     if body.dry_run:
         fv = await validate_landing_full({**data, "id": None})
         return envelope("landing.create", request, f"[dry-run] Landing '{titolo}' per {', '.join(names) or 'nessuna modella'}: score {fv['score']}, {len(fv['errors'])} errori, {len(fv['warnings'])} avvisi.", {"dry_run": True, "proposed_after": data, "full_validation": fv})

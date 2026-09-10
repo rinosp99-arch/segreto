@@ -267,6 +267,21 @@ Scenario completo:
 **Manuale (utente):** creazione chiave READ_ONLY da /admin/motore; creazione GPT + import schema + Authentication API Key/Bearer; primo prompt in Preview; verifica in "Richieste ChatGPT". FULL NON attivato.
 **Storico:** redeploy produzione da Emergent; creazione chiave READ_ONLY da /admin/motore; creazione GPT + import schema + Authentication API Key/Bearer; primo prompt in Preview; verifica in "Richieste ChatGPT". FULL NON attivato.
 
+### Phase 12A — TOTAL SITE CONTROL API (universal engine v2) — Status: IN PROGRESS (preview only; produzione resta READ_ONLY, nessun deploy automatico)
+**Decisioni utente:** schema GPT v2 compatto (~12 primitive universali) al posto delle 23 operazioni; media library/URL come flusso primario + upload diretto sicuro mantenuto; 12A e 12B separate (12B: articoli, A/B avanzato, landing avanzate, clone/varianti, bulk/async pesanti); produzione READ_ONLY per tutta la Phase 12.
+**Audit eseguito:** `/app/PHASE12_AUDIT_MATRIX.md` (FUNZIONE ADMIN → SERVICE → CAPABILITY → SCOPE → RISK → DRY → RB → APPR → STATO).
+**Acceptance criteria obbligatori (utente):**
+1. capability senza binding valido = `UNBOUND` → mai eseguibile (503 CAPABILITY_UNBOUND), visibile nel pannello come disabilitata;
+2. preview ed execute condividono service + validator (stesso `patch_model(dry_run)`, stesso `slot_changes`, stesso `transition(dry_run)`, stesso planner per settings/config/categorie);
+3. ID e versione capability stabili (dichiarati nel registry, indipendenti dal nome della funzione Python);
+4. `capability_deny` prevale sempre su `capability_allow`; `capability_allow` restringe e non amplia mai gli scope (scope check resta obbligatorio); `expand_scopes` non gonfia più i fine scope (fix `media:upload`→`media:write`→`media:delete`);
+5. CRITICAL mai auto-eseguibile via dispatcher (anche in FULL, anche per JWT): solo pannello admin;
+6. `models.prepare_complete` = orchestrazione dei service (create → patch_model → slot_changes/patch_model → apply_safe_fixes → validate), mai publish, nessun bypass di validator/audit/approval (i campi REVIEW restano soggetti ad approvazione);
+7. E2E TEST GIULIA: prepara → verifica (campi, media, file, SEO, audit, sessione) → `rollback.session` → stato business identico (modella soft-deleted, file soft-deleted, issue SEO chiuse, slot vuoti) con versions/audit/ai_actions conservati;
+8. OpenAPI v2 separato (`/api/v2/ai/openapi-chatgpt.json`) finché i test non sono completati: il GPT attuale (v1, 23 op) continua a funzionare.
+**Architettura:** `backend/v1_capabilities.py` (registry + dispatcher) montato su `/api/v2/ai/*`: getCapabilities, getCapability, previewCapability, executeCapability, listApprovals, approveApproval, rejectApproval, getJob, queryAnalytics, getSystemStatus, rollback, findModel. Idempotency per-capability (chiave + principal + hash body → 409 IDEMPOTENCY_CONFLICT se body diverso). `session_id` in `ai_actions` per rollback di sessione. Pannello `/admin/motore` → "Capacità ChatGPT" (conteggi, rischio, toggle, allow/deny per chiave).
+**Test:** `tests/test_phase12_capabilities.py` (registry/security/enforcement/E2E TEST GIULIA) + regressioni `test_ai_control.py`, `test_health_reconciliation.py`, `phase11_gpt_simulation.py`.
+
 ## 3) Next Actions
 0. Fase successiva (NON ora, su richiesta utente): dominio latosegreto.it, redirect da Emergent, SSR/prerender, GSC, GA4 produzione, lancio SEO Italia. Tutto predisposto via Config Center (site.base_url, flags domain_it_migration/ssr_prerender/search_console_sync/ga4_production) e redirect engine.
 1. Implementare Phase 8 (override manuale per-media, checklist required, filtri lista, blocco pubblicazione con errori strutturati, import rapido file+URL, copia configurazione, anteprima admin bozza).

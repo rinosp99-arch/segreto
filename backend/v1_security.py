@@ -56,6 +56,9 @@ FINE_SCOPES = [
     "landing:read", "landing:create", "landing:update", "landing:validate", "landing:publish",
     "system:status", "system:daily_summary",
     "rollback:read", "rollback:execute",
+    # Phase 12A (Total Site Control)
+    "media:update", "media:delete", "categories:read", "categories:write", "settings:read", "settings:update", "config:update",
+    "seo:update", "alerts:write", "jobs:execute", "backup:read", "backup:create", "users:read", "health:run", "content:read",
 ]
 ALL_SCOPES = COARSE_SCOPES + FINE_SCOPES
 
@@ -64,14 +67,14 @@ IMPLIED: Dict[str, List[str]] = {
     "models:write": ["models:create", "models:update", "models:validate", "models:archive", "models:feature"],
     "models:read": ["models:validate"],
     "models:publish": ["models:unpublish"],
-    "media:write": ["media:upload", "media:optimize", "media:replace"],
+    "media:write": ["media:upload", "media:optimize", "media:replace", "media:update", "media:delete"],  # Phase 12A: update/delete
     "seo:read": ["seo:audit"],
-    "seo:write": ["seo:review_prepare", "seo:audit"],
+    "seo:write": ["seo:review_prepare", "seo:audit", "seo:update"],  # Phase 12A: seo:update
     "seo:autofix": ["seo:safe_fix"],
     "landings:read": ["landing:read"],
     "landings:write": ["landing:create", "landing:update", "landing:validate"],
     "landings:publish": ["landing:publish"],
-    "health:read": ["system:status"],
+    "health:read": ["system:status", "health:run"],  # Phase 12A: health:run
     "analytics:read": ["system:daily_summary"],
     "versions:read": ["rollback:read"],
     "versions:rollback": ["rollback:execute"],
@@ -83,6 +86,13 @@ IMPLIED: Dict[str, List[str]] = {
     "landing:read": ["landings:read"], "landing:create": ["landings:write"], "landing:update": ["landings:write"], "landing:validate": ["landings:read"],
     "landing:publish": ["landings:publish"],
     "system:status": ["health:read"], "rollback:read": ["versions:read"], "rollback:execute": ["versions:rollback"],
+    # Phase 12A (fine -> coarse; the coarse -> fine side is merged into the entries above)
+    "media:update": ["media:write"], "media:delete": ["media:write"],
+    "seo:update": ["seo:write"],
+    "config:read": ["settings:read", "categories:read", "backup:read", "content:read"],
+    "config:write": ["settings:update", "categories:write", "config:update"],
+    "jobs:run": ["jobs:execute"], "jobs:execute": ["jobs:run"],
+    "users:manage": ["users:read"],
 }
 
 # Scopes an API key (machine principal) may NEVER exercise: CRITICAL surface
@@ -96,6 +106,9 @@ AI_OPERATOR_SCOPES = [
     "analytics:read", "system:status", "system:daily_summary",
     "rollback:read", "rollback:execute",
     "experiments:read", "health:read", "alerts:read", "jobs:read", "config:read", "ai:execute",
+    # Phase 12A operational control (business-level only; CRITICAL surface stays excluded)
+    "media:update", "media:delete", "categories:read", "categories:write", "settings:read", "settings:update", "config:update",
+    "seo:update", "alerts:write", "jobs:execute", "backup:read", "backup:create", "users:read", "health:run", "content:read",
 ]
 # Optional scopes that a human can explicitly grant to a key of that role
 ROLE_OPTIONAL_SCOPES = {"AI_OPERATOR": ["landing:publish"]}
@@ -105,6 +118,7 @@ AI_READ_ONLY_SCOPES = [
     "models:read", "models:validate", "media:read", "seo:read", "seo:audit", "seo:review_prepare",
     "analytics:read", "landing:read", "landing:validate", "rollback:read", "system:status", "system:daily_summary",
     "health:read", "alerts:read", "jobs:read", "experiments:read", "config:read", "ai:execute",
+    "categories:read", "settings:read", "backup:read", "users:read", "content:read",
 ]
 
 ROLE_SCOPES = {
@@ -124,7 +138,7 @@ ROLE_SCOPES = {
 }
 ROLES = list(ROLE_SCOPES.keys())
 WRITE_BLOCKED_LEGACY_ROLES = {"ANALYST", "READ_ONLY"}
-READ_SCOPES = {s for s in ALL_SCOPES if s.endswith(":read") or s in ("models:validate", "seo:audit", "seo:review_prepare", "landing:validate", "system:status", "system:daily_summary", "rollback:read", "ai:execute")}
+READ_SCOPES = {s for s in ALL_SCOPES if s.endswith(":read") or s in ("models:validate", "seo:audit", "seo:review_prepare", "landing:validate", "system:status", "system:daily_summary", "rollback:read", "ai:execute", "health:run")}
 
 
 def normalize_role(ruolo: Optional[str]) -> str:
@@ -144,7 +158,15 @@ def scopes_for_role(role: str) -> List[str]:
     return ALL_SCOPES[:] if "*" in sc else sc[:]
 
 
+_COARSE = set(COARSE_SCOPES)
+
+
 def expand_scopes(scopes: List[str]) -> set:
+    """Two-phase expansion (Phase 12A hardening):
+    1) coarse -> fine, transitively (a coarse scope legitimately grants all the fine scopes it covers);
+    2) fine -> its coarse alias, NON transitively (so legacy v1 routes guarded by the coarse scope keep working),
+       without the alias re-expanding into *other* fine scopes. Before this fix `media:upload` implied `media:write`
+       which implied `media:delete`: a fine-only key silently gained privileges it was never granted."""
     out = set(scopes)
     if "*" in out:
         return set(ALL_SCOPES) | {"*"}
@@ -152,10 +174,17 @@ def expand_scopes(scopes: List[str]) -> set:
     while changed:
         changed = False
         for s in list(out):
+            if s not in _COARSE:
+                continue
             for i in IMPLIED.get(s, []):
                 if i not in out:
                     out.add(i)
                     changed = True
+    for s in list(out):
+        if s in _COARSE:
+            continue
+        for i in IMPLIED.get(s, []):
+            out.add(i)  # alias only, never expanded further
     return out
 
 
@@ -264,6 +293,7 @@ async def resolve_principal(request: Request,
             "email": rec.get("name", "api-key"), "role": role, "scopes": scopes,
             "source": "chatgpt" if rec.get("source") in ("ai", "chatgpt") or role == "AI_OPERATOR" else "api",
             "rate_limit": int(rec.get("rate_limit_per_min") or DEFAULT_LIMIT_KEY), "ip": ip,
+            "capability_allow": rec.get("capability_allow") or [], "capability_deny": rec.get("capability_deny") or [],
         }
         rl = await rate_limit_shared(f"key:{rec['id']}", principal["rate_limit"])
         request.state.rate = rl
