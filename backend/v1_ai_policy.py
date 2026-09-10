@@ -59,6 +59,38 @@ async def ai_config() -> dict:
 
 
 # ---------------- GUARD ----------------
+# dry_run is a READ-level operation: a write scope can be satisfied by its preview (read) scope when dry_run=true
+PREVIEW_SCOPE = {
+    "models:create": "models:read", "models:update": "models:read", "models:publish": "models:validate", "models:unpublish": "models:read",
+    "models:archive": "models:read", "models:feature": "models:read", "seo:safe_fix": "seo:audit",
+    "landing:create": "landing:read", "landing:update": "landing:read", "landing:publish": "landing:read", "rollback:execute": "rollback:read",
+}
+
+
+async def request_is_dry_run(request: Request) -> bool:
+    if str(request.query_params.get("dry_run", "")).lower() in ("1", "true"):
+        return True
+    if request.method in ("POST", "PATCH", "PUT"):
+        try:
+            payload = await request.json()
+            return isinstance(payload, dict) and payload.get("dry_run") is True
+        except Exception:
+            return False
+    return False
+
+
+def missing_scopes_for(principal: dict, scopes, dry: bool) -> List[str]:
+    """Scopes still missing; when dry=True a write scope may be replaced by its preview scope."""
+    out = []
+    for s in scopes:
+        if has_scope(principal, s):
+            continue
+        if dry and s in PREVIEW_SCOPE and has_scope(principal, PREVIEW_SCOPE[s]):
+            continue
+        out.append(s)
+    return out
+
+
 def ai_guard(*scopes: str, write: bool = False, batch: bool = False, dry_capable: bool = True):
     """Dependency for /api/v1/ai routes: kill switch, mode, flags, scopes, dedicated AI rate limit.
     dry_capable=False marks write endpoints that cannot preview (upload, confirm): always blocked in READ_ONLY."""
@@ -67,15 +99,9 @@ def ai_guard(*scopes: str, write: bool = False, batch: bool = False, dry_capable
         is_machine = principal.get("type") == "api_key"
         if is_machine and not cfg["enabled"]:
             raise err(503, "AI_API_DISABLED", "ChatGPT API disattivata dall'amministratore (kill switch)")
+        dry = bool(write and dry_capable and await request_is_dry_run(request))
         if is_machine and write and not cfg["write_enabled"]:
             # READ_ONLY still allows previews: dry_run=true (JSON body or query string) never mutates
-            dry = dry_capable and str(request.query_params.get("dry_run", "")).lower() in ("1", "true")
-            if dry_capable and not dry and request.method in ("POST", "PATCH", "PUT"):
-                try:
-                    payload = await request.json()
-                    dry = isinstance(payload, dict) and payload.get("dry_run") is True
-                except Exception:
-                    dry = False
             if not dry:
                 raise err(403, "READ_ONLY_MODE", "ChatGPT API in modalità READ_ONLY: sono consentite solo letture, audit e anteprime (dry_run=true)")
             request.state.forced_dry_run = True
@@ -87,11 +113,15 @@ def ai_guard(*scopes: str, write: bool = False, batch: bool = False, dry_capable
                 raise err(403, "CRITICAL_ACTION_BLOCKED", "Operazione critica non consentita alle API key", scopes=crit)
             rl = rate_limit(f"ai:{principal['id']}", min(cfg["rate_limit_per_min"], principal.get("rate_limit", cfg["rate_limit_per_min"])))
             request.state.rate = rl
-        # every AI endpoint requires ai:execute in addition to the action scopes
-        missing = [s for s in ("ai:execute", *scopes) if not has_scope(principal, s)]
+        # every AI endpoint requires ai:execute in addition to the action scopes (preview scopes accepted for dry_run)
+        missing = missing_scopes_for(principal, ("ai:execute", *scopes), dry)
         if missing:
-            raise err(403, "INSUFFICIENT_SCOPE", "Permessi insufficienti", missing_scopes=missing, role=principal.get("role"))
-        request.state.ai_write = write
+            extra = {"missing_scopes": missing, "role": principal.get("role")}
+            if write and dry_capable and not dry:
+                extra["hint"] = "Con dry_run=true bastano gli scope di lettura corrispondenti (anteprima, nessuna modifica)"
+            raise err(403, "INSUFFICIENT_SCOPE", "Permessi insufficienti", **extra)
+        request.state.ai_write = write and not dry
+        request.state.ai_dry_run = dry
         return principal
     return _dep
 

@@ -126,7 +126,13 @@ async def request_context(request: Request, call_next):
     principal = getattr(request.state, "principal", None) or {}
     try:
         if path.startswith("/api/v1/ai"):
-            await record_metric(path, method, response.status_code, (time.time() - t0) * 1000, principal.get("key_id"), bool(getattr(request.state, "ai_write", False)))
+            dur = (time.time() - t0) * 1000
+            await record_metric(path, method, response.status_code, dur, principal.get("key_id"), bool(getattr(request.state, "ai_write", False)))
+            if principal.get("type") == "api_key" and not path.endswith(("/control", "/test-connection")):
+                from database import ai_requests_col
+                await ai_requests_col.insert_one({"id": str(uuid.uuid4()), "request_id": rid, "timestamp": now_iso(), "created_dt": now_dt(), "method": method, "path": path,
+                                                  "status": response.status_code, "duration_ms": round(dur), "key_id": principal.get("key_id"), "actor": principal.get("name"),
+                                                  "source": principal.get("source"), "kind": "dry_run" if getattr(request.state, "ai_dry_run", False) else ("write" if getattr(request.state, "ai_write", False) else "read")})
         if principal.get("key_id") and response.status_code >= 400 and path.startswith("/api/v1"):
             from database import api_keys_col
             await api_keys_col.update_one({"id": principal["key_id"]}, {"$inc": {"error_count": 1}, "$set": {"last_error_at": now_iso(), "last_error_status": response.status_code, "last_error_path": path}})

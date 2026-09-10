@@ -1,30 +1,34 @@
 [
   {
-    "content": "Audit backend Fase 10: v1_security, v1_ai_policy, v1_ai vs checklist",
+    "content": "Audit pre-connessione (prod/preview, TLS, endpoint, flag) - checklist PASS/FAIL",
     "status": "completed"
   },
   {
-    "content": "Colmare lacune backend (READ_ONLY dry-run preview; upload/confirm sempre bloccati; test approval CONFLICT; public landing API dietro flag; resolver token-prefix)",
+    "content": "OpenAPI Action-ready: /api/v1/ai/openapi-chatgpt.json (23 op, desc<=300, Bearer, validata)",
     "status": "completed"
   },
   {
-    "content": "Integrare ChatGptPanel in /admin/motore + adminApi + compile + screenshot",
+    "content": "Dry-run con scope di lettura (minimum privilege) + preset chiave READ_ONLY nel pannello",
     "status": "completed"
   },
   {
-    "content": "Verifica reale flussi: key one-time, kill switch, READ_ONLY, approval, CRITICAL, dry-run, idempotenza, rollback, no secrets (40/40 pytest + curl + DB scan)",
+    "content": "Test kill switch / READ_ONLY / dry-run zero-mutation con hash DB before/after",
     "status": "completed"
   },
   {
-    "content": "Testing agent E2E A-F e fix (iteration_21: 53/53 + 40/40 dopo fix; dati test puliti)",
+    "content": "Simulazione GPT Action (Bearer) scenari A-I + negativi, request ID, attivita', metriche (42/42)",
     "status": "completed"
   },
   {
-    "content": "Docs: SUPER_API.md, CHATGPT_API.md, plan.md",
+    "content": "Docs: CHATGPT_INSTRUCTIONS.md, CHATGPT_API.md REAL GPT CONNECTION + troubleshooting",
     "status": "completed"
   },
   {
-    "content": "Report finale in italiano",
+    "content": "Secret leak scan, screenshot admin senza secret, test connessione 13/13, deployment readiness PASS",
+    "status": "completed"
+  },
+  {
+    "content": "Report finale Phase 11 in italiano (MANUAL CHATGPT STEP REQUIRED)",
     "status": "completed"
   }
 ]

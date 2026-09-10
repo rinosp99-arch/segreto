@@ -89,3 +89,73 @@ Ogni operazione in `ai_actions`: `actor, key_id, principal_type, source:"chatgpt
 ## 10. Test
 - `cd /app && python -m pytest tests/test_ai_control.py -q` → 40 test (auth, scopes, CRITICAL, kill switch/READ_ONLY con dry-run, riferimenti, dry-run/etag/409, approvazioni single-use/actor/target-changed, prompt injection, publish blocked, SEO audit/safe/review/critical, landing, analytics, idempotenza, rollback history, SSRF/MIME, no secrets, dispatcher, capabilities/openapi, batch, rate limit, audit, **E2E A–F**).
 - `python tests/test_phase10_agent.py` → 53 controlli (suite del testing agent, iteration_21).
+
+---
+
+# REAL GPT CONNECTION (Phase 11)
+
+## Stato
+- Codice pronto e verificato sull'ambiente preview (`https://secret-side.preview.emergentagent.com`).
+- **Produzione `https://secret-side.emergent.host`: online e TLS valido, ma la build deployata è precedente alla Phase 9/10 (`/api/v1/ai/*` → 404). Prima del collegamento reale serve un redeploy dal pannello Emergent (operazione manuale dell'amministratore).**
+- Il collegamento nell'account ChatGPT (creazione GPT, import schema, inserimento chiave) è un passaggio manuale dell'utente: **MANUAL CHATGPT STEP REQUIRED**.
+
+## URL di produzione (dopo il deploy)
+| Cosa | URL |
+|---|---|
+| API Base URL | `https://secret-side.emergent.host` |
+| OpenAPI per GPT Actions (23 operazioni, ≤30) | `https://secret-side.emergent.host/api/v1/ai/openapi-chatgpt.json` |
+| OpenAPI completa (riferimento, NON importarla nel GPT: 39 path > limite 30) | `https://secret-side.emergent.host/api/v1/ai/openapi.json` |
+| Capabilities | `https://secret-side.emergent.host/api/v1/ai/capabilities` |
+| Pannello | `https://secret-side.emergent.host/admin/motore` |
+
+Il campo `servers[0].url` dello schema viene calcolato dall'host che serve la richiesta: importandolo dal dominio di produzione punta automaticamente alla produzione.
+
+## Autenticazione (esatta)
+- Metodo reale della SUPER API: `Authorization: Bearer <API_KEY>` (accettato anche `X-API-Key: <API_KEY>`).
+- Nel GPT Builder: **Authentication → API Key → Auth Type: Bearer** → incolla la chiave. Lo schema dichiara un solo `securitySchemes.ApiKeyBearer` (`type: http, scheme: bearer`).
+- Ruolo: `AI_OPERATOR`. Preset **Scopes READ_ONLY** (minimo privilegio, 18 scope): `models:read, models:validate, media:read, seo:read, seo:audit, seo:review_prepare, analytics:read, landing:read, landing:validate, rollback:read, system:status, system:daily_summary, health:read, alerts:read, jobs:read, experiments:read, config:read, ai:execute`.
+- Con questi scope il `dry_run=true` è consentito (un'anteprima è un'operazione di lettura: `PREVIEW_SCOPE` in `v1_ai_policy.py`), mentre update/publish/upload/confirm/rollback reali rispondono `403 INSUFFICIENT_SCOPE` **anche in modalità FULL**. Nessuno scope di scrittura viene concesso nella prima sessione.
+
+## Modalità server
+`ai_api_enabled=true` · `ai_write_enabled=false` → **READ_ONLY** (verificato server-side: `GET /api/v1/ai/status → data.ai.mode = "READ_ONLY"`). Non passare a FULL automaticamente: solo decisione umana dal pannello.
+
+## Configurazione GPT
+Vedi `/app/CHATGPT_INSTRUCTIONS.md` (nome, descrizione, Instructions, conversation starters). Mai inserire la chiave nelle Instructions.
+
+## Procedura (UI GPT Builder, settembre 2026)
+1. ChatGPT → *Explore GPTs* → **Create** (o *My GPTs* → *Edit*).
+2. Tab **Configure**: Name, Description, Instructions (copiare da `CHATGPT_INSTRUCTIONS.md`), Conversation starters.
+3. In basso: **Create new action**.
+4. **Authentication** (icona ingranaggio) → *API Key* → Auth Type **Bearer** → incolla la chiave creata in `/admin/motore` (preset READ_ONLY) → **Save**.
+5. **Schema** → **Import from URL** → `https://secret-side.emergent.host/api/v1/ai/openapi-chatgpt.json` → **Import**. Le 23 operazioni compaiono in "Available actions".
+6. (Solo per GPT pubblici) Privacy policy: `https://secret-side.emergent.host/privacy`.
+7. **Preview** (colonna destra) → scrivi: *"Controlla lo stato di LATO SEGRETO."* → alla prima chiamata ChatGPT chiede conferma ("Allow") per il dominio.
+8. `/admin/motore → ChatGPT Control Layer → Richieste ChatGPT`: deve comparire la richiesta (`GET /site-health` o `/status`, 200, kind read) con actor = nome della chiave.
+
+## Test prompts e risultati attesi (READ_ONLY)
+| Prompt | Operazione | Atteso |
+|---|---|---|
+| Controlla lo stato di LATO SEGRETO | getSiteHealth/getSystemStatus | dati reali, `data.ai.mode=READ_ONLY` |
+| Controlla Francesca Rossi | findModel → getModelHealth | pubblicazione, SEO score, media, OnlyFans, analytics |
+| Controlla tutta la SEO di Francesca Rossi | runSeoAudit | score + conteggi SAFE/REVIEW/CRITICAL, nessuna modifica |
+| Sistema automaticamente gli errori SEO sicuri di Francesca | previewSafeSeoFixes `dry_run=true` | anteprima `would_fix`, DB invariato; senza dry_run → `READ_ONLY_MODE` |
+| Quale modella converte meglio in Italia negli ultimi 7 giorni? | queryAnalytics strutturata (IT, 7d, onlyfans_ctr, model, desc) | ranking + sample_size + limitations; nessun vincitore se campione insufficiente |
+| Fammi il riepilogo di oggi | getDailySummary | visite, Italia, funnel, click OF, SEO, alert, top, backup |
+| Cosa dovrei sistemare adesso? | getRecommendations | lista per priorità, automatic/review/manual |
+| Pubblica Francesca Rossi | publishModel `dry_run:true` | readiness/“già online”; publish reale → `READ_ONLY_MODE`/`INSUFFICIENT_SCOPE` |
+| Controlla Alessia | findModel | `404 NOT_FOUND` (non esiste) |
+| Controlla Mar | findModel | `409 AMBIGUOUS_REFERENCE` (Martina Conte, Sofia Marino) |
+
+## Troubleshooting
+- **Schema import failed**: verifica URL (https, dominio deployato con Phase 10), JSON valido (`curl <url> | python -m json.tool`), `openapi: 3.1.0`, ≤30 operazioni, operationId unici; se il dominio cambia, reimporta (il campo `servers` segue l'host).
+- **Authentication failed / 401**: `AUTH_REQUIRED` = chiave non inviata (controlla Auth Type Bearer); `INVALID_API_KEY` = chiave errata/incollata male; `API_KEY_REVOKED` / `API_KEY_DISABLED` / `API_KEY_EXPIRED` = stato chiave nel pannello (ruota e reincolla).
+- **403 INSUFFICIENT_SCOPE**: la chiave READ_ONLY non ha scope di scrittura: è il comportamento voluto; `data.hint` suggerisce `dry_run=true`.
+- **403 READ_ONLY_MODE**: intenzionale (modalità server). Usa dry_run o attiva FULL manualmente dal pannello.
+- **403 CRITICAL_ACTION_BLOCKED**: azione riservata all'admin umano (chiavi, utenti, config, backup, delete, issue SEO CRITICAL).
+- **409**: `AMBIGUOUS_REFERENCE` (scegli tra `data.matches`), `CONFLICT` (etag stale / target cambiato dopo l'anteprima), `APPROVAL_INVALID` (token riusato).
+- **429 RATE_LIMITED**: rispetta `Retry-After`; limite chiave/AI nel pannello (min 10/min).
+- **503 AI_API_DISABLED**: kill switch OFF nel pannello.
+- **Nessuna richiesta nel pannello**: la chiamata non è arrivata al server (schema che punta a un altro host, deploy non aggiornato, conferma "Allow" non data in Preview).
+
+## Verifiche automatiche Phase 11
+`python tests/phase11_gpt_simulation.py` → simula le chiamate del GPT Action (Bearer) con una chiave READ_ONLY temporanea: 42/42 PASS (kill switch, READ_ONLY, dry-run, test A–I, ambiguo/inesistente, idempotenza, scope/auth negativi, rate limit, hash DB business before/after identico, metriche, attività, leak scan). Report: `/app/test_reports/phase11_simulation.json`.

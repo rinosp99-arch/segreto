@@ -20,7 +20,7 @@ from database import (
     ai_actions_col, models_col, alerts_col, jobs_col, seo_issues_col, versions_col, events_col, health_col, config_col, backups_col,
     landings_col, files_col, webhook_deliveries_col, redirects_col, now_iso, serialize_doc,
 )
-from v1_security import require, actor_of, request_id_of, has_scope, ALL_SCOPES, AI_OPERATOR_SCOPES, ROLE_OPTIONAL_SCOPES, generate_api_key, hash_key
+from v1_security import require, actor_of, request_id_of, has_scope, ALL_SCOPES, AI_OPERATOR_SCOPES, AI_READ_ONLY_SCOPES, ROLE_OPTIONAL_SCOPES, generate_api_key, hash_key
 from v1_ai_policy import (
     ai_guard, ai_config, classify_model_changes, create_approval, consume_approval, list_pending_approvals, metrics_snapshot, bump,
     SAFE, REVIEW, CRITICAL, ERROR_CODES, redact,
@@ -56,7 +56,7 @@ async def log_action(principal: dict, request: Request, action: str, inp: Any, r
     inp_red = redact(inp if isinstance(inp, dict) else {"input": inp})
     if isinstance(inp_red, dict) and "base64_data" in inp_red:
         inp_red["base64_data"] = "<base64>"
-    doc = {"id": str(uuid.uuid4()), "request_id": request_id_of(request), "actor": actor_of(principal), "key_id": principal.get("key_id"), "principal_type": principal.get("type"),
+    doc = {"id": str(uuid.uuid4()), "request_id": request_id_of(request), "actor": actor_of(principal), "key_id": principal.get("key_id"), "principal_type": "machine" if principal.get("type") == "api_key" else "user",
            "source": "chatgpt" if principal.get("type") == "api_key" else "admin-ai", "action": action, "target": target, "input": inp_red, "ok": ok, "status": "ok" if ok else "error",
            "summary": result_summary, "changes": changes or [], "version_ids": version_ids or [], "rollback_ref": rollback_ref or ((version_ids or [None])[-1]),
            "before": redact(before) if before is not None else None, "after": redact(after) if after is not None else None, "reason": reason or "",
@@ -1314,7 +1314,8 @@ async def ai_command(body: AICommand, request: Request, principal=Depends(ai_gua
         raise HTTPException(status_code=403, detail={"code": "READ_ONLY_MODE", "message": "Modalità READ_ONLY: usa dry_run=true (upload e conferme non hanno anteprima)"})
     if handler in ("batch_seo",) and not cfg["batch_enabled"]:
         raise HTTPException(status_code=403, detail={"code": "BATCH_DISABLED", "message": "Batch disattivato"})
-    missing = [s for s in scopes if not has_scope(principal, s)]
+    from v1_ai_policy import missing_scopes_for
+    missing = missing_scopes_for(principal, scopes, bool(write and body.dry_run and handler not in ("confirm", "media_upload")))
     if missing:
         raise HTTPException(status_code=403, detail={"code": "INSUFFICIENT_SCOPE", "message": "Permessi insufficienti", "missing_scopes": missing})
     p, t, r, dry = body.parameters or {}, body.target, body.reason or "", body.dry_run
@@ -1412,7 +1413,20 @@ for _c in CAPABILITIES:
 @ai_router.get("/capabilities", operation_id="getCapabilities", summary="Catalogo machine-readable delle capacità ChatGPT")
 async def capabilities(request: Request, principal=Depends(ai_guard("ai:execute"))):
     cfg = await ai_config()
-    mine = [c for c in CAPABILITIES if all(has_scope(principal, s.split(" ")[0]) for s in c["required_scopes"] if ":" in s and "(" not in s and "+" not in s)]
+    from v1_ai_policy import PREVIEW_SCOPE
+    def _req(c):
+        return [s.split(" ")[0] for s in c["required_scopes"] if ":" in s and "(" not in s and "+" not in s]
+    mine = []
+    for c in CAPABILITIES:
+        req = _req(c)
+        if all(has_scope(principal, s) for s in req):
+            mine.append({**c, "access": "full"})
+        elif all(has_scope(principal, s) or (s in PREVIEW_SCOPE and has_scope(principal, PREVIEW_SCOPE[s])) for s in req) and "dry_run" in str(c.get("parameters")):
+            mine.append({**c, "access": "preview_only", "note": "Con i tuoi scope puoi solo usare dry_run=true (anteprima, nessuna modifica)"})
+    if not cfg["write_enabled"]:
+        for c in mine:
+            if c["method"] == "POST" and "dry_run" in str(c.get("parameters")):
+                c["read_only_note"] = "Modalità READ_ONLY: consentito solo con dry_run=true"
     return envelope("capabilities", request, f"{len(mine)} capacità disponibili per questa chiave ({len(CAPABILITIES)} totali). Modalità {cfg['mode']}.",
                     {"version": "1.0", "auth": {"header": "X-API-Key: <chiave>", "alternative": "Authorization: Bearer <chiave ls_...>", "roles": "AI_OPERATOR consigliato"},
                      "openapi": "/api/v1/ai/openapi.json", "docs": "/api/docs", "idempotency": "header Idempotency-Key su POST", "request_correlation": "header X-Request-ID (accettato e restituito)",
@@ -1464,6 +1478,15 @@ async def ai_openapi(request: Request):
     return spec
 
 
+@ai_router.get("/openapi-chatgpt.json", operation_id="getAiOpenApiChatGpt", include_in_schema=False)
+async def ai_openapi_chatgpt(request: Request):
+    """GPT Action-ready schema: sanitized READ_ONLY-first subset (<=30 operations), single Bearer security scheme.
+    Public document (no secrets, no auth needed to read it) so ChatGPT can import it from URL."""
+    from v1_ai_openapi import build_chatgpt_openapi
+    cfg = await ai_config()
+    return build_chatgpt_openapi(await _public_base_url(request), ERROR_CODES, cfg["mode"])
+
+
 async def _public_base_url(request: Request) -> str:
     cfg = await config_col.find_one({"id": "global"}, {"_id": 0, "site": 1}) or {}
     base = (cfg.get("site") or {}).get("base_url") or os.environ.get("PUBLIC_BASE_URL") or ""
@@ -1487,16 +1510,21 @@ async def ai_control(request: Request, principal=Depends(require("config:read"))
     last = await ai_actions_col.find_one({"source": "chatgpt"}, {"_id": 0, "timestamp": 1, "action": 1, "ok": 1, "summary": 1}, sort=[("timestamp", -1)])
     last_err = await ai_actions_col.find_one({"ok": False}, {"_id": 0, "timestamp": 1, "action": 1, "summary": 1}, sort=[("timestamp", -1)])
     activity = await ai_actions_col.find({}, {"_id": 0, "before": 0, "after": 0, "input": 0}).sort("timestamp", -1).to_list(30)
+    from database import ai_requests_col
+    requests_log = await ai_requests_col.find({}, {"_id": 0, "created_dt": 0}).sort("timestamp", -1).to_list(40)
+    last_req = await ai_requests_col.find_one({}, {"_id": 0, "created_dt": 0}, sort=[("timestamp", -1)])
     pending = await list_pending_approvals()
     base = await _public_base_url(request)
     ai_keys = [k for k in keys if k.get("role") == "AI_OPERATOR"]
-    status = "disabled" if not cfg["enabled"] else ("connected" if last else ("never_used" if ai_keys else "no_key"))
+    status = "disabled" if not cfg["enabled"] else ("connected" if (last or last_req) else ("never_used" if ai_keys else "no_key"))
     return {"flags": {"ai_api_enabled": cfg["enabled"], "ai_write_enabled": cfg["write_enabled"], "ai_batch_enabled": cfg["batch_enabled"], "ai_approval_flow_enabled": cfg["approval_enabled"]}, "mode": cfg["mode"],
             "policy": cfg["policy"], "rate_limit_per_min": cfg["rate_limit_per_min"], "metrics": m, "keys": keys, "status": status, "last_request": last, "last_error": last_err,
-            "activity": activity, "pending_approvals": pending,
-            "setup": {"base_url": base, "openapi_url": f"{base}/api/v1/ai/openapi.json", "capabilities_url": f"{base}/api/v1/ai/capabilities", "docs_url": f"{base}/api/docs",
-                      "auth_header": "X-API-Key: <API_KEY>", "auth_alternative": "Authorization: Bearer <API_KEY>", "recommended_role": "AI_OPERATOR",
-                      "recommended_scopes": AI_OPERATOR_SCOPES, "optional_scopes": ROLE_OPTIONAL_SCOPES.get("AI_OPERATOR", []), "error_codes": ERROR_CODES}}
+            "activity": activity, "requests": requests_log, "last_request_any": last_req, "pending_approvals": pending,
+            "setup": {"base_url": base, "openapi_url": f"{base}/api/v1/ai/openapi-chatgpt.json", "openapi_full_url": f"{base}/api/v1/ai/openapi.json",
+                      "capabilities_url": f"{base}/api/v1/ai/capabilities", "docs_url": f"{base}/api/docs",
+                      "gpt_auth": {"type": "API Key", "auth_type": "Bearer", "header": "Authorization: Bearer <API_KEY>"},
+                      "auth_header": "Authorization: Bearer <API_KEY>", "auth_alternative": "X-API-Key: <API_KEY>", "recommended_role": "AI_OPERATOR",
+                      "read_only_scopes": AI_READ_ONLY_SCOPES, "recommended_scopes": AI_OPERATOR_SCOPES, "optional_scopes": ROLE_OPTIONAL_SCOPES.get("AI_OPERATOR", []), "error_codes": ERROR_CODES}}
 
 
 class ControlPatch(BaseModel):

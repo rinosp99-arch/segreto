@@ -24,8 +24,9 @@ export function ChatGptPanel() {
   const [busy, setBusy] = useState('');
   const [test, setTest] = useState(null);
   const [created, setCreated] = useState(null);
-  const [keyName, setKeyName] = useState('ChatGPT Production');
+  const [keyName, setKeyName] = useState('ChatGPT Production READ_ONLY');
   const [withPublish, setWithPublish] = useState(false);
+  const [preset, setPreset] = useState('read_only');   // read_only (minimo privilegio) | full
 
   const load = useCallback(() => aiControl().then(setC).catch(() => toast.error('Impossibile caricare il controllo ChatGPT')), []);
   useEffect(() => { load(); }, [load]);
@@ -48,18 +49,24 @@ export function ChatGptPanel() {
     catch (e) { toast.error(e?.response?.data?.detail?.message || e?.response?.data?.detail || 'Operazione fallita'); }
     finally { setBusy(''); }
   };
-  const createKey = () => keyAction('create', () => v1CreateKey({ name: keyName.trim() || 'ChatGPT Production', role: 'AI_OPERATOR', source: 'chatgpt', scopes: withPublish ? [...(c?.setup?.recommended_scopes || []), 'landing:publish'] : undefined }));
+  const scopesFor = () => {
+    const base = preset === 'read_only' ? (c?.setup?.read_only_scopes || []) : (c?.setup?.recommended_scopes || []);
+    return withPublish && preset !== 'read_only' ? [...base, 'landing:publish'] : base;
+  };
+  const createKey = () => keyAction('create', () => v1CreateKey({ name: keyName.trim() || (preset === 'read_only' ? 'ChatGPT Production READ_ONLY' : 'ChatGPT Production'), role: 'AI_OPERATOR', source: 'chatgpt', scopes: scopesFor() }));
 
   const setup = c?.setup || {};
   const configText = () => [
     '# LATO SEGRETO — configurazione ChatGPT (senza chiave: inseriscila solo nel campo Authentication di ChatGPT)',
     `Base URL: ${setup.base_url}`,
-    `OpenAPI (import in GPT Actions): ${setup.openapi_url}`,
+    `OpenAPI per GPT Actions (import from URL, max 30 operazioni): ${setup.openapi_url}`,
+    `OpenAPI completa (riferimento, NON importarla nel GPT): ${setup.openapi_full_url}`,
     `Capabilities: ${setup.capabilities_url}`,
     `Docs: ${setup.docs_url}`,
-    `Autenticazione: API Key · header "${setup.auth_header}" (alternativa: "${setup.auth_alternative}")`,
+    `Autenticazione GPT Action: Authentication = API Key · Auth Type = Bearer · header "${setup.auth_header}" (alternativa custom header: "${setup.auth_alternative}")`,
     `Ruolo chiave: ${setup.recommended_role}`,
-    `Scopes consigliati: ${(setup.recommended_scopes || []).join(', ')}`,
+    `Scopes READ_ONLY (primo collegamento, minimo privilegio): ${(setup.read_only_scopes || []).join(', ')}`,
+    `Scopes operativi completi (solo dopo attivazione FULL controllata): ${(setup.recommended_scopes || []).join(', ')}`,
     `Scopes opzionali (da concedere esplicitamente): ${(setup.optional_scopes || []).join(', ')}`,
     'Header consigliati: Idempotency-Key (POST), X-Request-ID (correlazione)',
     'Risposte: {ok, summary, data, warnings, next_steps, request_id, changes, approval_required}',
@@ -103,7 +110,7 @@ export function ChatGptPanel() {
       <SectionCard title="Collega ChatGPT" desc="Dati da inserire in ChatGPT (GPT Actions). La chiave API non viene mai inclusa nella configurazione copiata.">
         <div className="flex items-center gap-2 mb-3"><Pill label={statusLabel} color={statusColor} testid="chatgpt-status" /><span className="text-xs text-muted-foreground">ultima richiesta {fmt(c?.last_request?.timestamp)} · ultimo errore {c?.last_error ? `${fmt(c.last_error.timestamp)} (${c.last_error.action})` : 'nessuno'}</span></div>
         <div className="space-y-1.5 text-xs" data-testid="chatgpt-setup">
-          {[['Base URL', setup.base_url], ['OpenAPI URL', setup.openapi_url], ['Capabilities URL', setup.capabilities_url], ['Authentication', `API Key · ${setup.auth_header}`], ['Ruolo consigliato', setup.recommended_role]].map(([k, v]) => (
+          {[['Base URL', setup.base_url], ['OpenAPI URL (GPT Actions)', setup.openapi_url], ['Capabilities URL', setup.capabilities_url], ['Authentication', `API Key · Bearer · ${setup.auth_header}`], ['Ruolo consigliato', setup.recommended_role], ['Modalità consigliata', 'READ_ONLY per il primo collegamento']].map(([k, v]) => (
             <div key={k} className="flex items-center justify-between gap-2 rounded-lg border border-border/50 px-3 py-2"><span className="text-muted-foreground shrink-0">{k}</span><code className="truncate">{v}</code><button onClick={() => copy(v)} className="h-7 w-7 rounded-md border border-border flex items-center justify-center shrink-0" title="Copia"><Copy className="h-3.5 w-3.5" /></button></div>
           ))}
         </div>
@@ -122,8 +129,12 @@ export function ChatGptPanel() {
         <div className="mt-4 border-t border-border/50 pt-3">
           <div className="caps-label text-muted-foreground text-[10px] mb-2">Chiave dedicata ChatGPT (ruolo AI_OPERATOR)</div>
           <div className="flex flex-wrap gap-2 items-center">
-            <TextInput value={keyName} onChange={(e) => setKeyName(e.target.value)} placeholder="ChatGPT Production" className="max-w-[220px]" data-testid="chatgpt-key-name" />
-            <label className="flex items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={withPublish} onChange={(e) => setWithPublish(e.target.checked)} data-testid="chatgpt-key-publish-scope" /> concedi landing:publish</label>
+            <TextInput value={keyName} onChange={(e) => setKeyName(e.target.value)} placeholder="ChatGPT Production READ_ONLY" className="max-w-[240px]" data-testid="chatgpt-key-name" />
+            <select value={preset} onChange={(e) => setPreset(e.target.value)} className="bg-input border border-border rounded-lg px-2 py-2 text-xs" data-testid="chatgpt-key-preset">
+              <option value="read_only">Scopes READ_ONLY (minimo privilegio, consigliato)</option>
+              <option value="full">Scopes operativi completi</option>
+            </select>
+            {preset === 'full' && <label className="flex items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={withPublish} onChange={(e) => setWithPublish(e.target.checked)} data-testid="chatgpt-key-publish-scope" /> concedi landing:publish</label>}
             <Btn onClick={createKey} disabled={busy === 'create'} data-testid="chatgpt-create-key">{busy === 'create' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />} Crea chiave ChatGPT</Btn>
           </div>
           {created && (
@@ -166,6 +177,20 @@ export function ChatGptPanel() {
             </div>
           ))}
           {!(c?.activity || []).length && <div className="text-sm text-muted-foreground flex items-center gap-2"><Activity className="h-4 w-4" /> Nessuna attività ChatGPT ancora.</div>}
+        </div>
+        <div className="mt-4 border-t border-border/50 pt-3">
+          <div className="caps-label text-muted-foreground text-[10px] mb-2">Richieste ChatGPT (tutte, incluse letture e dry-run) · ultima {fmt(c?.last_request_any?.timestamp)}</div>
+          <div className="space-y-1 max-h-[260px] overflow-auto pr-1" data-testid="chatgpt-requests">
+            {(c?.requests || []).map((r) => (
+              <div key={r.id} className="grid sm:grid-cols-[110px_60px_1fr_auto] gap-2 text-[11px] border-b border-border/30 pb-1 last:border-0">
+                <span className="text-muted-foreground">{fmt(r.timestamp)}</span>
+                <span style={{ color: r.status < 400 ? C.ok : r.status === 429 ? C.warn : C.fail }}>{r.status}</span>
+                <span className="truncate"><span className="text-muted-foreground">{r.method}</span> {String(r.path || '').replace('/api/v1/ai', '')} <Pill label={r.kind} color={r.kind === 'write' ? C.warn : r.kind === 'dry_run' ? C.ai : C.muted} /></span>
+                <span className="text-muted-foreground/70 text-right">{r.actor} · {r.duration_ms} ms · req {String(r.request_id || '').slice(0, 8)}</span>
+              </div>
+            ))}
+            {!(c?.requests || []).length && <div className="text-xs text-muted-foreground">Nessuna richiesta con API key ancora.</div>}
+          </div>
         </div>
       </SectionCard>
     </div>

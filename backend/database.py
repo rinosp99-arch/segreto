@@ -39,6 +39,7 @@ webhooks_col = db['webhooks']
 webhook_deliveries_col = db['webhook_deliveries']
 backups_col = db['backups']
 ai_actions_col = db['ai_actions']
+ai_requests_col = db['ai_requests']   # Phase 11: access log of EVERY /api/v1/ai request made with an API key (reads included)
 analytics_daily_col = db['analytics_daily']
 
 
@@ -101,6 +102,9 @@ async def ensure_indexes():
     await job_runs_col.create_index([('job', 1), ('started_at', -1)])
     await webhook_deliveries_col.create_index('created_at')
     await ai_actions_col.create_index('timestamp')
+    await ai_requests_col.create_index('timestamp')
+    await ai_requests_col.create_index('created_dt', expireAfterSeconds=60 * 60 * 24 * 30)
+    await ai_requests_col.create_index('request_id')
     await analytics_daily_col.create_index([('giorno', 1), ('model_id', 1), ('country', 1)], unique=True)
     await files_col.create_index('id', unique=True, sparse=True)
     await files_col.create_index('storage_path')

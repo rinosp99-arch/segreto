@@ -72,10 +72,10 @@ class TestRunner:
                 requests.delete(f"{BASE_URL}/api/v1/landings/{landing_slug}", headers=self.admin_headers(), timeout=10)
             except:
                 pass
-        # Restore flags
-        for flag in ["ai_api_enabled", "ai_write_enabled", "ai_batch_enabled", "ai_approval_flow_enabled"]:
+        # Restore flags to the values found at start (Phase 11 keeps the server in READ_ONLY on purpose)
+        for flag, val in (getattr(self, "flags_before", None) or {f: True for f in ["ai_api_enabled", "ai_write_enabled", "ai_batch_enabled", "ai_approval_flow_enabled"]}).items():
             try:
-                requests.put(f"{BASE_URL}/api/v1/config/flags/{flag}", json={"value": True}, headers=self.admin_headers(), timeout=10)
+                requests.put(f"{BASE_URL}/api/v1/config/flags/{flag}", json={"value": bool(val)}, headers=self.admin_headers(), timeout=10)
             except:
                 pass
         # Restore rate limit
@@ -977,10 +977,12 @@ class TestRunner:
         api_key = key_data["api_key"]
         
         # Make some actions
-        requests.post(f"{BASE_URL}/api/v1/ai/models/create",
+        rc = requests.post(f"{BASE_URL}/api/v1/ai/models/create",
                      json={"nome": "Audit Test Model"},
                      headers={"X-API-Key": api_key, "Content-Type": "application/json"},
                      timeout=20)
+        if rc.status_code == 200 and rc.json().get("ok"):
+            self.test_models.append(rc.json()["data"]["slug"])
         
         # Get audit log
         r = requests.get(f"{BASE_URL}/api/v1/ai/actions",
@@ -1391,6 +1393,13 @@ class TestRunner:
         print("PHASE 10 CHATGPT CONTROL LAYER - BACKEND TESTING")
         print("=" * 60)
         print(f"Testing against: {BASE_URL}\n")
+        try:
+            cfg = requests.get(f"{BASE_URL}/api/v1/config", headers=self.admin_headers(), timeout=20).json().get("flags", {})
+            self.flags_before = {f: cfg.get(f, True) for f in ["ai_api_enabled", "ai_write_enabled", "ai_batch_enabled", "ai_approval_flow_enabled"]}
+            for f in self.flags_before:
+                requests.put(f"{BASE_URL}/api/v1/config/flags/{f}", json={"value": True}, headers=self.admin_headers(), timeout=10)
+        except Exception:
+            self.flags_before = None
         
         try:
             # Run tests in order

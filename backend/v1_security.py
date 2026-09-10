@@ -98,6 +98,13 @@ AI_OPERATOR_SCOPES = [
 ]
 # Optional scopes that a human can explicitly grant to a key of that role
 ROLE_OPTIONAL_SCOPES = {"AI_OPERATOR": ["landing:publish"]}
+# Minimum-privilege preset for the first real ChatGPT connection (READ_ONLY session):
+# reads, audits, validation, review preparation and dry-run previews only (dry_run accepts these read scopes).
+AI_READ_ONLY_SCOPES = [
+    "models:read", "models:validate", "media:read", "seo:read", "seo:audit", "seo:review_prepare",
+    "analytics:read", "landing:read", "landing:validate", "rollback:read", "system:status", "system:daily_summary",
+    "health:read", "alerts:read", "jobs:read", "experiments:read", "config:read", "ai:execute",
+]
 
 ROLE_SCOPES = {
     "SUPER_ADMIN": ["*"],

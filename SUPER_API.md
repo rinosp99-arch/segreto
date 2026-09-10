@@ -32,6 +32,12 @@ Catalogo completo: `GET /api/v1/ai/capabilities`. Risposta sempre `{ ok, action,
 - Pannello `/admin/motore → ChatGPT Control Layer`: kill switch, modalità FULL/READ_ONLY, batch, approvazioni, rate limit, metriche p50/p95, stato connessione, setup copiabile senza chiave, test connessione (13 controlli), chiave dedicata (mostrata una volta, ruota/disattiva/revoca, uso/errori/IP), attività ChatGPT.
 - `GET /api/landings/{slug}` ora dietro flag `public_landing_routes` (OFF → 404).
 
+## Phase 11 — Collegamento reale ChatGPT (vedi `CHATGPT_API.md` → REAL GPT CONNECTION, `CHATGPT_INSTRUCTIONS.md`)
+- `GET /api/v1/ai/openapi-chatgpt.json`: schema GPT Action-ready (23 operazioni ≤ 30, descrizioni ≤ 300 caratteri, un solo security scheme Bearer, sanitizzato, READ_ONLY-first). La `openapi.json` completa resta come riferimento.
+- Minimo privilegio: preset scopes READ_ONLY (`AI_READ_ONLY_SCOPES`); `dry_run=true` accettato con gli scope di lettura corrispondenti (`PREVIEW_SCOPE`), scritture reali → `INSUFFICIENT_SCOPE`.
+- Log richieste `ai_requests` (tutte le chiamate con API key, letture incluse) visibile nel pannello; `principal_type` = machine|user.
+- Server lasciato in **READ_ONLY** (`ai_write_enabled=false`). Test: `python tests/phase11_gpt_simulation.py` (42/42).
+
 ## Aree
 - Modelle: `/models` (GET/POST/PATCH/DELETE soft), `/validate`, `/publish`, `/unpublish`, `/archive`, `/restore`, `/duplicate`, `/feature`, `/versions`. Stati: DRAFT → INCOMPLETE → READY → PUBLISHED → ARCHIVED (+ERROR).
 - Media: `/media/upload` (multipart), `/media/from-url`, `PATCH/DELETE /media/{id}`, `/replace`, `/optimize`, `POST /models/{id}/media`. Varianti web/mobile/thumb (WebP), poster + mobile per video (ffmpeg), ALT, SEO filename, controllo magic-bytes.

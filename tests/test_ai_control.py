@@ -59,6 +59,11 @@ def set_flag(name, value):
 
 
 def setup_module(module=None):
+    # snapshot current flags (Phase 11 leaves the server in READ_ONLY on purpose): tests run in FULL, then restore
+    cfg = requests.get(f"{B}/api/v1/config", headers=H_admin(), timeout=20).json().get("flags", {})
+    STATE["flags_before"] = {n: cfg.get(n, True) for n in ("ai_api_enabled", "ai_write_enabled", "ai_batch_enabled", "ai_approval_flow_enabled")}
+    for name in ("ai_api_enabled", "ai_write_enabled", "ai_batch_enabled", "ai_approval_flow_enabled"):
+        set_flag(name, True)
     k = make_key(name="test-full")
     STATE["key"] = k["api_key"]
     STATE["key_id"] = k["id"]
@@ -70,14 +75,12 @@ def setup_module(module=None):
     STATE["slug"] = j["data"]["slug"]
     STATE["etag"] = j["data"]["etag"]
     STATE["model_id"] = j["data"]["id"]
-    for name in ("ai_api_enabled", "ai_write_enabled", "ai_batch_enabled", "ai_approval_flow_enabled"):
-        set_flag(name, True)
 
 
 def teardown_module(module=None):
-    for name in ("ai_api_enabled", "ai_write_enabled", "ai_batch_enabled", "ai_approval_flow_enabled"):
+    for name, val in (STATE.get("flags_before") or {}).items():
         try:
-            set_flag(name, True)
+            set_flag(name, bool(val))
         except Exception:
             pass
     for slug in (STATE.get("slug"), STATE.get("slug2"), "zeta-testuale", "zeta-testuale-2", "zeta-testuale-copia"):
@@ -439,6 +442,60 @@ def test_command_dispatcher():
     assert r.status_code == 422 and j["code"] == "VALIDATION_FAILED"
     r, j = ai("POST", "/command", STATE["ro_key"], {"action": "models.validate", "target": STATE["slug"]})
     assert r.status_code == 403
+
+
+def test_read_only_scopes_allow_dry_run_only():
+    """Phase 11 minimum privilege: a READ_ONLY-scoped key can preview (dry_run) but never mutate, regardless of mode."""
+    ro_scopes = ["models:read", "models:validate", "seo:read", "seo:audit", "seo:review_prepare", "analytics:read", "landing:read", "landing:validate",
+                 "rollback:read", "system:status", "system:daily_summary", "ai:execute"]
+    k = make_key(scopes=ro_scopes, name="test-ro-scopes")
+    key = k["api_key"]
+    before = ai("POST", "/models/find", key, {"model": STATE["slug"]})[1]["data"]["etag"]
+    # real writes -> INSUFFICIENT_SCOPE (even in FULL mode) with a hint about dry_run
+    r, j = ai("POST", "/models/update", key, {"model": STATE["slug"], "changes": {"tag": ["ro-scope"]}})
+    assert r.status_code == 403 and j["code"] == "INSUFFICIENT_SCOPE" and "models:update" in j["data"]["missing_scopes"] and j["data"].get("hint")
+    r, j = ai("POST", f"/models/{STATE['slug']}/seo/apply-safe-fixes", key)
+    assert r.status_code == 403 and j["code"] == "INSUFFICIENT_SCOPE"
+    r, j = ai("POST", "/models/publish", key, {"model": STATE["slug"]})
+    assert r.status_code == 403 and j["code"] == "INSUFFICIENT_SCOPE"
+    # previews -> allowed with read scopes
+    r, j = ai("POST", "/models/update", key, {"model": STATE["slug"], "changes": {"tag": ["ro-scope"]}, "dry_run": True})
+    assert r.status_code == 200 and j["ok"] and j["data"]["dry_run"] is True, j
+    r, j = ai("POST", f"/models/{STATE['slug']}/seo/apply-safe-fixes?dry_run=true", key)
+    assert r.status_code == 200 and j["ok"] and j["data"]["dry_run"] is True, j
+    r, j = ai("POST", "/models/publish", key, {"model": STATE["slug"], "dry_run": True})
+    assert r.status_code == 200 and (j.get("code") == "PUBLICATION_BLOCKED" or j["ok"]), j
+    r, j = ai("POST", "/landings", key, {"model": "francesca-rossi", "h1": "Anteprima landing", "meta_description": "Anteprima di una landing di test per il pubblico italiano di LATO SEGRETO.", "dry_run": True})
+    assert r.status_code == 200 and j["data"]["dry_run"], j
+    r, j = ai("POST", "/command", key, {"action": "models.update", "target": STATE["slug"], "parameters": {"changes": {"tag": ["x"]}}, "dry_run": True})
+    assert r.status_code == 200 and j["ok"], j
+    r, j = ai("POST", "/command", key, {"action": "models.update", "target": STATE["slug"], "parameters": {"changes": {"tag": ["x"]}}})
+    assert r.status_code == 403 and j["code"] == "INSUFFICIENT_SCOPE"
+    # upload / confirm never allowed for this key
+    r, j = ai("POST", "/media/upload", key, {"model": STATE["slug"], "slot": "pair", "url": "https://example.com/a.jpg", "dry_run": True})
+    assert r.status_code == 403
+    assert ai("POST", "/models/find", key, {"model": STATE["slug"]})[1]["data"]["etag"] == before  # zero mutation
+    caps = ai("GET", "/capabilities", key)[1]["data"]["capabilities"]
+    acc = {c["id"]: c.get("access") for c in caps}
+    assert acc.get("updateModel") == "preview_only" and acc.get("findModel") == "full" and "uploadMedia" not in acc
+
+
+def test_openapi_chatgpt_action_ready():
+    r = requests.get(f"{B}/api/v1/ai/openapi-chatgpt.json", headers={"Host": "secret-side.preview.emergentagent.com", "X-Forwarded-Proto": "https"}, timeout=20)
+    assert r.status_code == 200
+    d = r.json()
+    ops = [(m, p, o["operationId"], o) for p, v in d["paths"].items() for m, o in v.items()]
+    assert 1 <= len(ops) <= 30 and len({o[2] for o in ops}) == len(ops)
+    assert d["servers"] and d["servers"][0]["url"].startswith("https://")
+    assert list(d["components"]["securitySchemes"]) == ["ApiKeyBearer"] and d["components"]["securitySchemes"]["ApiKeyBearer"]["scheme"] == "bearer"
+    assert all(len(o[3].get("description", "")) <= 300 and len(o[3].get("summary", "")) <= 300 for o in ops)
+    assert all(p.startswith("/api/v1/ai/") for _, p, _, _ in ops)
+    assert not any(x in json.dumps(d) for x in ("key_hash", "MONGO_URL", "test-connection", "openapi-chatgpt", "/control"))
+    assert "AIError" in d["components"]["schemas"] and "AIResponse" in d["components"]["schemas"]
+    # ids exist in the full spec too (1:1 mapping, no invented endpoints)
+    full = requests.get(f"{B}/api/v1/ai/openapi.json", timeout=20).json()
+    for m, p, _, _ in ops:
+        assert m in full["paths"].get(p, {}), (m, p)
 
 
 def test_capabilities_and_openapi():
