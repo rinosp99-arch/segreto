@@ -231,7 +231,29 @@ Scenario completo:
 
 ---
 
+### Phase 9 — SUPER API (motore API-first dietro il sito, pronto per ChatGPT) — Status: COMPLETATA (agent-tested, iteration_20: backend 101/108 poi fix restore dry-run + DELETE experiments/users; frontend ok; sito pubblico e admin invariati)
+
+**Vincoli utente:** NON rifare frontend/concept, NON dominio .it, NON SSR/prerender definitivo, NON GSC/GA produzione. Sito pubblico e admin devono restare identici e funzionanti. L'API è il motore, non un sostituto.
+
+**Audit codebase (eseguito):**
+- Stack: React 18 (CRA/craco, Tailwind, shadcn) · FastAPI 0.110 + Motor · MongoDB. ffmpeg/ffprobe e Pillow disponibili.
+- Collections esistenti: models, categories, articles, analytics_events, admin_users, settings, audit_logs, files.
+- API esistenti: /api (pubblico: models, segreto, categorie, articoli, settings, pellicola, track, uploads), /api/admin (login JWT, CRUD modelle/categorie/articoli, settings, upload Emergent Object Storage, audit, copy-config), /api/admin/analytics (overview, funnel, models, timeseries, campaigns, pellicola), /api/sitemap.xml, rss, robots, /api/integrations/seo/articles (webhook X-API-Key).
+- Auth esistente: JWT HS256 (ruolo unico "amministratore"), bcrypt, rate-limit login in memoria.
+- Media: upload → Emergent Object Storage → files_col → servito via /api/uploads/{path}. Nessuna variante/ottimizzazione/ALT lato server.
+- SEO attuale: campi seo {title, meta_description, alt_default, og_image} per modella; seo_title/meta per categorie/articoli; head client-side (lib/seo.js), sitemap dinamica. Nessun audit/autofix.
+- Analytics attuale: eventi legacy (page_view, secret_activate, of_click, cta_click, interazione, message_*, pellicola_*, landing). Nessuna geo/device/country.
+- Readiness: content_status.py (checklist obbligatori, DEMO/REALE) → RIUSATO come base della validazione.
+
+**Riuso:** database.py, auth.py (JWT/bcrypt), content_status.py (readiness), storage.py, sanitize.py, schemas.ModelIn, routes esistenti (non toccate salvo hook versioning + filtro is_deleted + ruoli su scritture).
+**Aggiunte (nuovi file backend, prefisso /api/v1):** v1_security (API keys, ruoli/scopes, rate limit, request-id, idempotency), v1_versioning (before/after/rollback), v1_models, v1_media, v1_seo (engine+autopilot+redirect+sitemap manager+internal linking), v1_tracking (Italy Engine, eventi canonici), v1_analytics, v1_landings, v1_experiments, v1_health (self-healing+alerts), v1_jobs (scheduler asyncio), v1_config (feature flags, config center, webhooks firmati, backup/restore), v1_ai (endpoint ChatGPT-friendly), v1_dashboard. OpenAPI su /api/docs.
+**Frontend (minimo, non invasivo):** nuova pagina admin "Motore API" (/admin/motore) + voce menu; evento cta_view nel profilo (IntersectionObserver); redirect resolve in NotFound.
+**Rischi:** scheduler in-process (single worker: ok); eventi legacy devono continuare a funzionare → doppio campo tipo/event; ruoli nuovi non devono bloccare l'admin esistente (amministratore → SUPER_ADMIN).
+
+---
+
 ## 3) Next Actions
+0. Fase successiva (NON ora, su richiesta utente): dominio latosegreto.it, redirect da Emergent, SSR/prerender, GSC, GA4 produzione, lancio SEO Italia. Tutto predisposto via Config Center (site.base_url, flags domain_it_migration/ssr_prerender/search_console_sync/ga4_production) e redirect engine.
 1. Implementare Phase 8 (override manuale per-media, checklist required, filtri lista, blocco pubblicazione con errori strutturati, import rapido file+URL, copia configurazione, anteprima admin bozza).
 2. Test end-to-end dello scenario di creazione modella fino a pubblicazione senza modificare codice.
 3. Aggiornare questo plan.md con stato “COMPLETATA” per Phase 8 solo dopo testing agent.

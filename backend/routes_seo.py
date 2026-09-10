@@ -16,7 +16,10 @@ def base_url(request: Request) -> str:
 async def sitemap(request: Request):
     base = base_url(request)
     urls = [(f"{base}/", "1.0", "daily")]
-    async for m in models_col.find({"stato": "pubblicata"}, {"_id": 0, "slug": 1, "updated_at": 1}):
+    async for m in models_col.find({"stato": "pubblicata", "is_deleted": {"$ne": True}}, {"_id": 0, "slug": 1, "updated_at": 1, "seo": 1}):
+        seo = m.get("seo") or {}
+        if seo.get("indexable", True) is False or "noindex" in (seo.get("robots") or "").lower():
+            continue
         urls.append((f"{base}/modelle/{m['slug']}", "0.9", "weekly"))
     async for c in categories_col.find({"stato": "pubblicata", "indicizzabile": True}, {"_id": 0, "slug": 1}):
         urls.append((f"{base}/categorie/{c['slug']}", "0.7", "weekly"))

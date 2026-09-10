@@ -15,6 +15,7 @@ from schemas import ModelIn, CategoryIn, ArticleIn, SettingsIn, LoginIn
 from sanitize import sanitize_html, slugify
 from storage import put_object, APP_NAME
 from content_status import compute_content_status, full_status, compute_readiness
+from v1_versioning import record_version
 
 
 def _assert_publishable(data):
@@ -56,8 +57,11 @@ async def login(body: LoginIn, request: Request):
     if not admin or not verify_password(body.password, admin["password_hash"]):
         raise HTTPException(status_code=401, detail="Credenziali non valide")
     reset_rate_limit(ip)
-    token = create_token(admin["id"], admin["email"], admin.get("ruolo", "amministratore"))
-    return {"token": token, "email": admin["email"], "ruolo": admin.get("ruolo", "amministratore")}
+    if admin.get("active") is False:
+        raise HTTPException(status_code=401, detail="Utente disattivato")
+    ruolo = admin.get("role") or admin.get("ruolo", "amministratore")
+    token = create_token(admin["id"], admin["email"], ruolo)
+    return {"token": token, "email": admin["email"], "ruolo": ruolo}
 
 
 @admin_router.get("/me")
@@ -108,7 +112,7 @@ async def upload_media(file: UploadFile = File(...), admin=Depends(get_current_a
 # ---------------- MODELS CRUD ----------------
 @admin_router.get("/models")
 async def admin_list_models(stato: Optional[str] = None, admin=Depends(get_current_admin)):
-    query = {}
+    query = {"is_deleted": {"$ne": True}}
     if stato:
         query["stato"] = stato
     docs = await models_col.find(query, {"_id": 0}).sort("ordine", 1).to_list(500)
@@ -165,6 +169,7 @@ async def admin_create_model(body: ModelIn, admin=Depends(get_current_admin)):
         data["data_pubblicazione"] = now_iso()
     await models_col.insert_one(data)
     await audit(admin["email"], "create", "model", data["id"], {"nome": data["nome"]})
+    await record_version("model", data["id"], None, data, admin["email"], source="manual", reason="Creazione (admin)")
     return serialize_doc({k: v for k, v in data.items() if k != "_id"})
 
 
@@ -199,6 +204,8 @@ async def admin_update_model(model_id: str, body: ModelIn, admin=Depends(get_cur
             auto = {"type": "pellicola_off", "missing": rd["pellicola_missing"]}
 
     await models_col.update_one({"id": model_id}, {"$set": data})
+    _after = await models_col.find_one({"id": model_id}, {"_id": 0})
+    await record_version("model", model_id, existing, _after, admin["email"], source="manual", reason="Modifica (admin)")
     if auto and auto["type"] == "bozza":
         await audit(admin["email"], "auto_bozza", "model", model_id, {"missing": auto["missing"]})
     elif auto and auto["type"] == "pellicola_off":
@@ -228,16 +235,21 @@ async def admin_set_status(model_id: str, body: dict, admin=Depends(get_current_
         upd["data_pubblicazione"] = now_iso()
     await models_col.update_one({"id": model_id}, {"$set": upd})
     await audit(admin["email"], f"stato:{stato}", "model", model_id)
+    await record_version("model", model_id, existing, {**existing, **upd}, admin["email"], source="manual", reason=f"Cambio stato (admin): {stato}")
     return {"ok": True, "stato": stato}
 
 
 @admin_router.delete("/models/{model_id}")
 async def admin_delete_model(model_id: str, admin=Depends(get_current_admin)):
-    res = await models_col.delete_one({"id": model_id})
-    if res.deleted_count == 0:
+    existing = await models_col.find_one({"id": model_id}, {"_id": 0})
+    if not existing:
         raise HTTPException(status_code=404, detail="Modella non trovata")
+    # SOFT delete (restorable via /api/v1/models/{id}/restore or version rollback)
+    upd = {"is_deleted": True, "deleted_at": now_iso(), "stato_precedente": existing.get("stato"), "stato": "archiviata", "updated_at": now_iso()}
+    await models_col.update_one({"id": model_id}, {"$set": upd})
     await audit(admin["email"], "delete", "model", model_id)
-    return {"ok": True}
+    await record_version("model", model_id, existing, {**existing, **upd}, admin["email"], source="manual", reason="Eliminazione (admin, soft delete)")
+    return {"ok": True, "soft_deleted": True}
 
 
 @admin_router.post("/models/reorder")

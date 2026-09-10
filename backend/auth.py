@@ -25,11 +25,19 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
+def _role_of(ruolo: str) -> str:
+    r = (ruolo or '').upper()
+    if r in ('AMMINISTRATORE', 'ADMINISTRATOR', ''):
+        return 'SUPER_ADMIN'
+    return r
+
+
 def create_token(sub: str, email: str, ruolo: str = 'amministratore') -> str:
     payload = {
         'sub': sub,
         'email': email,
         'ruolo': ruolo,
+        'role': _role_of(ruolo),
         'iat': datetime.now(timezone.utc),
         'exp': datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_HOURS),
     }

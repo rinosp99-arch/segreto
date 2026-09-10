@@ -304,8 +304,25 @@ async def track_event(ev: TrackEventIn, request: Request):
         m = await models_col.find_one({"slug": doc["model_slug"]}, {"_id": 0, "id": 1})
         if m:
             doc["model_id"] = m["id"]
+    # SUPER API: canonical event name + device/source/geo enrichment (Italy Engine)
+    try:
+        from v1_tracking import enrich_event
+        enrich_event(doc, request)
+    except Exception:
+        pass
     await events_col.insert_one(doc)
     return {"ok": True}
+
+
+@public_router.get("/redirects/resolve")
+async def resolve_redirect(path: str):
+    """Safe redirects (e.g. slug changes). Used by the frontend 404 page."""
+    from database import redirects_col
+    r = await redirects_col.find_one({"from_path": path, "active": True}, {"_id": 0})
+    if not r:
+        return {"redirect": None}
+    await redirects_col.update_one({"id": r["id"]}, {"$inc": {"hits": 1}})
+    return {"redirect": r["to_path"], "status_code": r.get("status_code", 301)}
 
 
 @public_router.get("/uploads/{path:path}")

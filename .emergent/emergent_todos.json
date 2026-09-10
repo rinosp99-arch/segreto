@@ -1,26 +1,10 @@
 [
   {
-    "content": "FilmStrip: decouple video mount/play from reduced-motion (videos always play, muted-before-play)",
+    "content": "Test backend (curl) + testing_agent + verifica sito pubblico intatto",
     "status": "completed"
   },
   {
-    "content": "FilmStrip: MP4-priority sources for Safari/iOS (WebM only if canPlayType supports it)",
-    "status": "completed"
-  },
-  {
-    "content": "FilmStrip: replace CSS-animation marquee with rAF translate3d engine (viewport+track), remove overflow-x scroll",
-    "status": "completed"
-  },
-  {
-    "content": "index.css: remove CSS marquee animation + reduced-motion overflow-x fallback",
-    "status": "completed"
-  },
-  {
-    "content": "esbuild + differential 390x844 vs desktop test (video currentTime T2>T1, track X2<X1, no interaction)",
-    "status": "completed"
-  },
-  {
-    "content": "testing_agent_v3 differential desktop vs mobile verification",
+    "content": "Fix issue testing agent (restore dry-run 500, DELETE experiments/users) + cleanup dati test",
     "status": "completed"
   }
 ]

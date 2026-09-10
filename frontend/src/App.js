@@ -29,6 +29,7 @@ import AdminArticles from '@/pages/admin/AdminArticles';
 import ArticleEditor from '@/pages/admin/ArticleEditor';
 import AdminAnalytics from '@/pages/admin/AdminAnalytics';
 import AdminCampaigns from '@/pages/admin/AdminCampaigns';
+import AdminMotore from '@/pages/admin/AdminMotore';
 import AdminSettings from '@/pages/admin/AdminSettings';
 
 function PublicLayout() {
@@ -90,6 +91,7 @@ export default function App() {
             <Route path="articoli/:id" element={<ArticleEditor />} />
             <Route path="analytics" element={<AdminAnalytics />} />
             <Route path="campagne" element={<AdminCampaigns />} />
+            <Route path="motore" element={<AdminMotore />} />
             <Route path="impostazioni" element={<AdminSettings />} />
           </Route>
         </Routes>

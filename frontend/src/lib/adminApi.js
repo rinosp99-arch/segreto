@@ -50,3 +50,22 @@ export async function uploadMedia(file) {
   const r = await api.post('/admin/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   return r.data; // {url, tipo}
 }
+
+// ---- SUPER API v1 (Motore) ----
+export const v1Dashboard = (range) => api.get('/v1/dashboard/overview', { params: { range } }).then((r) => r.data);
+export const v1HealthRun = () => api.post('/v1/health/run').then((r) => r.data);
+export const v1SeoAudit = () => api.post('/v1/seo/audit', { scope: 'all' }).then((r) => r.data);
+export const v1SeoFixAll = (dry_run = false) => api.post('/v1/seo/fix-all', { scope: 'all', dry_run }).then((r) => r.data);
+export const v1SeoIssues = (params) => api.get('/v1/seo/issues', { params }).then((r) => r.data);
+export const v1SeoFix = (issue_id, apply_review = false) => api.post('/v1/seo/fix', { issue_id, apply_review }).then((r) => r.data);
+export const v1SeoIgnore = (issue_id) => api.post(`/v1/seo/issues/${issue_id}/ignore`).then((r) => r.data);
+export const v1Rollback = (version_id, reason) => api.post(`/v1/versions/${version_id}/rollback`, { reason }).then((r) => r.data);
+export const v1JobRun = (name) => api.post(`/v1/jobs/${name}/run`).then((r) => r.data);
+export const v1AlertAck = (id) => api.post(`/v1/alerts/${id}/ack`).then((r) => r.data);
+export const v1AlertResolve = (id) => api.post(`/v1/alerts/${id}/resolve`).then((r) => r.data);
+export const v1Keys = () => api.get('/v1/auth/keys').then((r) => r.data);
+export const v1CreateKey = (data) => api.post('/v1/auth/keys', data).then((r) => r.data);
+export const v1RevokeKey = (id) => api.delete(`/v1/auth/keys/${id}`).then((r) => r.data);
+export const v1Config = () => api.get('/v1/config').then((r) => r.data);
+export const v1SetFlag = (name, value) => api.put(`/v1/config/flags/${name}`, { value }).then((r) => r.data);
+export const v1Backup = () => api.post('/v1/backup', {}).then((r) => r.data);

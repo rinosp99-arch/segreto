@@ -65,6 +65,24 @@ export default function ModelProfile() {
     return () => { if (teaserFallback.current) clearTimeout(teaserFallback.current); };
   }, [secret, slug]);
 
+  // cta_view (funnel VISIT → MODEL VIEW → SECRET → CTA VIEW → OF CLICK): fired once per secret session when the CTA block is visible
+  useEffect(() => {
+    if (!secret) return undefined;
+    const el = ctaRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return undefined;
+    let fired = false;
+    const io = new IntersectionObserver((entries) => {
+      if (fired) return;
+      if (entries.some((e) => e.isIntersecting)) {
+        fired = true;
+        track({ tipo: 'cta_view', model_slug: slug, session_id: getSessionId(), cta_source: 'of_click_gallery' });
+        io.disconnect();
+      }
+    }, { threshold: 0.4 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [secret, slug]);
+
   const onTeaserTime = useCallback((cur, dur) => {
     if (dur > 0 && (dur - cur) <= Math.min(3, dur * 0.35)) setTeaserEnd(true);
   }, []);

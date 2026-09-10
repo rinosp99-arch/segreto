@@ -47,11 +47,22 @@ class Messaggio35s(BaseModel):
 
 
 class SeoFields(BaseModel):
-    model_config = ConfigDict(extra='ignore')
+    """Full SEO field-set (per page). extra='allow' so future fields survive round-trips."""
+    model_config = ConfigDict(extra='allow')
     title: str = ''
     meta_description: str = ''
     alt_default: str = ''
     og_image: str = ''
+    # SUPER API additions
+    canonical: str = ''
+    robots: str = 'index,follow'
+    og_title: str = ''
+    og_description: str = ''
+    structured_data_type: str = 'ProfilePage'
+    keywords: List[str] = []
+    topics: List[str] = []
+    indexable: bool = True
+    internal_links: List[Dict[str, Any]] = []
 
 
 class PellicolaSide(BaseModel):
@@ -100,10 +111,12 @@ class ModelIn(BaseModel):
     social: Dict[str, Any] = {}
     pellicola_home: PellicolaHome = Field(default_factory=PellicolaHome)
     content_overrides: Dict[str, str] = {}
-    stato: str = 'bozza'  # bozza | pubblicata | disattivata
+    stato: str = 'bozza'  # bozza | pubblicata | disattivata | archiviata
     ordine: int = 0
     conferma_maggiorenne: bool = False
     data_pubblicazione: Optional[str] = None
+    analytics: Dict[str, Any] = {}  # per-model tracking config (utm defaults, goals)
+    is_deleted: bool = False
 
 
 class CategoryIn(BaseModel):
