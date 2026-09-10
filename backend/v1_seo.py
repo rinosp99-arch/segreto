@@ -23,7 +23,7 @@ from v1_versioning import record_version, audit_log, rollback_version
 seo_router = APIRouter(prefix="/api/v1/seo", tags=["SEO"])
 
 SAFE, REVIEW, CRITICAL = "SAFE_AUTO_FIX", "REVIEW_REQUIRED", "CRITICAL"
-OF_RX = re.compile(r"^https://(www\.)?onlyfans\.com/[A-Za-z0-9_.\-]+(/(c\d+|trial/[A-Za-z0-9_\-]+))?/?(\?[A-Za-z0-9_=&%.\-]*)?$")  # accepts real OF tracking links /c<N>, /trial/<code>, ?query
+from v1_models import OF_RX  # canonical rule (no duplicated regex)
 SLUG_RX = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 BRAND = "LATO SEGRETO"
 

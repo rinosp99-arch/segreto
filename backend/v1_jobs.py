@@ -51,9 +51,11 @@ async def j_seo():
     if ap.get("enabled", True) and ap.get("auto_apply_safe", True) and res["counts"]["SAFE_AUTO_FIX"]:
         fx = await apply_safe_fixes("seo-autopilot", None, None, None, False, source="autofix")
         out["autofix"] = {"applied": fx["applied"], "skipped": fx["skipped"]}
+    from v1_health import raise_alert, resolve_alerts
     if res["counts"]["CRITICAL"]:
-        from v1_health import raise_alert
-        await raise_alert("seo_critical", "Issue SEO critiche", f"{res['counts']['CRITICAL']} issue CRITICAL aperte: intervento manuale", "critical", "seo", None, "seo_critical")
+        await raise_alert("seo_critical", "Issue SEO critiche", f"{res['counts']['CRITICAL']} issue CRITICAL aperte: intervento manuale", "critical", "seo", None, "seo_critical", {"counts": res["counts"], "source": "seo_scan"})
+    else:
+        await resolve_alerts("seo_critical")   # reconciliation: condition gone -> alert resolved (was never closed before)
     return out
 
 

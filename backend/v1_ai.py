@@ -1062,6 +1062,46 @@ async def _models_by_status() -> Dict[str, int]:
     return counts
 
 
+
+# ---------------- HEALTH: fresh + reconciled (Phase 11 fix) ----------------
+HEALTH_FRESH_S = 600  # a stored health record older than this is re-run before being reported to ChatGPT
+
+
+async def reconciled_health(max_age_s: int = HEALTH_FRESH_S) -> dict:
+    """Return the latest health record; if stale (or missing) run the checks now WITHOUT self-healing writes.
+    Running the checks also reconciles alerts (conditions that disappeared are resolved, history kept), so
+    health_overall / alerts / recommendations always describe the CURRENT state, never a stale snapshot."""
+    rec = await health_col.find_one({}, {"_id": 0}, sort=[("timestamp", -1)])
+    fresh = False
+    if rec:
+        try:
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(rec["timestamp"])).total_seconds()
+        except Exception:
+            age = max_age_s + 1
+        fresh = age <= max_age_s
+    if not fresh:
+        from v1_health import run_health_checks
+        rec = await run_health_checks(auto_fix=False)
+        rec["refreshed_now"] = True
+    rec = rec or {}
+    rec["checked_at"] = rec.get("checked_at") or rec.get("timestamp")
+    return rec
+
+
+async def alerts_view(limit_open: int = 50, history_hours: int = 24) -> dict:
+    """Current (open/acknowledged) alerts vs recently resolved ones, with timestamps so a client can tell them apart."""
+    fields = {"_id": 0, "id": 1, "tipo": 1, "titolo": 1, "messaggio": 1, "severity": 1, "stato": 1, "current": 1, "source": 1, "occurrences": 1,
+              "created_at": 1, "updated_at": 1, "checked_at": 1, "last_seen": 1, "resolved_at": 1, "resolved_by": 1, "dedupe_key": 1}
+    open_ = await alerts_col.find({"stato": {"$in": ["open", "acknowledged"]}}, fields).sort("created_at", -1).to_list(limit_open)
+    since = (datetime.now(timezone.utc) - timedelta(hours=history_hours)).isoformat()
+    resolved = await alerts_col.find({"stato": "resolved", "resolved_at": {"$gte": since}}, fields).sort("resolved_at", -1).to_list(limit_open)
+    for a in open_:
+        a["current"] = True
+    for a in resolved:
+        a["current"] = False
+    return {"open": open_, "open_critical": len([a for a in open_ if a.get("severity") == "critical"]), "resolved_recent": resolved, "history_window_hours": history_hours}
+
+
 @ai_router.get("/status", operation_id="getSystemStatus", summary="Stato sistema (API, DB, health, alert, job, SEO, flag, permessi)")
 async def ai_status(request: Request, principal=Depends(ai_guard("system:status"))):
     from database import db
@@ -1070,8 +1110,9 @@ async def ai_status(request: Request, principal=Depends(ai_guard("system:status"
         db_ok = True
     except Exception:
         db_ok = False
-    health = await health_col.find_one({}, {"_id": 0, "overall": 1, "timestamp": 1, "actions": 1}, sort=[("timestamp", -1)])
-    alerts = await alerts_col.count_documents({"stato": "open"})
+    hrec = await reconciled_health()
+    health = {k: hrec.get(k) for k in ("overall", "timestamp", "checked_at", "actions", "refreshed_now")}
+    alerts = await alerts_col.count_documents({"stato": {"$in": ["open", "acknowledged"]}})
     jobs = await jobs_col.find({}, {"_id": 0, "name": 1, "last_status": 1, "last_run": 1, "enabled": 1}).to_list(50)
     seo_counts = {}
     async for r in seo_issues_col.aggregate([{"$match": {"status": "open"}}, {"$group": {"_id": "$severity", "n": {"$sum": 1}}}]):
@@ -1087,8 +1128,9 @@ async def ai_status(request: Request, principal=Depends(ai_guard("system:status"
 @ai_router.get("/site-health", operation_id="getSiteHealth", summary="Salute complessiva del sito")
 async def ai_site_health(request: Request, principal=Depends(ai_guard("system:status"))):
     counts = await _models_by_status()
-    health = await health_col.find_one({}, {"_id": 0}, sort=[("timestamp", -1)]) or {}
+    health = await reconciled_health()
     checks = {c["name"]: c for c in health.get("checks", [])}
+    av = await alerts_view()
     seo_counts = {"SAFE_AUTO_FIX": 0, "REVIEW_REQUIRED": 0, "CRITICAL": 0}
     async for r in seo_issues_col.aggregate([{"$match": {"status": "open"}}, {"$group": {"_id": "$severity", "n": {"$sum": 1}}}]):
         seo_counts[r["_id"]] = r["n"]
@@ -1096,16 +1138,20 @@ async def ai_site_health(request: Request, principal=Depends(ai_guard("system:st
     job_fail = await jobs_col.find({"last_status": "error"}, {"_id": 0, "name": 1, "last_error": 1}).to_list(20)
     wh_fail = await webhook_deliveries_col.count_documents({"ok": False, "created_at": {"$gte": since}})
     last_backup = await backups_col.find_one({}, {"_id": 0, "id": 1, "created_at": 1, "size": 1}, sort=[("created_at", -1)])
-    alerts = await alerts_col.find({"stato": "open"}, {"_id": 0, "titolo": 1, "severity": 1, "tipo": 1}).to_list(50)
+    alerts = av["open"]
     m = await metrics_snapshot_shared()
     total = sum(counts.values())
     data = {"models": {"total": total, "published": counts.get("PUBLISHED", 0), "draft": counts.get("DRAFT", 0), "incomplete": counts.get("INCOMPLETE", 0), "ready": counts.get("READY", 0), "error": counts.get("ERROR", 0), "archived": counts.get("ARCHIVED", 0)},
             "broken_media": (checks.get("media") or {}).get("missing", []), "seo_issues": sum(seo_counts.values()), "critical_issues": seo_counts["CRITICAL"], "safe_issues": seo_counts["SAFE_AUTO_FIX"], "review_issues": seo_counts["REVIEW_REQUIRED"],
             "sitemap_status": (checks.get("sitemap") or {}).get("detail"), "job_failures": job_fail, "webhook_failures_24h": wh_fail, "api_errors_last_hour": m["last_hour"]["errors"],
-            "performance_alerts": [a for a in alerts if a.get("tipo") in ("traffic_anomaly", "conversion_anomaly")], "alerts": alerts,
+            "performance_alerts": [a for a in alerts if a.get("tipo") in ("traffic_anomaly", "conversion_anomaly")],
+            "alerts": alerts, "alerts_open_critical": av["open_critical"], "alerts_resolved_recent": av["resolved_recent"],
+            "onlyfans_links": {k: v for k, v in (checks.get("onlyfans_links") or {}).items() if k != "name"},
+            "checks": [{"name": c["name"], "status": c["status"], "detail": c["detail"], "checked_at": c.get("checked_at") or health.get("checked_at")} for c in health.get("checks", [])],
             "backup_status": "ok" if last_backup and last_backup["created_at"] >= since else ("stale" if last_backup else "none"), "last_successful_backup": last_backup,
-            "health_overall": health.get("overall"), "health_at": health.get("timestamp"), "data_available": bool(health)}
-    s = f"Sito: {total} modelle ({data['models']['published']} online, {data['models']['incomplete'] + data['models']['draft']} in lavorazione, {data['models']['error']} in errore); SEO {data['seo_issues']} issue ({seo_counts['CRITICAL']} critiche); health {health.get('overall', 'n/d')}; {len(job_fail)} job in errore; backup {data['backup_status']}."
+            "health_overall": health.get("overall"), "health_at": health.get("timestamp"), "health_checked_at": health.get("checked_at"), "health_refreshed_now": bool(health.get("refreshed_now")),
+            "health_source": "checks correnti (alert risolti non influenzano lo stato)", "data_available": bool(health)}
+    s = f"Sito: {total} modelle ({data['models']['published']} online, {data['models']['incomplete'] + data['models']['draft']} in lavorazione, {data['models']['error']} in errore); SEO {data['seo_issues']} issue ({seo_counts['CRITICAL']} critiche); health {health.get('overall', 'n/d')} (verificato {str(health.get('checked_at', ''))[11:16]} UTC); alert critici aperti {av['open_critical']}; {len(job_fail)} job in errore; backup {data['backup_status']}."
     return envelope("site_health", request, s, data)
 
 
@@ -1143,11 +1189,11 @@ async def build_daily_summary() -> dict:
     manual_changes = await versions_col.count_documents({"source": "manual", "timestamp": {"$gte": since24}})
     ai_actions = await ai_actions_col.count_documents({"timestamp": {"$gte": since24}})
     ai_errors = await ai_actions_col.count_documents({"timestamp": {"$gte": since24}, "ok": False})
-    alerts_open = await alerts_col.find({"stato": "open"}, {"_id": 0, "titolo": 1, "severity": 1, "created_at": 1, "tipo": 1}).sort("created_at", -1).to_list(10)
+    alerts_open = (await alerts_view(limit_open=10))["open"]
     seo_counts = {}
     async for r in seo_issues_col.aggregate([{"$match": {"status": "open"}}, {"$group": {"_id": "$severity", "n": {"$sum": 1}}}]):
         seo_counts[r["_id"]] = r["n"]
-    health = await health_col.find_one({}, {"_id": 0, "overall": 1, "timestamp": 1, "checks": 1}, sort=[("timestamp", -1)]) or {}
+    health = await reconciled_health()
     media_issues = (next((c for c in health.get("checks", []) if c["name"] == "media"), {}) or {}).get("missing", [])
     jobs_err = await jobs_col.find({"last_status": "error"}, {"_id": 0, "name": 1}).to_list(20)
     new_landings = await landings_col.count_documents({"created_at": {"$gte": since24}})
@@ -1214,7 +1260,7 @@ async def ai_recommendations(request: Request, limit: int = 30, principal=Depend
                 recs.append({"priority": "MEDIUM", "type": "conversion", "target": name, "target_slug": d["slug"], "problem": f"Conversione bassa: {k['conversion_rate']}% su {k['visits']} visite (7g)", "recommended_action": "Rivedi CTA/teaser o avvia un A/B test sulla CTA", "automatic": False, "capability_id": "queryAnalytics"})
             if k["visits"] >= 50 and k["activation_rate"] < 20:
                 recs.append({"priority": "LOW", "type": "conversion", "target": name, "target_slug": d["slug"], "problem": f"Attivazione Lato Segreto bassa: {k['activation_rate']}%", "recommended_action": "Rafforza frase di attivazione / teaser", "automatic": False, "capability_id": "updateModel"})
-    health = await health_col.find_one({}, {"_id": 0, "checks": 1}, sort=[("timestamp", -1)]) or {}
+    health = await reconciled_health()   # current, reconciled state only: stale alerts never produce recommendations
     for c in health.get("checks", []):
         if c["status"] == "fail":
             recs.append({"priority": "HIGH", "type": "technical", "target": "sito", "problem": f"Check {c['name']} fallito: {c['detail']}", "recommended_action": "Verifica e risolvi", "automatic": False, "capability_id": "getSiteHealth"})

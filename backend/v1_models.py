@@ -20,7 +20,18 @@ from v1_versioning import record_version, audit_log
 
 models_router = APIRouter(prefix="/api/v1/models", tags=["Models"])
 
-OF_RX = re.compile(r"^https://(www\.)?onlyfans\.com/[A-Za-z0-9_.\-]+(/(c\d+|trial/[A-Za-z0-9_\-]+))?/?(\?[A-Za-z0-9_=&%.\-]*)?$")  # accepts real OF tracking links /c<N>, /trial/<code>, ?query
+# CANONICAL OnlyFans URL rule (single source of truth: validator, model-health, SEO engine, global health, tracking all import this).
+# Accepts https://onlyfans.com/<user>, /<user>/c<N> (tracking), /<user>/trial/<code>, optional query string.
+OF_RX = re.compile(r"^https://(www\.)?onlyfans\.com/[A-Za-z0-9_.\-]+(/(c\d+|trial/[A-Za-z0-9_\-]+))?/?(\?[A-Za-z0-9_=&%.\-]*)?$")
+
+
+def onlyfans_url_status(url) -> str:
+    """'ok' | 'missing' | 'invalid' - structural check only (no HTTP: OnlyFans blocks server-side bots; reachability is never
+    treated as URL validity)."""
+    u = (url or "").strip()
+    if not u:
+        return "missing"
+    return "ok" if OF_RX.match(u) else "invalid"
 REQUIRED_CODES = {
     "Creator maggiorenne confermata": "AGE_CONFIRMATION_MISSING",
     "Nome": "NAME_MISSING",

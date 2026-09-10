@@ -26,7 +26,7 @@ logger = logging.getLogger("lato-segreto.health")
 health_router = APIRouter(prefix="/api/v1/health", tags=["Health & Self-healing"])
 alerts_router = APIRouter(prefix="/api/v1/alerts", tags=["Health & Self-healing"])
 
-OF_RX = re.compile(r"^https://(www\.)?onlyfans\.com/[A-Za-z0-9_.\-]+/?$")
+from v1_models import onlyfans_url_status  # canonical OnlyFans URL rule (was a stale duplicate regex: root cause of false critical alerts)
 FRONTEND_PUBLIC_DIR = "/app/frontend/public"
 
 
@@ -36,11 +36,13 @@ async def raise_alert(tipo: str, titolo: str, messaggio: str, severity: str = "w
     dedupe_key = dedupe_key or f"{tipo}:{entity}:{entity_id}"
     existing = await alerts_col.find_one({"dedupe_key": dedupe_key, "stato": {"$in": ["open", "acknowledged"]}}, {"_id": 0})
     if existing:
-        await alerts_col.update_one({"id": existing["id"]}, {"$set": {"last_seen": now_iso(), "messaggio": messaggio}, "$inc": {"occurrences": 1}})
+        # refresh the alert with the CURRENT evidence (message, meta, severity) so it never shows stale details
+        await alerts_col.update_one({"id": existing["id"]}, {"$set": {"last_seen": now_iso(), "updated_at": now_iso(), "checked_at": now_iso(), "messaggio": messaggio,
+                                                                     "severity": severity, "meta": meta or existing.get("meta") or {}, "current": True}, "$inc": {"occurrences": 1}})
         return None
     doc = {"id": str(uuid.uuid4()), "tipo": tipo, "titolo": titolo, "messaggio": messaggio, "severity": severity,
-           "entity": entity, "entity_id": entity_id, "dedupe_key": dedupe_key, "stato": "open", "occurrences": 1,
-           "created_at": now_iso(), "last_seen": now_iso(), "meta": meta or {}}
+           "entity": entity, "entity_id": entity_id, "dedupe_key": dedupe_key, "stato": "open", "occurrences": 1, "current": True,
+           "source": (meta or {}).get("source") or "health_check", "created_at": now_iso(), "updated_at": now_iso(), "checked_at": now_iso(), "last_seen": now_iso(), "meta": meta or {}}
     await alerts_col.insert_one(dict(doc))
     try:
         from v1_config import emit_event
@@ -50,8 +52,16 @@ async def raise_alert(tipo: str, titolo: str, messaggio: str, severity: str = "w
     return doc
 
 
-async def resolve_alerts(dedupe_key: str, by: str = "system"):
-    await alerts_col.update_many({"dedupe_key": dedupe_key, "stato": {"$in": ["open", "acknowledged"]}}, {"$set": {"stato": "resolved", "resolved_at": now_iso(), "resolved_by": by}})
+async def resolve_alerts(dedupe_key: str, by: str = "system") -> int:
+    """Reconciliation: the condition is no longer present -> close open alerts (history kept, resolved_at set)."""
+    r = await alerts_col.update_many({"dedupe_key": dedupe_key, "stato": {"$in": ["open", "acknowledged"]}},
+                                     {"$set": {"stato": "resolved", "current": False, "resolved_at": now_iso(), "updated_at": now_iso(), "checked_at": now_iso(), "resolved_by": by}})
+    return r.modified_count
+
+
+async def touch_alerts(dedupe_key: str):
+    """Condition re-checked and still present: only refresh checked_at (used when a check passes through without re-raising)."""
+    await alerts_col.update_many({"dedupe_key": dedupe_key, "stato": {"$in": ["open", "acknowledged"]}}, {"$set": {"checked_at": now_iso()}})
 
 
 # ---------------- CHECKS ----------------
@@ -81,6 +91,19 @@ def _http_head(url: str, timeout=8):
         return r.status_code
     except Exception:
         return None
+
+
+def classify_reachability(code) -> str:
+    """Remote reachability is NEVER a URL-validity verdict. 'missing' only for definitive 404/410; anti-bot/rate-limit/timeouts are warnings."""
+    if code is None:
+        return "REMOTE_REACHABILITY_WARNING"      # timeout / network error / challenge
+    if code in (403, 429, 401, 405, 503):
+        return "REMOTE_BLOCKED_WARNING"           # WAF / anti-bot / rate limit
+    if code in (404, 410):
+        return "REMOTE_MISSING"
+    if code >= 500:
+        return "REMOTE_ERROR_WARNING"
+    return "OK"
 
 
 async def check_frontend():
@@ -116,22 +139,30 @@ async def check_media(sample: int = 12):
             if not await files_col.find_one({"storage_path": path, "is_deleted": {"$ne": True}}):
                 missing.append({"slug": slug, "field": field, "url": u})
     loop = asyncio.get_event_loop()
+    warnings = []
     for slug, field, u in external[:sample]:
         checked += 1
         code = await loop.run_in_executor(None, _http_head, u)
-        if code is None or code >= 400:
-            missing.append({"slug": slug, "field": field, "url": u, "status": code})
-    status = "ok" if not missing else ("warn" if len(missing) <= 3 else "fail")
-    return _chk("media", status, f"{checked} media verificati, {len(missing)} non raggiungibili", missing=missing[:20], total_refs=len(urls))
+        kind = classify_reachability(code)
+        if kind == "REMOTE_MISSING":
+            missing.append({"slug": slug, "field": field, "url": u, "status": code, "code": kind})
+        elif kind != "OK":
+            warnings.append({"slug": slug, "field": field, "url": u, "status": code, "code": kind})
+    status = "ok" if not missing and not warnings else ("warn" if len(missing) <= 3 else "fail")
+    return _chk("media", status, f"{checked} media verificati, {len(missing)} mancanti, {len(warnings)} non verificabili da server", missing=missing[:20], warnings=warnings[:20], total_refs=len(urls), checked_at=now_iso())
 
 
 async def check_onlyfans_links():
-    bad = []
+    """Structural check with the CANONICAL rule (same as validator / model-health / SEO). No HTTP request to OnlyFans:
+    a server-side fetch would be blocked by anti-bot and must never be interpreted as an invalid URL."""
+    bad, total = [], 0
     async for m in models_col.find({"stato": "pubblicata", "is_deleted": {"$ne": True}}, {"_id": 0, "slug": 1, "onlyfans_url": 1}):
-        u = (m.get("onlyfans_url") or "").strip()
-        if not u or not OF_RX.match(u):
-            bad.append({"slug": m["slug"], "onlyfans_url": u, "problem": "mancante" if not u else "formato non valido"})
-    return _chk("onlyfans_links", "ok" if not bad else "fail", f"{len(bad)} link OnlyFans problematici su modelle pubblicate", items=bad)
+        total += 1
+        st = onlyfans_url_status(m.get("onlyfans_url"))
+        if st != "ok":
+            bad.append({"slug": m["slug"], "onlyfans_url": (m.get("onlyfans_url") or "").strip(), "code": "URL_MISSING" if st == "missing" else "URL_STRUCTURE_INVALID", "problem": "mancante" if st == "missing" else "formato non valido"})
+    return _chk("onlyfans_links", "ok" if not bad else "fail", (f"{len(bad)} link OnlyFans problematici su {total} modelle pubblicate" if bad else f"{total}/{total} link OnlyFans validi (controllo strutturale canonico)"),
+                items=bad, valid=total - len(bad), total=total, check_kind="URL_STRUCTURE", reachability="not_tested (anti-bot)", checked_at=now_iso())
 
 
 async def check_links():
@@ -151,7 +182,7 @@ async def check_seo():
     async for r in seo_issues_col.aggregate([{"$match": {"status": "open"}}, {"$group": {"_id": "$severity", "n": {"$sum": 1}}}]):
         counts[r["_id"]] = r["n"]
     status = "fail" if counts["CRITICAL"] else ("warn" if counts["REVIEW_REQUIRED"] > 10 or counts["SAFE_AUTO_FIX"] > 0 else "ok")
-    return _chk("seo_fields", status, f"Issue aperte: {counts}", counts=counts)
+    return _chk("seo_fields", status, f"Issue aperte: {counts}", counts=counts, checked_at=now_iso())
 
 
 async def check_sitemap():
@@ -213,17 +244,28 @@ async def run_health_checks(auto_fix: Optional[bool] = None) -> dict:
         await raise_alert("published_not_ready", "Modelle pubblicate con requisiti mancanti", f"{len(broken)} modelle pubblicate non superano la validazione", "critical", "model", None, "published_not_ready", {"items": broken})
     else:
         await resolve_alerts("published_not_ready")
-    # alerts from checks
+    # alerts from checks (reconciled on EVERY run: a condition that disappeared closes its alert, history is kept)
+    resolved_now = []
     for c in checks:
         key = f"health:{c['name']}"
         if c["status"] == "fail":
             await raise_alert("health_check", f"Check fallito: {c['name']}", c["detail"], "critical", "health", c["name"], key, {k: v for k, v in c.items() if k not in ("name", "status", "detail")})
         elif c["status"] == "warn":
-            await raise_alert("health_check", f"Attenzione: {c['name']}", c["detail"], "warning", "health", c["name"], key)
+            await raise_alert("health_check", f"Attenzione: {c['name']}", c["detail"], "warning", "health", c["name"], key, {k: v for k, v in c.items() if k not in ("name", "status", "detail")})
         else:
-            await resolve_alerts(key)
+            if await resolve_alerts(key):
+                resolved_now.append(key)
+    # job-level alerts that mirror the same conditions must be reconciled here too (they used to stay open forever)
+    of_chk = next(c for c in checks if c["name"] == "onlyfans_links")
+    if of_chk["status"] == "ok" and await resolve_alerts("onlyfans_links"):
+        resolved_now.append("onlyfans_links")
+    if seo_chk["counts"]["CRITICAL"] == 0 and await resolve_alerts("seo_critical"):
+        resolved_now.append("seo_critical")
+    elif seo_chk["counts"]["CRITICAL"] > 0:
+        await touch_alerts("seo_critical")
     overall = "fail" if any(c["status"] == "fail" for c in checks) else ("warn" if any(c["status"] == "warn" for c in checks) else "ok")
-    rec = {"id": str(uuid.uuid4()), "timestamp": now_iso(), "overall": overall, "checks": checks, "actions": actions, "auto_fix": auto_fix}
+    rec = {"id": str(uuid.uuid4()), "timestamp": now_iso(), "checked_at": now_iso(), "overall": overall, "checks": checks, "actions": actions, "auto_fix": auto_fix,
+           "resolved_alerts": resolved_now, "source": "health_check"}
     await health_col.insert_one(dict(rec))
     old = await health_col.find({}, {"_id": 0, "id": 1}).sort("timestamp", -1).skip(300).to_list(1000)
     if old:
