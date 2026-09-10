@@ -24,12 +24,12 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, ConfigDict
 
 from database import (models_col, files_col, categories_col, settings_col, config_col, alerts_col, jobs_col, job_runs_col,
-                      backups_col, versions_col, ai_actions_col, admins_col, landings_col, seo_issues_col, redirects_col, articles_col, now_iso)
-from v1_security import resolve_principal, has_scope, actor_of, request_id_of, CRITICAL_SCOPES, rate_limit_shared, err
-from v1_ai_policy import (redact, ai_config, classify_model_changes, create_approval, consume_approval, list_pending_approvals, approvals_col,
-                          missing_scopes_for, PREVIEW_SCOPE, bump)
+                      backups_col, versions_col, ai_actions_col, admins_col, landings_col, seo_issues_col, redirects_col, now_iso)
+from v1_security import resolve_principal, has_scope, actor_of, request_id_of, rate_limit_shared, err
+from v1_ai_policy import (redact, ai_config, classify_model_changes, create_approval, approvals_col,
+                          missing_scopes_for, bump)
 from v1_models import (resolve_model, create_model, patch_model, transition, validate_model, deep_merge, enrich, workflow_status,
-                       ALLOWED_FIELDS, unique_slug, onlyfans_url_status)
+                       ALLOWED_FIELDS, unique_slug)
 from v1_versioning import record_version, audit_log, rollback_version, diff_fields
 
 caps_router = APIRouter(prefix="/api/v1/ai", tags=["AI - Universal engine"])
@@ -151,7 +151,7 @@ async def find_media(ref: str) -> dict:
     q_del = {"is_deleted": {"$ne": True}}
     doc = await files_col.find_one({"id": ref, **q_del}, {"_id": 0})
     if not doc:
-        doc = await files_col.find_one({"$or": [{"url": ref}, {"variants.web": ref}, {"variants.original": ref}], **q_del}, {"_id": 0})
+        doc = await files_col.find_one({"$or": [{"url": ref}, {"variants.web.url": ref}, {"variants.original.url": ref}, {"storage_path": ref.replace("/api/uploads/", "")}], **q_del}, {"_id": 0})
     if not doc:
         rx = {"$regex": re.escape(ref), "$options": "i"}
         cands = await files_col.find({"$or": [{"seo_name": rx}, {"original_filename": rx}, {"alt": rx}, {"title": rx}], **q_del}, {"_id": 0}).to_list(10)
@@ -164,8 +164,19 @@ async def find_media(ref: str) -> dict:
     return doc
 
 
+def media_urls(f: dict) -> tuple:
+    """(url, poster) for a media record using the REAL `variants` contract via v1_media.public_file
+    (variants.{web|original|poster}.url are dicts, not strings). Videos use the original, images the web variant."""
+    from v1_media import public_file
+    pf = public_file(f)
+    if f.get("tipo") == "video":
+        return pf["url"], pf.get("poster_url") or ""
+    return pf["web_url"], ""
+
+
 def media_summary(f: dict) -> dict:
-    return {"id": f.get("id"), "tipo": f.get("tipo"), "url": (f.get("variants") or {}).get("web") or f.get("url"), "name": f.get("seo_name") or f.get("original_filename"),
+    url, poster = media_urls(f)
+    return {"id": f.get("id"), "tipo": f.get("tipo"), "url": url, "poster_url": poster or None, "name": f.get("seo_name") or f.get("original_filename"),
             "alt": f.get("alt"), "width": f.get("width"), "height": f.get("height"), "duration": f.get("duration"), "size": f.get("size"), "model_id": f.get("model_id"),
             "slot": f.get("slot"), "created_at": f.get("created_at"), "is_deleted": f.get("is_deleted", False)}
 
@@ -202,49 +213,18 @@ def pair_index_for(doc: dict, tipo: str, n: int) -> Optional[int]:
 
 
 async def apply_media_to_slot(ctx: Ctx, doc: dict, url: str, slot: str, alt: str = "", poster: str = "", reason: str = "") -> dict:
-    from v1_media import attach_to_model
+    """Preview AND execute build the change with the SAME planner (v1_media.slot_changes) and validate/apply it with the
+    SAME service (patch_model via model_change): the preview can never differ from what gets applied."""
+    from v1_media import slot_changes
     tech, side, tipo, n = parse_slot(slot)
     pidx = pair_index_for(doc, tipo, n) if n else None
-    if ctx.dry:
-        # build the same change attach_to_model would build and preview it through patch_model
-        preview_doc = dict(doc)
-        # simulate with a dry attach: attach_to_model always writes -> emulate by computing changes on a copy
-        import copy
-        sim = copy.deepcopy(doc)
-        sim_changes = {}
-        if tech == "pair":
-            pairs = [dict(p) for p in (sim.get("media_pairs") or [])]
-            if pidx is None:
-                pairs.append({"id": str(uuid.uuid4()), "tipo": tipo, "pubblico": {"tipo": tipo, "url": "", "poster": "", "alt": ""}, "segreto": {"tipo": tipo, "url": "", "poster": "", "alt": ""}})
-                pidx = len(pairs) - 1
-            item = dict(pairs[pidx].get(side) or {})
-            item.update({"tipo": tipo, "url": url, "alt": alt or item.get("alt", "")})
-            if poster:
-                item["poster"] = poster
-            pairs[pidx][side] = item
-            sim_changes["media_pairs"] = pairs
-        elif tech in ("foto_card", "foto_copertina", "foto_card_teaser", "foto_segreta_hero"):
-            sim_changes[tech] = url
-        elif tech == "og_image":
-            sim_changes["seo"] = {"og_image": url}
-        elif tech == "pellicola":
-            ph = dict(sim.get("pellicola_home") or {})
-            ph[f"video_{side}"] = url
-            if poster:
-                ph[f"poster_{side}"] = poster
-            sim_changes["pellicola_home"] = ph
-        elif tech in ("messaggio_foto", "messaggio_video"):
-            msg = dict(sim.get("messaggio_35s") or {})
-            msg["foto" if tech == "messaggio_foto" else "video"] = url
-            sim_changes["messaggio_35s"] = msg
-        else:
-            gal = list(sim.get(tech) or [])
-            gal.append({"tipo": "image", "url": url, "poster": "", "alt": alt})
-            sim_changes[tech] = gal
-        return await model_change(ctx, doc, sim_changes, reason or f"Media → {slot}")
-    out = await attach_to_model(doc, url=url, slot=tech, side=side, tipo=tipo, alt=alt, poster=poster, pair_index=pidx, principal=ctx.principal, request=ctx.request, reason=reason or f"Media assegnato a {slot}")
-    return R(f"Media assegnato a {slot} di {out.get('nome_artistico') or out['slug']}", {"slot": slot, "technical_slot": tech, "side": side, "tipo": tipo, "url": url, "version_id": out.get("version_id"), "etag": out.get("etag")},
-             changes=[{"field": f"slot:{slot}", "before": None, "after": url}], version_ids=[out["version_id"]] if out.get("version_id") else [], target=_tgt(out), rollback_ref=out.get("version_id"))
+    changes = slot_changes(doc, url=url, slot=tech, side=side, tipo=tipo, alt=alt, poster=poster, pair_index=pidx)
+    r = await model_change(ctx, doc, changes, reason or f"Media assegnato a {slot}")
+    r["data"].update({"slot": slot, "technical_slot": tech, "side": side, "tipo": tipo, "url": url})
+    if not ctx.dry and not r.get("needs_approval"):
+        r["summary"] = f"Media assegnato a {slot} di {doc.get('nome_artistico') or doc['slug']}"
+        r["changes"] = [{"field": f"slot:{slot}", "before": None, "after": url}]
+    return r
 
 
 async def settings_change(ctx: Ctx, changes: dict, reason: str, allowed: set) -> dict:
@@ -273,7 +253,7 @@ MODEL_FIELDS_DOC = ("nome, nome_artistico, slug(R), frase(R), bio(R), bio_segret
                     "tema{preset, colore_primario, colore_secondario, grain, glow, sfondo_stile, frase_attivazione, testo_dopo_click, effetti_touch}, "
                     "messaggio_35s{attivo, ritardo_secondi, testo, foto, video, timer}, seo{title(R), meta_description(R), canonical(R), robots(R), indexable(R), keywords, topics, alt_default, og_image, schema_data}, "
                     "regia{fumo, luci, glow, movimento, audio{traccia, volume, attiva}}, cta_temporizzata{attiva, ritardo_secondi, testo}, social{instagram, tiktok, telegram, x, sito}, "
-                    "pellicola_home{attiva, priorita, ordine, video_pubblico, poster_pubblico, video_segreto, poster_segreto}, ordine, conferma_maggiorenne. (R)=richiede approvazione")
+                    "pellicola_home{attiva, priorita, ordine, pubblico{video_url, poster_url}, segreto{video_url, poster_url}}, ordine, conferma_maggiorenne. (R)=richiede approvazione")
 
 
 @cap("models.list", "models", "Elenca le modelle con stato workflow, opzionalmente filtrate per stato/categoria/tag.", ["models:read"], read_only=True,
@@ -576,7 +556,8 @@ async def _media_upload_url(ctx: Ctx):
         return R("Anteprima upload: nessun file scaricato in dry_run", {"dry_run": True, "would_upload": ctx.params.get("url") or "<base64>", "then_assign": ctx.params.get("slot")})
     model = await resolve_model(ctx.params["model"]) if ctx.params.get("model") else None
     if ctx.params.get("url"):
-        data, mime = await fetch_url_bytes(ctx.params["url"], ctx.params.get("content_type"))
+        # real contract: fetch_url_bytes(url) -> (bytes, mime), SYNC (SSRF/size/magic-byte checks inside) -> run off the event loop
+        data, mime = await asyncio.get_event_loop().run_in_executor(None, fetch_url_bytes, ctx.params["url"])
     elif ctx.params.get("base64_data"):
         raw = ctx.params["base64_data"]
         if raw.startswith("data:"):
@@ -588,12 +569,12 @@ async def _media_upload_url(ctx: Ctx):
         mime = validate_bytes(data, mime)
     else:
         raise err(422, "VALIDATION_FAILED", "Serve 'url' oppure 'base64_data'")
+    # real contract: store_media(data, mime, *, original_filename, alt, seo_name, model_id, slot, actor, request_id) -> public_file(record); no `source` kwarg
     rec = await store_media(data, mime, original_filename=ctx.params.get("filename") or "", alt=ctx.params.get("alt") or "", seo_name=ctx.params.get("seo_name") or "",
-                            model_id=model["id"] if model else None, slot=ctx.params.get("slot") or None, actor=ctx.actor, request_id=request_id_of(ctx.request), source=ctx.source)
+                            model_id=model["id"] if model else None, slot=ctx.params.get("slot") or None, actor=ctx.actor, request_id=request_id_of(ctx.request))
     res = R(f"Media caricato: {rec.get('seo_name') or rec.get('original_filename')} ({rec.get('tipo')})", media_summary(rec), changes=[{"field": "file", "before": None, "after": rec["id"]}])
     if model and ctx.params.get("slot"):
-        url = (rec.get("variants") or {}).get("web") or rec["url"]
-        poster = (rec.get("variants") or {}).get("poster") or ""
+        url, poster = media_urls(rec)
         a = await apply_media_to_slot(ctx, model, url, ctx.params["slot"], alt=ctx.params.get("alt") or "", poster=poster, reason=f"Upload + slot {ctx.params['slot']}")
         res["summary"] += f"; assegnato a {ctx.params['slot']} di {model.get('nome_artistico') or model['slug']}"
         res["version_ids"] = a["version_ids"]
@@ -608,8 +589,7 @@ async def _media_upload_url(ctx: Ctx):
      examples=[{"action": "media.assign", "target": "Alessia", "parameters": {"media": "alessia-rossa.jpg", "slot": "secret_photo_2"}}], natural=["metti questa foto come seconda foto segreta di Alessia"])
 async def _media_assign(ctx: Ctx):
     f = await find_media(ctx.params.get("media") or "")
-    url = (f.get("variants") or {}).get("web") or f["url"]
-    poster = (f.get("variants") or {}).get("poster") or ""
+    url, poster = media_urls(f)
     r = await apply_media_to_slot(ctx, ctx.target, url, ctx.params["slot"], alt=ctx.params.get("alt") or f.get("alt") or "", poster=poster, reason=ctx.reason or f"Media {f['id']} → {ctx.params['slot']}")
     if not ctx.dry and f.get("model_id") != ctx.target["id"]:
         await files_col.update_one({"id": f["id"]}, {"$set": {"model_id": ctx.target["id"], "slot": ctx.params["slot"], "updated_at": now_iso()}})
@@ -639,7 +619,9 @@ async def _media_remove(ctx: Ctx):
     elif tech == "og_image":
         ch["seo"] = {"og_image": ""}
     elif tech == "pellicola":
-        ch["pellicola_home"] = {f"video_{side}": "", f"poster_{side}": ""}
+        ph = dict(ctx.target.get("pellicola_home") or {})
+        ph[side] = {"video_url": "", "poster_url": ""}   # real schema: pellicola_home.{pubblico|segreto}.{video_url,poster_url}
+        ch["pellicola_home"] = ph
     elif tech in ("messaggio_foto", "messaggio_video"):
         ch["messaggio_35s"] = {"foto" if tech == "messaggio_foto" else "video": ""}
     else:
@@ -666,7 +648,7 @@ async def _media_reorder_pairs(ctx: Ctx):
 
 @cap("media.update", "media", "Aggiorna ALT, nome SEO, titolo, metadata di un media (versionato).", ["media:update"], params={"media": {"type": "string", "required": True}, "alt": {"type": "string"}, "seo_name": {"type": "string"}, "title": {"type": "string"}, "metadata": {"type": "object"}}, natural=["metti l'ALT alla foto"])
 async def _media_update(ctx: Ctx):
-    from v1_media import patch_media, MediaPatch, public_file
+    from v1_media import patch_media, MediaPatch
     f = await find_media(ctx.params.get("media") or ctx.target_ref or "")
     body = MediaPatch(**{k: v for k, v in ctx.params.items() if k in ("alt", "seo_name", "title", "metadata")})
     fields = [k for k in ("alt", "seo_name", "title", "metadata") if getattr(body, k) is not None]
@@ -782,7 +764,9 @@ async def _filmstrip_get(ctx: Ctx):
     items = []
     async for m in models_col.find({"stato": "pubblicata", "is_deleted": {"$ne": True}}, {"_id": 0, "slug": 1, "nome_artistico": 1, "pellicola_home": 1, "ordine": 1}):
         ph = m.get("pellicola_home") or {}
-        items.append({"slug": m["slug"], "nome": m.get("nome_artistico"), "attiva": ph.get("attiva", True), "priorita": ph.get("priorita", 0), "ordine": ph.get("ordine", m.get("ordine")), "video_pubblico": bool(ph.get("video_pubblico")), "video_segreto": bool(ph.get("video_segreto"))})
+        pub, sec = (ph.get("pubblico") or {}), (ph.get("segreto") or {})   # real schema: PellicolaHome.pubblico/segreto -> PellicolaSide{video_url, poster_url}
+        items.append({"slug": m["slug"], "nome": m.get("nome_artistico"), "attiva": ph.get("attiva", True), "priorita": ph.get("priorita", 0), "ordine": ph.get("ordine", m.get("ordine")),
+                      "video_pubblico": bool(pub.get("video_url")), "video_segreto": bool(sec.get("video_url")), "poster_pubblico": bool(pub.get("poster_url")), "poster_segreto": bool(sec.get("poster_url"))})
     items.sort(key=lambda x: (-(x["priorita"] or 0), x["ordine"] or 0))
     return R(f"FilmStrip: {len([i for i in items if i['attiva'] and (i['video_pubblico'] or i['video_segreto'])])} video attivi", {"config": s.get("home_pellicola") or {}, "models": items})
 
@@ -923,11 +907,20 @@ async def resolve_category(ref: str) -> dict:
     return doc
 
 
-CATEGORY_FIELDS = {"nome", "slug", "descrizione", "ordine", "attiva", "seo", "hero_text", "icona", "colore"}
+# Real contract = schemas.CategoryIn (routes_admin.admin_create_category / admin_update_category). Public side lists only stato == "pubblicata".
+CATEGORY_FIELDS = {"nome", "slug", "descrizione", "seo_title", "meta_description", "immagine", "ordine", "indicizzabile", "stato"}
+CATEGORY_STATES = {"pubblicata", "bozza"}
 
 
 async def category_change(ctx: Ctx, doc: dict, changes: dict, reason: str) -> dict:
-    changes = {k: v for k, v in changes.items() if k in CATEGORY_FIELDS}
+    bad = [k for k in changes if k not in CATEGORY_FIELDS]
+    if bad:
+        raise err(422, "VALIDATION_FAILED", "Campi categoria non validi", fields=bad, allowed=sorted(CATEGORY_FIELDS))
+    if "stato" in changes and changes["stato"] not in CATEGORY_STATES:
+        raise err(422, "VALIDATION_FAILED", "stato categoria non valido", allowed=sorted(CATEGORY_STATES))
+    if "slug" in changes:
+        from sanitize import slugify
+        changes = {**changes, "slug": slugify(changes["slug"] or doc.get("nome") or "")}
     new = deep_merge(doc, changes)
     fields = diff_fields(doc, new)
     ch = _changes_from(doc, new, fields)
@@ -956,16 +949,25 @@ async def _cat_list(ctx: Ctx):
     return R(f"{len(cats)} categorie", {"items": cats})
 
 
-@cap("categories.create", "categories", "Crea una categoria (nome, slug opzionale, descrizione, ordine, seo).", ["categories:write"], params={"nome": {"type": "string", "required": True}, "slug": {"type": "string"}, "descrizione": {"type": "string"}, "ordine": {"type": "integer"}}, natural=["crea la categoria Estate"])
+@cap("categories.create", "categories", "Crea una categoria (nome, slug opzionale, descrizione, seo_title, meta_description, immagine, ordine, indicizzabile, stato pubblicata|bozza).", ["categories:write"],
+     params={"nome": {"type": "string", "required": True}, "slug": {"type": "string"}, "descrizione": {"type": "string"}, "seo_title": {"type": "string"}, "meta_description": {"type": "string"}, "immagine": {"type": "string"},
+             "ordine": {"type": "integer"}, "indicizzabile": {"type": "boolean"}, "stato": {"type": "string", "enum": ["pubblicata", "bozza"]}}, natural=["crea la categoria Estate"])
 async def _cat_create(ctx: Ctx):
+    from sanitize import slugify
+    from schemas import CategoryIn
     nome = (ctx.params.get("nome") or "").strip()
     if not nome:
         raise err(422, "VALIDATION_FAILED", "nome obbligatorio")
-    slug = re.sub(r"[^a-z0-9]+", "-", (ctx.params.get("slug") or nome).lower()).strip("-")
+    try:
+        data = CategoryIn(**{k: v for k, v in ctx.params.items() if k in CATEGORY_FIELDS}).model_dump()   # same schema/validation as the admin form
+    except Exception as e:
+        raise err(422, "VALIDATION_FAILED", "Dati categoria non validi", errors=str(e)[:400])
+    if data.get("stato") not in CATEGORY_STATES:
+        raise err(422, "VALIDATION_FAILED", "stato categoria non valido", allowed=sorted(CATEGORY_STATES))
+    slug = slugify(data.get("slug") or nome)   # same slugify as routes_admin.admin_create_category
     if await categories_col.find_one({"slug": slug, "is_deleted": {"$ne": True}}):
         raise err(409, "CONFLICT", f"Slug categoria '{slug}' già esistente")
-    doc = {"id": str(uuid.uuid4()), "nome": nome, "slug": slug, "descrizione": ctx.params.get("descrizione") or "", "ordine": int(ctx.params.get("ordine") or 99), "attiva": True, "seo": {},
-           "created_at": now_iso(), "updated_at": now_iso()}
+    doc = {**data, "id": str(uuid.uuid4()), "slug": slug, "created_at": now_iso(), "updated_at": now_iso()}
     if ctx.dry:
         return R(f"Anteprima: categoria '{nome}' ({slug})", {"dry_run": True, "proposed": doc})
     await categories_col.insert_one(dict(doc))
@@ -990,14 +992,14 @@ async def _cat_reorder(ctx: Ctx):
     return R(f"{'Anteprima ' if ctx.dry else ''}ordine categorie: {[d['slug'] for d in docs]}", {}, changes=ch, version_ids=vids)
 
 
-@cap("categories.archive", "categories", "Disattiva una categoria (attiva=false; le modelle restano).", ["categories:write"], target="category", risk=REVIEW)
+@cap("categories.archive", "categories", "Nasconde una categoria dal sito (stato=bozza; le modelle restano assegnate).", ["categories:write"], target="category", risk=REVIEW)
 async def _cat_archive(ctx: Ctx):
-    return await category_change(ctx, ctx.target, {"attiva": False}, "Categoria disattivata")
+    return await category_change(ctx, ctx.target, {"stato": "bozza"}, "Categoria nascosta (bozza)")
 
 
-@cap("categories.restore", "categories", "Riattiva una categoria.", ["categories:write"], target="category")
+@cap("categories.restore", "categories", "Ripubblica una categoria (stato=pubblicata).", ["categories:write"], target="category")
 async def _cat_restore(ctx: Ctx):
-    return await category_change(ctx, ctx.target, {"attiva": True}, "Categoria riattivata")
+    return await category_change(ctx, ctx.target, {"stato": "pubblicata"}, "Categoria ripubblicata")
 
 
 @cap("categories.assign_models", "categories", "Aggiunge (o rimuove con remove=true) la categoria a una lista di modelle.", ["models:update"], target="category", batch=True,
@@ -1026,19 +1028,28 @@ async def _cat_assign(ctx: Ctx):
 async def _seo_audit(ctx: Ctx):
     from v1_seo import run_audit
     if ctx.target:
-        r = await run_audit(scope="models", model_id=ctx.target["id"])
+        r = await run_audit(scope="models", entity_id=ctx.target["id"])
         return R(f"SEO {ctx.target.get('nome_artistico') or ctx.target['slug']}: score {r.get('health_score')} — {r['counts']}", r, target=_tgt(ctx.target))
     r = await run_audit(scope=ctx.params.get("scope") or "all")
     return R(f"Audit SEO sito: score {r.get('health_score')} — {r['counts']}", r)
 
 
+def _safe_fix_view(r: dict) -> tuple:
+    """Adapter on the REAL apply_safe_fixes return: dry -> {dry_run, would_fix:int, items[]}; apply -> {applied, skipped, results[{applied, version_id, code, ...}]}.
+    Returns (n_fixes, version_ids, applied_results)."""
+    if r.get("dry_run"):
+        return int(r.get("would_fix") or 0), [], r.get("items", [])
+    applied = [x for x in r.get("results", []) if x.get("applied")]
+    return int(r.get("applied") or 0), [x["version_id"] for x in applied if x.get("version_id")], applied
+
+
 @cap("seo.safe_fix", "seo", "Applica SOLO le correzioni SEO SAFE_AUTO_FIX a una modella (dry_run per anteprima). REVIEW/CRITICAL mai toccate.", ["seo:safe_fix"], target="model", natural=["sistema gli errori SEO sicuri di Alessia"])
 async def _seo_safe_fix(ctx: Ctx):
     from v1_seo import apply_safe_fixes
-    r = await apply_safe_fixes(model_id=ctx.target["id"], actor=ctx.actor, request_id=request_id_of(ctx.request), source=ctx.source, dry_run=ctx.dry)
-    vids = [f.get("version_id") for f in r.get("fixes", []) if f.get("version_id")]
-    n = len(r.get("would_fix", r.get("fixes", [])))
-    return R(f"{'Anteprima: ' if ctx.dry else ''}{n} fix SAFE su {ctx.target.get('nome_artistico') or ctx.target['slug']}" + ("" if ctx.dry else f" (score {r.get('seo_score_before')} → {r.get('seo_score_after')})"), r, version_ids=vids, target=_tgt(ctx.target))
+    r = await apply_safe_fixes(scope="models", entity_id=ctx.target["id"], actor=ctx.actor, request_id=request_id_of(ctx.request), source=ctx.source, dry_run=ctx.dry)
+    n, vids, applied = _safe_fix_view(r)
+    return R(f"{'Anteprima: ' if ctx.dry else ''}{n} fix SAFE su {ctx.target.get('nome_artistico') or ctx.target['slug']}" + ("" if ctx.dry else f" ({r.get('skipped', 0)} saltati)"), r, version_ids=vids, target=_tgt(ctx.target),
+             changes=[{"field": x.get("field") or x.get("code"), "before": x.get("before"), "after": x.get("after") or x.get("suggested_value")} for x in applied])
 
 
 @cap("seo.safe_fix_all", "seo", "SEO autopilot: applica i fix SAFE a tutte le modelle (selezione all/published/draft/category/ids). Batch, errori parziali, mai CRITICAL.", ["seo:safe_fix"], batch=True,
@@ -1063,10 +1074,10 @@ async def _seo_safe_fix_all(ctx: Ctx):
     results, vids = [], []
     for m in models:
         try:
-            r = await apply_safe_fixes(model_id=m["id"], actor=ctx.actor, request_id=request_id_of(ctx.request), source=ctx.source, dry_run=ctx.dry)
-            n = len(r.get("would_fix", r.get("fixes", [])))
-            vids += [f.get("version_id") for f in r.get("fixes", []) if f.get("version_id")]
-            results.append({"slug": m["slug"], "ok": True, "fixes": n, "score_before": r.get("seo_score_before"), "score_after": r.get("seo_score_after")})
+            r = await apply_safe_fixes(scope="models", entity_id=m["id"], actor=ctx.actor, request_id=request_id_of(ctx.request), source=ctx.source, dry_run=ctx.dry)
+            n, v_ids, _ = _safe_fix_view(r)
+            vids += v_ids
+            results.append({"slug": m["slug"], "ok": True, "fixes": n, "skipped": r.get("skipped", 0)})
         except Exception as e:
             results.append({"slug": m["slug"], "ok": False, "error": str(e)[:160]})
     tot = sum(r.get("fixes", 0) for r in results)
@@ -1349,7 +1360,8 @@ async def _jobs_resume(ctx: Ctx):
 
 @cap("backup.list", "backup", "Ultimi backup (id, data, collection, dimensione).", ["backup:read"], read_only=True, natural=["ultimo backup"])
 async def _backup_list(ctx: Ctx):
-    items = await backups_col.find({}, {"_id": 0, "data": 0, "snapshot": 0}).sort("created_at", -1).to_list(20)
+    # real record: {id, created_at, actor, reason, counts{collection:n}, size, storage_path | inline(gzip)} -> never return the gzip blob
+    items = await backups_col.find({}, {"_id": 0, "inline": 0}).sort("created_at", -1).to_list(20)
     return R(f"{len(items)} backup, ultimo {items[0]['created_at'][:16] if items else 'mai'}", {"items": items})
 
 
@@ -1358,40 +1370,45 @@ async def _backup_create(ctx: Ctx):
     from v1_config import create_backup
     if ctx.dry:
         return R("Anteprima: verrebbe creato un backup completo", {"dry_run": True})
-    b = await create_backup(actor=ctx.actor, reason=ctx.reason or "ChatGPT")
-    return R(f"Backup creato ({b.get('id')})", {k: v for k, v in b.items() if k not in ("data", "snapshot")})
+    b = await create_backup(actor=ctx.actor, include_events=False, reason=ctx.reason or "ChatGPT")   # real signature (actor, include_events, reason)
+    return R(f"Backup creato ({b.get('id')})", {k: v for k, v in b.items() if k != "inline"})
 
 
 @cap("backup.verify", "backup", "Verifica un backup: collection incluse e conteggi vs stato attuale.", ["backup:read"], read_only=True, params={"backup_id": {"type": "string"}})
 async def _backup_verify(ctx: Ctx):
+    from v1_config import _load_backup
+    from database import db
     q = {"id": ctx.params["backup_id"]} if ctx.params.get("backup_id") else {}
-    b = await backups_col.find_one(q, {"_id": 0}, sort=[("created_at", -1)])
+    b = await backups_col.find_one(q, {"_id": 0, "inline": 0}, sort=[("created_at", -1)])
     if not b:
         raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "Backup non trovato"})
-    snap = b.get("snapshot") or b.get("data") or {}
-    from database import db
-    comp = {}
-    for c, docs in snap.items():
+    snap = await _load_backup(b["id"])            # real contract: gzip(json) -> {"created_at", "app", "collections": {name: [docs]}}
+    cols = snap.get("collections") or {}
+    comp, mismatches = {}, []
+    for c, docs in cols.items():
+        n_backup = len(docs) if isinstance(docs, list) else None
+        declared = (b.get("counts") or {}).get(c)
         try:
-            comp[c] = {"in_backup": len(docs) if isinstance(docs, list) else None, "now": await db[c].count_documents({})}
+            now_n = await db[c].count_documents({})
         except Exception:
-            comp[c] = {"in_backup": None, "now": None}
-    return R(f"Backup {b['id']} del {b['created_at'][:16]}: {len(comp)} collection", {"id": b["id"], "created_at": b["created_at"], "collections": comp})
+            now_n = None
+        comp[c] = {"in_backup": n_backup, "declared": declared, "now": now_n}
+        if declared is not None and n_backup is not None and declared != n_backup:
+            mismatches.append(c)
+    return R(f"Backup {b['id']} del {b['created_at'][:16]}: {len(comp)} collection, integrità {'OK' if not mismatches else 'ANOMALA'}",
+             {"id": b["id"], "created_at": b["created_at"], "integrity_ok": not mismatches, "mismatches": mismatches, "collections": comp}, warnings=[f"Conteggio incoerente: {m}" for m in mismatches])
 
 
 @cap("backup.restore_plan", "backup", "Piano di ripristino (dry-run): cosa cambierebbe. Il ripristino reale è CRITICAL (solo admin umano).", ["backup:read"], read_only=True, params={"backup_id": {"type": "string", "required": True}, "collections": {"type": "array", "items": {"type": "string"}}})
 async def _backup_plan(ctx: Ctx):
-    b = await backups_col.find_one({"id": ctx.params.get("backup_id")}, {"_id": 0})
-    if not b:
+    # reuse the REAL restore service in dry-run (restore_backup never writes when dry_run=True / confirm=False)
+    from v1_config import restore_backup, RestoreBody
+    if not await backups_col.find_one({"id": ctx.params.get("backup_id")}, {"_id": 0, "id": 1}):
         raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "Backup non trovato"})
-    snap = b.get("snapshot") or b.get("data") or {}
-    from database import db
-    cols = ctx.params.get("collections") or list(snap.keys())
-    plan = []
-    for c in cols:
-        docs = snap.get(c) or []
-        plan.append({"collection": c, "in_backup": len(docs), "now": await db[c].count_documents({}), "mode": "replace"})
-    return R("Piano di ripristino (nessuna modifica). Esecuzione reale: CRITICAL, solo amministratore umano.", {"backup_id": b["id"], "plan": plan, "critical": True})
+    body = RestoreBody(collections=ctx.params.get("collections") or None, mode="replace", dry_run=True, confirm=False)
+    r = await restore_backup(ctx.params["backup_id"], body, ctx.request, principal=ctx.principal)
+    plan = [{"collection": c, "in_backup": v.get("in_backup"), "now": v.get("current"), "mode": r.get("mode")} for c, v in (r.get("plan") or {}).items()]
+    return R("Piano di ripristino (nessuna modifica). Esecuzione reale: CRITICAL, solo amministratore umano dal pannello.", {"backup_id": ctx.params["backup_id"], "plan": plan, "critical": True, "dry_run": True})
 
 
 @cap("system.health_run", "system", "Esegue ora l'health check completo (senza self-healing) e riconcilia gli alert.", ["health:run"], rollback=False, natural=["esegui health check"])
@@ -1539,14 +1556,12 @@ async def _prepare_complete(ctx: Ctx):
             sub = Ctx(ctx.principal, ctx.request, {}, dry=False, reason="Workflow: media", session_id=ctx.session_id, approved=True)
             if m.get("url") and not m.get("media"):
                 from v1_media import fetch_url_bytes, store_media
-                data, mime = await fetch_url_bytes(m["url"], None)
-                rec = await store_media(data, mime, original_filename=m.get("filename") or "", alt=m.get("alt") or "", seo_name=m.get("seo_name") or "", model_id=doc["id"], slot=m.get("slot"), actor=ctx.actor, request_id=request_id_of(ctx.request), source=ctx.source)
-                url = (rec.get("variants") or {}).get("web") or rec["url"]
-                poster = (rec.get("variants") or {}).get("poster") or ""
+                data, mime = await asyncio.get_event_loop().run_in_executor(None, fetch_url_bytes, m["url"])   # sync, 1 arg
+                rec = await store_media(data, mime, original_filename=m.get("filename") or "", alt=m.get("alt") or "", seo_name=m.get("seo_name") or "", model_id=doc["id"], slot=m.get("slot"), actor=ctx.actor, request_id=request_id_of(ctx.request))
+                url, poster = media_urls(rec)
             else:
                 f = await find_media(m.get("media") or "")
-                url = (f.get("variants") or {}).get("web") or f["url"]
-                poster = (f.get("variants") or {}).get("poster") or ""
+                url, poster = media_urls(f)
             r = await apply_media_to_slot(sub, doc, url, m.get("slot") or "public_photo_1", alt=m.get("alt") or "", poster=poster, reason="Workflow: media")
             vids += r["version_ids"]
             steps.append({"step": "media.assign", "ok": True, "slot": m.get("slot"), "version_id": r.get("rollback_ref")})
@@ -1555,9 +1570,10 @@ async def _prepare_complete(ctx: Ctx):
             steps.append({"step": "media.assign", "ok": False, "slot": m.get("slot"), "error": str(getattr(e, "detail", e))[:200]})
     if ctx.params.get("seo_safe_fix", True):
         from v1_seo import apply_safe_fixes
-        r = await apply_safe_fixes(model_id=doc["id"], actor=ctx.actor, request_id=request_id_of(ctx.request), source=ctx.source, dry_run=False)
-        vids += [f.get("version_id") for f in r.get("fixes", []) if f.get("version_id")]
-        steps.append({"step": "seo.safe_fix", "ok": True, "fixes": len(r.get("fixes", [])), "score_before": r.get("seo_score_before"), "score_after": r.get("seo_score_after")})
+        r = await apply_safe_fixes(scope="models", entity_id=doc["id"], actor=ctx.actor, request_id=request_id_of(ctx.request), source=ctx.source, dry_run=False)
+        n_fix, v_ids, _ = _safe_fix_view(r)
+        vids += v_ids
+        steps.append({"step": "seo.safe_fix", "ok": True, "fixes": n_fix, "skipped": r.get("skipped", 0)})
         doc = await models_col.find_one({"id": doc["id"]}, {"_id": 0})
     v = validate_model(doc)
     steps.append({"step": "models.validate", "ok": True, "ready": v["ready"], "missing": [e["field"] for e in v["errors"]]})
@@ -1796,7 +1812,7 @@ async def execute_approved_capability(doc: dict, principal: dict, request: Reque
 
 @caps_router.post("/approvals/{approval_id}/approve", operation_id="approveApproval", summary="Approva ed esegue una proposta in attesa (token per API key; admin JWT senza token)")
 async def approve_by_id(approval_id: str, body: ApproveBody, request: Request, principal: dict = Depends(resolve_principal)):
-    from v1_ai import envelope, ai_confirm, AIConfirm
+    from v1_ai import ai_confirm, AIConfirm
     doc = await approvals_col.find_one({"id": approval_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "Approvazione non trovata"})
