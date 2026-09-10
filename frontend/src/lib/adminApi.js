@@ -69,3 +69,11 @@ export const v1RevokeKey = (id) => api.delete(`/v1/auth/keys/${id}`).then((r) =>
 export const v1Config = () => api.get('/v1/config').then((r) => r.data);
 export const v1SetFlag = (name, value) => api.put(`/v1/config/flags/${name}`, { value }).then((r) => r.data);
 export const v1Backup = () => api.post('/v1/backup', {}).then((r) => r.data);
+
+// ---- Phase 10: ChatGPT control layer ----
+export const aiControl = () => api.get('/v1/ai/control').then((r) => r.data);
+export const aiControlPatch = (data) => api.patch('/v1/ai/control', data).then((r) => r.data);
+export const aiTestConnection = () => api.post('/v1/ai/test-connection').then((r) => r.data);
+export const v1KeyRotate = (id) => api.post(`/v1/auth/keys/${id}/rotate`).then((r) => r.data);
+export const v1KeyDisable = (id) => api.post(`/v1/auth/keys/${id}/disable`).then((r) => r.data);
+export const v1KeyEnable = (id) => api.post(`/v1/auth/keys/${id}/enable`).then((r) => r.data);

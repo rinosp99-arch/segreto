@@ -4,9 +4,9 @@ import { uploadMedia } from '@/lib/adminApi';
 import { Upload, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-export function SectionCard({ title, desc, children }) {
+export function SectionCard({ title, desc, children, className = '' }) {
   return (
-    <div className="rounded-2xl border border-border/60 bg-card p-5 mb-5">
+    <div className={`rounded-2xl border border-border/60 bg-card p-5 mb-5 ${className}`}>
       {title && <div className="mb-4"><h3 className="font-serif text-xl">{title}</h3>{desc && <p className="text-xs text-muted-foreground mt-1">{desc}</p>}</div>}
       {children}
     </div>

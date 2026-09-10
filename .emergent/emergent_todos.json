@@ -1,10 +1,30 @@
 [
   {
-    "content": "Test backend (curl) + testing_agent + verifica sito pubblico intatto",
+    "content": "Audit backend Fase 10: v1_security, v1_ai_policy, v1_ai vs checklist",
     "status": "completed"
   },
   {
-    "content": "Fix issue testing agent (restore dry-run 500, DELETE experiments/users) + cleanup dati test",
+    "content": "Colmare lacune backend (READ_ONLY dry-run preview; upload/confirm sempre bloccati; test approval CONFLICT; public landing API dietro flag; resolver token-prefix)",
+    "status": "completed"
+  },
+  {
+    "content": "Integrare ChatGptPanel in /admin/motore + adminApi + compile + screenshot",
+    "status": "completed"
+  },
+  {
+    "content": "Verifica reale flussi: key one-time, kill switch, READ_ONLY, approval, CRITICAL, dry-run, idempotenza, rollback, no secrets (40/40 pytest + curl + DB scan)",
+    "status": "completed"
+  },
+  {
+    "content": "Testing agent E2E A-F e fix (iteration_21: 53/53 + 40/40 dopo fix; dati test puliti)",
+    "status": "completed"
+  },
+  {
+    "content": "Docs: SUPER_API.md, CHATGPT_API.md, plan.md",
+    "status": "completed"
+  },
+  {
+    "content": "Report finale in italiano",
     "status": "completed"
   }
 ]

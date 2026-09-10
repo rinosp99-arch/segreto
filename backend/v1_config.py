@@ -21,7 +21,7 @@ from auth import hash_password
 from storage import put_object, get_object, APP_NAME
 from v1_security import (
     require, actor_of, request_id_of, generate_api_key, hash_key, ROLES, ROLE_SCOPES, ALL_SCOPES, scopes_for_role,
-    normalize_role, sign_payload,
+    normalize_role, sign_payload, ROLE_OPTIONAL_SCOPES,
 )
 from v1_versioning import record_version, audit_log
 
@@ -45,12 +45,15 @@ DEFAULT_CONFIG = {
     "alerts": {"email": "", "webhook_url": "", "min_severity": "warning"},
     "backups": {"enabled": True, "retention": 14, "interval_hours": 24, "include_events": False},
     "jobs": {"enabled": True},
-    "ai": {"enabled": True, "default_source": "ai", "require_reason": False, "max_batch": 20},
+    "ai": {"enabled": True, "default_source": "chatgpt", "require_reason": False, "max_batch": 50,
+           "policy": {"review_fields": ["slug", "nome", "nome_artistico", "onlyfans_url", "bio", "bio_segreta", "frase", "seo.title", "seo.meta_description", "seo.canonical", "seo.robots", "seo.indexable"],
+                      "approval_ttl_min": 30, "max_batch": 50, "rate_limit_per_min": 120}},
     "rendering": {"ssr": False, "prerender": False, "note": "Predisposto: da attivare nella fase dominio/SEO avanzata"},
     "analytics_production": {"ga4_measurement_id": "", "gsc_verified": False, "note": "Da configurare nella fase produzione"},
     "flags": {
         "super_api": True, "seo_autopilot": True, "self_healing": True, "italy_engine": True, "landing_engine": True,
         "ab_testing": True, "ai_api": True, "webhooks": True, "public_landing_routes": False, "domain_it_migration": False,
+        "ai_api_enabled": True, "ai_write_enabled": True, "ai_batch_enabled": True, "ai_approval_flow_enabled": True,
         "ssr_prerender": False, "search_console_sync": False, "ga4_production": False,
     },
     "created_at": None, "updated_at": None,
@@ -365,9 +368,14 @@ async def create_key(body: ApiKeyIn, request: Request, principal=Depends(require
     bad = [s for s in scopes if s not in ALL_SCOPES]
     if bad:
         raise HTTPException(status_code=400, detail={"message": "Scope non validi", "invalid": bad})
+    allowed = set(scopes_for_role(role)) | set(ROLE_OPTIONAL_SCOPES.get(role, []))
+    outside = [s for s in scopes if s not in allowed and "*" not in scopes_for_role(role)]
+    if outside:
+        raise HTTPException(status_code=400, detail={"message": f"Scope non consentiti per il ruolo {role}", "invalid": outside, "optional_allowed": ROLE_OPTIONAL_SCOPES.get(role, [])})
     doc = {"id": str(uuid.uuid4()), "name": body.name, "role": role, "scopes": scopes, "key_hash": hash_key(raw), "prefix": raw[:10],
            "expires_at": body.expires_at, "rate_limit_per_min": body.rate_limit_per_min, "ip_allowlist": body.ip_allowlist, "source": body.source,
-           "active": True, "uses": 0, "created_by": actor_of(principal), "created_at": now_iso(), "last_used_at": None}
+           "active": True, "uses": 0, "request_count": 0, "error_count": 0, "last_ip": None, "revoked_at": None, "disabled_at": None,
+           "created_by": actor_of(principal), "created_at": now_iso(), "last_used_at": None}
     await api_keys_col.insert_one(doc)
     await audit_log(actor_of(principal), "create", "api_key", doc["id"], {"name": body.name, "role": role}, request_id_of(request))
     return {"id": doc["id"], "name": body.name, "role": role, "scopes": scopes, "api_key": raw, "prefix": doc["prefix"],
@@ -381,6 +389,51 @@ async def revoke_key(key_id: str, request: Request, principal=Depends(require("k
         raise HTTPException(status_code=404, detail="API key non trovata")
     await audit_log(actor_of(principal), "revoke", "api_key", key_id, {}, request_id_of(request))
     return {"ok": True, "revoked": True}
+
+
+@auth_router.post("/keys/{key_id}/disable")
+async def disable_key(key_id: str, request: Request, principal=Depends(require("keys:manage"))):
+    r = await api_keys_col.update_one({"id": key_id, "revoked_at": None}, {"$set": {"active": False, "disabled_at": now_iso()}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="API key non trovata o revocata")
+    await audit_log(actor_of(principal), "disable", "api_key", key_id, {}, request_id_of(request))
+    return {"ok": True, "active": False}
+
+
+@auth_router.post("/keys/{key_id}/enable")
+async def enable_key(key_id: str, request: Request, principal=Depends(require("keys:manage"))):
+    r = await api_keys_col.update_one({"id": key_id, "revoked_at": None}, {"$set": {"active": True, "disabled_at": None}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="API key non trovata o revocata (non riattivabile)")
+    await audit_log(actor_of(principal), "enable", "api_key", key_id, {}, request_id_of(request))
+    return {"ok": True, "active": True}
+
+
+@auth_router.post("/keys/{key_id}/rotate")
+async def rotate_key(key_id: str, request: Request, principal=Depends(require("keys:manage"))):
+    """Issue a new secret for the same key record (old secret stops working immediately)."""
+    rec = await api_keys_col.find_one({"id": key_id, "revoked_at": None}, {"_id": 0})
+    if not rec:
+        raise HTTPException(status_code=404, detail="API key non trovata o revocata")
+    raw = generate_api_key()
+    await api_keys_col.update_one({"id": key_id}, {"$set": {"key_hash": hash_key(raw), "prefix": raw[:10], "rotated_at": now_iso(), "rotated_by": actor_of(principal), "active": True, "disabled_at": None}})
+    await audit_log(actor_of(principal), "rotate", "api_key", key_id, {}, request_id_of(request))
+    return {"id": key_id, "name": rec["name"], "role": rec["role"], "scopes": rec.get("scopes"), "api_key": raw, "prefix": raw[:10], "note": "Nuova chiave mostrata SOLO ora. La precedente non funziona più."}
+
+
+@auth_router.get("/keys/{key_id}/usage")
+async def key_usage(key_id: str, principal=Depends(require("keys:manage"))):
+    rec = await api_keys_col.find_one({"id": key_id}, {"_id": 0, "key_hash": 0})
+    if not rec:
+        raise HTTPException(status_code=404, detail="API key non trovata")
+    from v1_security import bucket_usage
+    from v1_ai_policy import ai_config
+    cfg = await ai_config()
+    since = (__import__("datetime").datetime.now(__import__("datetime").timezone.utc) - __import__("datetime").timedelta(hours=24)).isoformat()
+    from database import ai_actions_col
+    acts = await ai_actions_col.count_documents({"key_id": key_id, "timestamp": {"$gte": since}})
+    return {**rec, "requests_last_minute": bucket_usage(f"ai:{key_id}") or bucket_usage(f"key:{key_id}"), "requests_last_hour": bucket_usage(f"key:{key_id}", 3600), "ai_actions_24h": acts,
+            "effective_rate_limit_per_min": min(cfg["rate_limit_per_min"], int(rec.get("rate_limit_per_min") or cfg["rate_limit_per_min"]))}
 
 
 class UserIn(BaseModel):

@@ -9,6 +9,7 @@ import {
   v1Keys, v1CreateKey, v1RevokeKey, v1Backup,
 } from '@/lib/adminApi';
 import { SectionCard, Btn, TextInput, SelectInput, Field } from '@/pages/admin/ui';
+import { ChatGptPanel } from '@/pages/admin/ChatGptPanel';
 
 const RANGES = [{ k: 'oggi', l: 'Oggi' }, { k: '7g', l: '7 giorni' }, { k: '30g', l: '30 giorni' }];
 const STATUS_COLOR = { ok: 'hsl(150 45% 58%)', warn: 'hsl(38 75% 60%)', fail: 'hsl(0 60% 58%)', unknown: 'hsl(var(--muted-foreground))', critical: 'hsl(0 60% 58%)', warning: 'hsl(38 75% 60%)', info: 'hsl(200 50% 60%)' };
@@ -107,6 +108,12 @@ export default function AdminMotore() {
           <Btn variant="ghost" onClick={() => run('backup', v1Backup, (r) => `Backup creato (${Math.round(r.size / 1024)} KB)`)} disabled={!!busy} data-testid="motore-backup">{busy === 'backup' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />} Backup ora</Btn>
         </div>
       </SectionCard>
+
+      {/* Phase 10 - ChatGPT control layer */}
+      <div className="mb-5" data-testid="chatgpt-section">
+        <div className="flex items-center gap-2 mb-3"><Bot className="h-5 w-5 text-muted-foreground" /><h2 className="font-serif text-2xl">ChatGPT Control Layer</h2></div>
+        <ChatGptPanel />
+      </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
         {/* Health checks */}

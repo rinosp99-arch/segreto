@@ -64,13 +64,52 @@ def validate_landing(doc: dict) -> dict:
     return {"ready": not errors, "errors": errors, "warnings": warnings}
 
 
+async def validate_landing_full(doc: dict) -> dict:
+    """Pre-publication checks: SEO, duplicate content, slug collision, canonical, CTA, target models, media, accessibility, index status, internal links."""
+    base = validate_landing(doc)
+    checks = []
+    def chk(code, ok, msg, level="error"):
+        checks.append({"code": code, "ok": bool(ok), "message": msg, "level": level if not ok else "ok"})
+    seo = doc.get("seo") or {}
+    t = seo.get("title") or ""
+    md = seo.get("meta_description") or ""
+    chk("SEO_TITLE", bool(t), "SEO title presente" if t else "SEO title mancante", "warning")
+    chk("SEO_TITLE_LENGTH", 0 < len(t) <= 65 if t else False, f"SEO title {len(t)} caratteri (max 65)", "warning")
+    chk("META_DESCRIPTION", bool(md), "Meta description presente" if md else "Meta description mancante", "warning")
+    chk("META_DESCRIPTION_LENGTH", 60 <= len(md) <= 170 if md else False, f"Meta description {len(md)} caratteri (60-170)", "warning")
+    chk("CANONICAL", bool(seo.get("canonical")) or True, "Canonical " + (seo.get("canonical") or "(derivato dall'URL)"), "info")
+    chk("INDEX_STATUS", True, f"indexable={seo.get('indexable', True)} robots={seo.get('robots', 'index,follow')}", "info")
+    chk("CTA", bool((doc.get("cta") or {}).get("testo")), "CTA presente" if (doc.get("cta") or {}).get("testo") else "CTA mancante")
+    # target models
+    slugs = doc.get("model_slugs") or []
+    published = []
+    missing = []
+    for sl in slugs:
+        m = await models_col.find_one({"slug": sl, "is_deleted": {"$ne": True}}, {"_id": 0, "stato": 1})
+        (published if m and m.get("stato") == "pubblicata" else missing).append(sl)
+    chk("TARGET_MODELS", not slugs or not missing, f"{len(published)} modelle pubblicate" + (f", non pubblicate/inesistenti: {missing}" if missing else ""), "warning" if slugs else "info")
+    chk("INTERNAL_LINKS", len(slugs) >= 1, f"{len(slugs)} collegamenti interni a modelle", "warning")
+    hero = doc.get("hero") or {}
+    chk("MEDIA", bool(hero.get("media_url")) or bool(slugs), "Media hero presente" if hero.get("media_url") else "Nessun media hero (usa le card modelle)", "warning")
+    chk("ACCESSIBILITY_ALT", (not hero.get("media_url")) or bool(hero.get("alt")), "ALT hero " + ("presente" if hero.get("alt") else "mancante"), "warning")
+    # duplicate content / slug collision
+    dup = await landings_col.find_one({"id": {"$ne": doc.get("id")}, "is_deleted": {"$ne": True}, "$or": [{"headline": doc.get("headline")}, {"seo.title": t}] if t or doc.get("headline") else [{"_none": 1}]}, {"_id": 0, "slug": 1})
+    chk("DUPLICATE_CONTENT", dup is None, "Nessun duplicato" if dup is None else f"Headline/SEO title duplicati con landing '{dup['slug']}'", "warning")
+    coll = await models_col.find_one({"slug": doc.get("slug")}, {"_id": 0, "id": 1})
+    chk("SLUG_COLLISION", coll is None, "Slug libero" if coll is None else "Slug coincide con una modella (confusione URL)", "warning")
+    errors = [c for c in checks if not c["ok"] and c["level"] == "error"] + [{"code": e["code"], "message": e["message"], "level": "error", "ok": False} for e in base["errors"]]
+    warnings = [c for c in checks if not c["ok"] and c["level"] == "warning"]
+    score = max(0, 100 - len(errors) * 20 - len(warnings) * 7)
+    return {"ready": not errors, "publishable": not errors, "score": score, "errors": errors, "warnings": warnings, "checks": checks}
+
+
 async def resolve_landing(ref: str) -> dict:
     doc = await landings_col.find_one({"$or": [{"id": ref}, {"slug": slugify(ref)}], "is_deleted": {"$ne": True}}, {"_id": 0})
     if not doc:
         import re
         doc = await landings_col.find_one({"titolo": {"$regex": f"^{re.escape(ref)}$", "$options": "i"}, "is_deleted": {"$ne": True}}, {"_id": 0})
     if not doc:
-        raise HTTPException(status_code=404, detail=f"Landing '{ref}' non trovata")
+        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": f"Landing '{ref}' non trovata"})
     return doc
 
 
@@ -193,6 +232,10 @@ async def soft_delete(landing_id: str, request: Request, principal=Depends(requi
 # ---------------- PUBLIC (published only) ----------------
 @public_landings_router.get("/{slug}")
 async def public_landing(slug: str):
+    # Phase 10: public landing routes stay OFF until the flag public_landing_routes is enabled by a human admin
+    cfg = await config_col.find_one({"id": "global"}, {"_id": 0, "flags": 1}) or {}
+    if not (cfg.get("flags") or {}).get("public_landing_routes", False):
+        raise HTTPException(status_code=404, detail="Landing non trovata")
     doc = await landings_col.find_one({"slug": slug, "stato": "pubblicata", "is_deleted": {"$ne": True}}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Landing non trovata")

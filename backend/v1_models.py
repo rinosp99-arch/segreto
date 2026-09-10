@@ -134,9 +134,19 @@ async def unique_slug(base: str, exclude_id: Optional[str] = None) -> str:
 
 
 async def resolve_model(ref: str, include_deleted: bool = False) -> dict:
-    """Find a model by id, slug or (artistic) name - case insensitive."""
+    """Find a model by id, slug or (artistic) name - case insensitive. Non-deleted matches always win."""
+    if include_deleted:
+        try:
+            return await _resolve_model(ref, False)
+        except HTTPException as e:
+            if e.status_code != 404:
+                raise
+    return await _resolve_model(ref, include_deleted)
+
+
+async def _resolve_model(ref: str, include_deleted: bool) -> dict:
     if not ref:
-        raise HTTPException(status_code=400, detail="Riferimento modella mancante")
+        raise HTTPException(status_code=400, detail={"code": "VALIDATION_FAILED", "message": "Riferimento modella mancante"})
     q_del = {} if include_deleted else {"is_deleted": {"$ne": True}}
     doc = await models_col.find_one({"id": ref, **q_del}, {"_id": 0})
     if not doc:
@@ -147,16 +157,31 @@ async def resolve_model(ref: str, include_deleted: bool = False) -> dict:
         if len(cands) == 1:
             doc = cands[0]
         elif len(cands) > 1:
-            raise HTTPException(status_code=409, detail={"message": "Riferimento ambiguo: più modelle corrispondono", "candidates": [summary(c) for c in cands]})
+            raise HTTPException(status_code=409, detail={"code": "AMBIGUOUS_REFERENCE", "message": "Riferimento ambiguo: più modelle corrispondono", "candidates": [summary(c) for c in cands]})
     if not doc:
         rx = {"$regex": re.escape(ref.strip()), "$options": "i"}
         cands = await models_col.find({"$or": [{"nome": rx}, {"nome_artistico": rx}, {"slug": rx}], **q_del}, {"_id": 0}).to_list(5)
         if len(cands) == 1:
             doc = cands[0]
         elif len(cands) > 1:
-            raise HTTPException(status_code=409, detail={"message": "Riferimento ambiguo: più modelle corrispondono", "candidates": [summary(c) for c in cands]})
+            raise HTTPException(status_code=409, detail={"code": "AMBIGUOUS_REFERENCE", "message": "Riferimento ambiguo: più modelle corrispondono", "candidates": [summary(c) for c in cands]})
     if not doc:
-        raise HTTPException(status_code=404, detail=f"Modella '{ref}' non trovata")
+        # token-prefix match: every word of the reference is a prefix of the corresponding word of the name
+        # ("zeta test resolver 2" -> "Zeta Testuale Resolver 2"), unambiguous only
+        toks = [t for t in re.split(r"[\s\-_]+", ref.strip().lower()) if t]
+        if toks:
+            first = {"$regex": f"^{re.escape(toks[0])}", "$options": "i"}
+            pool = await models_col.find({"$or": [{"nome": first}, {"nome_artistico": first}], **q_del}, {"_id": 0}).to_list(50)
+            def _tok_match(name: str) -> bool:
+                nt = [t for t in re.split(r"[\s\-_]+", (name or "").lower()) if t]
+                return len(nt) == len(toks) and all(n.startswith(t) for t, n in zip(toks, nt))
+            cands = [c for c in pool if _tok_match(c.get("nome_artistico")) or _tok_match(c.get("nome"))]
+            if len(cands) == 1:
+                doc = cands[0]
+            elif len(cands) > 1:
+                raise HTTPException(status_code=409, detail={"code": "AMBIGUOUS_REFERENCE", "message": "Riferimento ambiguo: più modelle corrispondono", "candidates": [summary(c) for c in cands]})
+    if not doc:
+        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": f"Modella '{ref}' non trovata"})
     return doc
 
 
@@ -207,11 +232,20 @@ async def create_model(data: dict, principal: dict, request: Optional[Request], 
     return enrich(doc)
 
 
-async def patch_model(doc: dict, changes: dict, principal: dict, request: Optional[Request], reason: str = "", source: Optional[str] = None) -> dict:
+def check_precondition(doc: dict, expected_updated_at: Optional[str]):
+    """Optimistic concurrency: 409 CONFLICT if the record changed since the caller read it."""
+    if expected_updated_at and doc.get("updated_at") and expected_updated_at != doc.get("updated_at"):
+        raise HTTPException(status_code=409, detail={"code": "CONFLICT", "message": "La modella è stata modificata da qualcun altro: rileggi lo stato e riprova",
+                                                     "current_updated_at": doc.get("updated_at"), "expected_updated_at": expected_updated_at})
+
+
+async def patch_model(doc: dict, changes: dict, principal: dict, request: Optional[Request], reason: str = "", source: Optional[str] = None,
+                      dry_run: bool = False, expected_updated_at: Optional[str] = None) -> dict:
     src = source or principal.get("source", "manual")
+    check_precondition(doc, expected_updated_at)
     changes = {k: v for k, v in (changes or {}).items() if k in ALLOWED_FIELDS and k not in PROTECTED_FIELDS}
     if not changes:
-        raise HTTPException(status_code=400, detail="Nessun campo modificabile nella richiesta")
+        raise HTTPException(status_code=400, detail={"code": "VALIDATION_FAILED", "message": "Nessun campo modificabile nella richiesta"})
     merged = deep_merge(doc, changes)
     # type-validate merged document
     try:
@@ -235,6 +269,14 @@ async def patch_model(doc: dict, changes: dict, principal: dict, request: Option
                 raise HTTPException(status_code=400, detail={"message": "NON PUOI ANCORA PUBBLICARE", "errors": v["errors"]})
         elif not doc.get("data_pubblicazione"):
             new_doc["data_pubblicazione"] = now_iso()
+    if dry_run:
+        from v1_versioning import diff_fields
+        changed = diff_fields(serialize_doc(doc), serialize_doc(new_doc))
+        out = enrich(new_doc)
+        return {"dry_run": True, "id": doc["id"], "slug": new_doc["slug"], "changed_fields": changed,
+                "before": {k: doc.get(k) for k in changed}, "proposed_after": {k: new_doc.get(k) for k in changed},
+                "workflow_status_before": workflow_status(doc), "workflow_status_after": out["workflow_status"], "validation": out["validation"],
+                "auto": auto, "etag": doc.get("updated_at")}
     new_doc["updated_at"] = now_iso()
     await models_col.replace_one({"id": doc["id"]}, new_doc)
     rid = request_id_of(request)
@@ -247,19 +289,20 @@ async def patch_model(doc: dict, changes: dict, principal: dict, request: Option
     out = enrich(new_doc)
     out["version_id"] = ver.get("id")
     out["changed_fields"] = ver.get("changed_fields", [])
+    out["etag"] = new_doc["updated_at"]
     if auto:
         out["_auto"] = auto
     return out
 
 
-async def transition(doc: dict, action: str, principal: dict, request: Optional[Request], reason: str = "", force: bool = False) -> dict:
-    """publish | unpublish | archive | restore"""
+async def transition(doc: dict, action: str, principal: dict, request: Optional[Request], reason: str = "", force: bool = False, dry_run: bool = False) -> dict:
+    """publish | unpublish | archive | restore. `force` NEVER bypasses readiness."""
     src = principal.get("source", "manual")
     new_doc = copy.deepcopy(doc)
     if action == "publish":
         v = validate_model(doc)
         if not v["ready"]:
-            raise HTTPException(status_code=400, detail={"message": "NON PUOI ANCORA PUBBLICARE", "errors": v["errors"], "warnings": v["warnings"]})
+            raise HTTPException(status_code=400, detail={"code": "PUBLICATION_BLOCKED", "message": "NON PUOI ANCORA PUBBLICARE", "errors": v["errors"], "warnings": v["warnings"], "missing": [e["field"] for e in v["errors"]]})
         new_doc["stato"] = "pubblicata"
         if not new_doc.get("data_pubblicazione"):
             new_doc["data_pubblicazione"] = now_iso()
@@ -283,6 +326,10 @@ async def transition(doc: dict, action: str, principal: dict, request: Optional[
         new_doc.pop("stato_precedente", None)
     else:
         raise HTTPException(status_code=400, detail="Azione non valida")
+    if dry_run:
+        return {"dry_run": True, "id": doc["id"], "slug": doc["slug"], "nome_artistico": doc.get("nome_artistico"), "action": action,
+                "before": {"stato": doc.get("stato"), "workflow_status": workflow_status(doc)}, "proposed_after": {"stato": new_doc["stato"], "workflow_status": workflow_status(new_doc)},
+                "changed_fields": ["stato"], "validation": validate_model(new_doc), "workflow_status": workflow_status(new_doc), "public_url": f"/modelle/{doc['slug']}" if new_doc["stato"] == "pubblicata" else None}
     new_doc["updated_at"] = now_iso()
     await models_col.replace_one({"id": doc["id"]}, new_doc)
     rid = request_id_of(request)

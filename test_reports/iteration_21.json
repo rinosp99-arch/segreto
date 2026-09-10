@@ -1,0 +1,151 @@
+{
+  "summary": "Phase 10 ChatGPT Control Layer testing completed. Verified authentication chain, scope enforcement, kill switch, READ_ONLY mode, approval flow, rollback, security measures, and frontend ChatGPT panel. Existing pytest suite passes 40/40 tests. Custom backend tests pass 46/51. Frontend panel fully functional with proper API key security (shown only once, never retrievable).",
+  "backend_issues": {
+    "minor_bugs": [
+      {
+        "endpoint": "GET /api/v1/ai/control",
+        "issue": "Response contains 'api_key' or 'key_hash' fields (should be redacted)",
+        "impact": "Potential information disclosure if API keys are exposed in control endpoint",
+        "fix_priority": "MEDIUM",
+        "verification": "Check v1_ai.py control endpoint response serialization"
+      },
+      {
+        "endpoint": "POST /api/v1/ai/models/find",
+        "issue": "Reference resolver by partial name may have edge cases",
+        "impact": "Minor - partial name matching might not work in all scenarios",
+        "fix_priority": "LOW"
+      },
+      {
+        "endpoint": "GET /api/admin/dashboard/overview",
+        "issue": "Returns 404 (endpoint may have been moved or renamed)",
+        "impact": "Admin dashboard overview not accessible via this endpoint",
+        "fix_priority": "LOW",
+        "note": "This is a regression test - main dashboard may use different endpoint"
+      }
+    ],
+    "test_setup_issues": [
+      {
+        "test": "CRITICAL SEO issue test",
+        "issue": "Could not create CRITICAL SEO issue for testing (test setup limitation, not a bug)",
+        "impact": "Unable to verify CRITICAL action blocking via SEO review endpoint",
+        "note": "CRITICAL blocking is verified via other tests (keys:manage, config:write, models:delete)"
+      }
+    ],
+    "configuration_notes": [
+      {
+        "flag": "public_landing_routes",
+        "issue": "Landing public route returns 200 instead of 404",
+        "expected": "Public landing routes should be OFF (404) until flag is enabled",
+        "actual": "Route returns 200",
+        "impact": "Landing pages may be publicly accessible before intended",
+        "fix_priority": "LOW",
+        "note": "May be intentional for testing or flag is ON"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Existing pytest suite: 40/40 tests passed",
+    "API key creation - key shown ONLY once at creation (ls_... format, ~46 chars)",
+    "API key secrets - GET /api/v1/auth/keys does NOT contain api_key or key_hash",
+    "API key secrets - GET /api/v1/auth/keys/{id}/usage does NOT contain secrets",
+    "Auth chain - valid key returns 200 with X-Request-ID and X-RateLimit-Limit headers",
+    "Auth chain - wrong key returns 401 INVALID_API_KEY",
+    "Auth chain - revoked key returns 401 API_KEY_REVOKED",
+    "Auth chain - disabled key returns 401 API_KEY_DISABLED",
+    "Auth chain - enabled key returns 200",
+    "Auth chain - rotate: old key 401, new key 200",
+    "Auth chain - Bearer Authorization header accepted (Bearer ls_...)",
+    "Scopes - missing scope returns 403 INSUFFICIENT_SCOPE with missing_scopes list",
+    "Scopes - allowed scope works (seo:audit with correct scopes)",
+    "Critical - API key cannot access GET /api/v1/auth/keys (403 CRITICAL_ACTION_BLOCKED)",
+    "Critical - API key cannot PATCH /api/v1/config (403)",
+    "Critical - API key cannot DELETE models (403)",
+    "Kill switch - ai_api_enabled=false: AI key gets 503 AI_API_DISABLED, JWT still works",
+    "READ_ONLY mode - ai_write_enabled=false: writes blocked (403 READ_ONLY_MODE)",
+    "READ_ONLY mode - dry_run=true allowed in READ_ONLY",
+    "READ_ONLY mode - upload/confirm always blocked even with dry_run",
+    "Reference resolver - find by ID, slug, exact name, partial name works",
+    "Reference resolver - ambiguous reference returns 409 AMBIGUOUS_REFERENCE with matches",
+    "Reference resolver - not found returns 404 NOT_FOUND",
+    "Update - dry_run works, no mutation (etag unchanged)",
+    "Update - SAFE update applied without approval, version_id created",
+    "Update - concurrency check: stale etag rejected with 409 CONFLICT",
+    "Approval - REVIEW_REQUIRED creates approval token (apr_...)",
+    "Approval - model unchanged before approval confirmation",
+    "Approval - pending approvals list does NOT contain token or token_hash",
+    "Approval - confirm applies change and creates version_id",
+    "Approval - token is single-use (409/404/400 APPROVAL_INVALID on reuse)",
+    "Approval - token bound to actor (different key cannot confirm)",
+    "Approval - target change invalidates approval (409 CONFLICT)",
+    "Publish - incomplete model blocked (ok:false, code:PUBLICATION_BLOCKED)",
+    "Publish - force parameter ignored (validation always runs)",
+    "Publish - model state unchanged when blocked",
+    "Idempotency - same Idempotency-Key returns same ID",
+    "Idempotency - Idempotent-Replayed: true header on replay",
+    "Idempotency - no duplicate models created",
+    "Rollback - preview returns version_id and will_restore",
+    "Rollback - dry_run works",
+    "Rollback - execute creates new_version_id",
+    "Rollback - duplicate rollback blocked (409 CONFLICT)",
+    "Rollback - history intact with source=rollback entry",
+    "Audit - activity log contains actor, key_id, request_id, action, target, changes, source",
+    "Audit - source=chatgpt for API key actions",
+    "Audit - no secrets in input field (no raw api_key or ls_...)",
+    "Analytics - structured query returns sample_size and data_available",
+    "Analytics - natural language query works",
+    "Landing - create in bozza with geoblocking=false",
+    "Landing - validate works",
+    "Landing - publish without landing:publish scope requires approval",
+    "Landing - not published without approval confirmation",
+    "Security - SSRF URLs blocked (127.0.0.1, localhost, 169.254.169.254, 10.0.0.1)",
+    "Security - invalid mime rejected (text/html)",
+    "Capabilities - 35 capabilities with correct structure (id, method, endpoint, required_scopes, safety_level, errors)",
+    "OpenAPI - only /api/v1/ai/* paths exposed",
+    "OpenAPI - no /api/v1/ai/test-connection in spec",
+    "OpenAPI - ApiKeyAuth in securitySchemes",
+    "OpenAPI - AIError schema present",
+    "OpenAPI - servers[0].url is https",
+    "Batch - SEO fix works with dry_run",
+    "Batch - ai_batch_enabled=false blocks batch (403 BATCH_DISABLED)",
+    "Rate limit - rate_limit_per_min floored to 10 (min)",
+    "Rate limit - 429 RATE_LIMITED with Retry-After header",
+    "Regression - home page loads (200)",
+    "Regression - model page renders (/modelle/francesca-rossi)",
+    "Regression - public API works (GET /api/models returns published models)",
+    "Frontend - ChatGPT section and panel visible at /admin/motore",
+    "Frontend - all toggles present (kill-switch, mode, batch, approval)",
+    "Frontend - toggles show ON state",
+    "Frontend - copy config button works",
+    "Frontend - test connection button shows 13/13 checks OK",
+    "Frontend - create key section present",
+    "Frontend - API key shown ONLY once at creation (ls_xrmztLa..., 46 chars)",
+    "Frontend - key box dismisses and disappears",
+    "Frontend - keys list shows ONLY prefix (first 10 chars), NOT full key",
+    "Frontend - after page reload, full API key NOT in DOM",
+    "Frontend - only prefix visible after reload",
+    "Frontend - kill switch toggle works (ON -> OFF -> ON)",
+    "Frontend - activity list shows 'chatgpt' pill",
+    "Frontend - keys list present with key actions (rotate, disable, enable, revoke)"
+  ],
+  "test_report_links": [
+    "/app/tests/test_ai_control.py",
+    "/app/backend_test_phase10.py"
+  ],
+  "action_item_for_main_agent": "1. Investigate GET /api/v1/ai/control response to ensure api_key and key_hash are properly redacted. 2. Verify public_landing_routes flag behavior (currently returns 200 instead of expected 404). 3. Check if GET /api/admin/dashboard/overview endpoint exists or has been moved. All other functionality working correctly.",
+  "updated_files": [
+    "/app/backend_test_phase10.py"
+  ],
+  "success_percentage": {
+    "backend_pytest": "100% (40/40)",
+    "backend_custom": "90% (46/51)",
+    "frontend": "100% (all key features working)",
+    "overall": "95%"
+  },
+  "should_call_test_agent_after_fix": "false",
+  "should_main_agent_test_itself": "true"
+}

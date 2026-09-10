@@ -1,9 +1,12 @@
 import os
 import json
+import time
 import uuid
 import logging
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
 
 from database import ensure_indexes, idempotency_col, now_dt, now_iso
@@ -27,6 +30,7 @@ from v1_health import health_router, alerts_router
 from v1_jobs import jobs_router, ensure_job_docs, start_scheduler, stop_scheduler
 from v1_config import config_router, webhooks_router, backup_router, auth_router, versions_router, get_config
 from v1_ai import ai_router
+from v1_ai_policy import error_body, record_metric
 from v1_dashboard import dashboard_router
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -115,7 +119,23 @@ async def request_context(request: Request, call_next):
             return Response(content=cached["body"], status_code=cached["status"], media_type="application/json",
                             headers={"X-Request-ID": cached.get("request_id", rid), "Idempotent-Replayed": "true"})
 
+    t0 = time.time()
     response = await call_next(request)
+
+    # AI control layer observability + rate-limit headers + key error counters
+    principal = getattr(request.state, "principal", None) or {}
+    try:
+        if path.startswith("/api/v1/ai"):
+            await record_metric(path, method, response.status_code, (time.time() - t0) * 1000, principal.get("key_id"), bool(getattr(request.state, "ai_write", False)))
+        if principal.get("key_id") and response.status_code >= 400 and path.startswith("/api/v1"):
+            from database import api_keys_col
+            await api_keys_col.update_one({"id": principal["key_id"]}, {"$inc": {"error_count": 1}, "$set": {"last_error_at": now_iso(), "last_error_status": response.status_code, "last_error_path": path}})
+    except Exception:
+        pass
+    rate = getattr(request.state, "rate", None)
+    if rate:
+        response.headers["X-RateLimit-Limit"] = str(rate.get("limit"))
+        response.headers["X-RateLimit-Remaining"] = str(rate.get("remaining"))
 
     if idem_doc_key and 200 <= response.status_code < 500:
         body = b""
@@ -137,13 +157,56 @@ async def request_context(request: Request, call_next):
     return response
 
 
+# ---------------- AI ERROR CONTRACT ----------------
+def _is_ai(request: Request) -> bool:
+    return request.url.path.startswith("/api/v1/ai")
+
+
+def _rid(request: Request) -> str:
+    return getattr(request.state, "request_id", None) or request.headers.get("X-Request-ID") or str(uuid.uuid4())
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exc_handler(request: Request, exc: StarletteHTTPException):
+    headers = dict(getattr(exc, "headers", None) or {})
+    if _is_ai(request):
+        body = error_body(exc, _rid(request))
+        return JSONResponse(status_code=exc.status_code, content=body, headers={**headers, "X-Request-ID": body["request_id"]})
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=headers)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exc_handler(request: Request, exc: RequestValidationError):
+    if _is_ai(request):
+        rid = _rid(request)
+        errs = [{"loc": ".".join(str(x) for x in e.get("loc", [])), "msg": e.get("msg")} for e in exc.errors()]
+        return JSONResponse(status_code=422, content={"ok": False, "code": "VALIDATION_FAILED", "summary": "Parametri non validi: " + "; ".join(f"{e['loc']}: {e['msg']}" for e in errs[:4]), "data": {"errors": errs}, "warnings": [], "next_steps": ["Controlla i parametri richiesti in GET /api/v1/ai/capabilities"], "request_id": rid, "approval_required": False}, headers={"X-Request-ID": rid})
+    return JSONResponse(status_code=422, content={"detail": jsonable(exc.errors())})
+
+
+def jsonable(o):
+    try:
+        return json.loads(json.dumps(o, default=str))
+    except Exception:
+        return str(o)
+
+
+@app.exception_handler(Exception)
+async def generic_exc_handler(request: Request, exc: Exception):
+    logger.exception(f"Unhandled error on {request.url.path}: {exc}")
+    rid = _rid(request)
+    if _is_ai(request):
+        return JSONResponse(status_code=500, content={"ok": False, "code": "INTERNAL_ERROR", "summary": "Errore interno: riprova o segnala il request_id", "data": {}, "warnings": [], "next_steps": [], "request_id": rid, "approval_required": False}, headers={"X-Request-ID": rid})
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error", "request_id": rid}, headers={"X-Request-ID": rid})
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
     allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Request-ID", "Idempotent-Replayed", "Retry-After"],
+    expose_headers=["X-Request-ID", "Idempotent-Replayed", "Retry-After", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
 )
 
 

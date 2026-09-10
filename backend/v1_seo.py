@@ -243,6 +243,19 @@ async def run_audit(scope: Optional[str] = None, entity_id: Optional[str] = None
     return {"ok": True, "total": len(found), "counts": counts, "health_score": score, "audited_at": now_iso(), "scope": scope or "all"}
 
 
+def issue_impact(issue: dict) -> dict:
+    """Deterministic impact/risk description for a review preview (no LLM)."""
+    code = issue.get("code", "")
+    seo_impact = {"SEO_TITLE_TOO_LONG": "Alto: il title viene troncato nei risultati", "META_DESCRIPTION_TOO_SHORT": "Medio: snippet povero, CTR ridotto",
+                  "DUPLICATE_SEO_TITLE": "Alto: pagine in competizione tra loro", "DUPLICATE_META_DESCRIPTION": "Medio: snippet identici",
+                  "THIN_CONTENT": "Alto: pagina povera, difficile da posizionare", "CANONICAL_MISMATCH": "Alto: segnali di indicizzazione confusi",
+                  "SLUG_INVALID": "Alto: URL non pulito", "NO_INTERNAL_LINKS": "Medio: pagina isolata", "BROKEN_INTERNAL_LINK_BODY": "Medio: link rotto nel testo",
+                  "SITE_BASE_URL_MISSING": "Bloccante per canonical/sitemap assoluti"}.get(code, "Basso/Medio")
+    ux_impact = "Nessuno (solo metadati)" if issue.get("field", "").startswith("seo") or issue.get("field") in ("seo_title", "meta_description") else "Visibile agli utenti: verificare il testo"
+    risk = "CRITICAL" if issue.get("severity") == "CRITICAL" else ("medio: modifica editoriale" if issue.get("severity") == "REVIEW_REQUIRED" else "basso: reversibile con rollback")
+    return {"seo_impact": seo_impact, "ux_impact": ux_impact, "risk": risk}
+
+
 # ---------------- FIX APPLICATION ----------------
 ENTITY_COL = {"model": models_col, "article": articles_col, "category": categories_col, "landing": landings_col}
 
