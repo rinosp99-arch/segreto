@@ -105,6 +105,8 @@ async def ensure_indexes():
     await ai_requests_col.create_index('timestamp')
     await ai_requests_col.create_index('created_dt', expireAfterSeconds=60 * 60 * 24 * 30)
     await ai_requests_col.create_index('request_id')
+    await db['rate_buckets'].create_index('created_dt', expireAfterSeconds=180)
+    await db['rate_buckets'].create_index('id', unique=True)
     await analytics_daily_col.create_index([('giorno', 1), ('model_id', 1), ('country', 1)], unique=True)
     await files_col.create_index('id', unique=True, sparse=True)
     await files_col.create_index('storage_path')

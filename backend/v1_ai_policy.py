@@ -18,7 +18,7 @@ from typing import Optional, Dict, Any, List
 from fastapi import Depends, Request, HTTPException
 
 from database import db, config_col, now_iso
-from v1_security import resolve_principal, has_scope, err, READ_SCOPES, CRITICAL_SCOPES, DEFAULT_LIMIT_AI, MIN_AI_LIMIT, rate_limit, bucket_usage
+from v1_security import rate_limit_shared, resolve_principal, has_scope, err, READ_SCOPES, CRITICAL_SCOPES, DEFAULT_LIMIT_AI, MIN_AI_LIMIT, rate_limit, bucket_usage
 
 approvals_col = db["ai_approvals"]
 ai_metrics_col = db["ai_metrics"]
@@ -111,7 +111,7 @@ def ai_guard(*scopes: str, write: bool = False, batch: bool = False, dry_capable
             crit = [s for s in scopes if s in CRITICAL_SCOPES]
             if crit:
                 raise err(403, "CRITICAL_ACTION_BLOCKED", "Operazione critica non consentita alle API key", scopes=crit)
-            rl = rate_limit(f"ai:{principal['id']}", min(cfg["rate_limit_per_min"], principal.get("rate_limit", cfg["rate_limit_per_min"])))
+            rl = await rate_limit_shared(f"ai:{principal['id']}", min(cfg["rate_limit_per_min"], principal.get("rate_limit", cfg["rate_limit_per_min"])))
             request.state.rate = rl
         # every AI endpoint requires ai:execute in addition to the action scopes (preview scopes accepted for dry_run)
         missing = missing_scopes_for(principal, ("ai:execute", *scopes), dry)

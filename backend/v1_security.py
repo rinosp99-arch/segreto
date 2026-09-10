@@ -14,6 +14,7 @@ import time
 import uuid
 import hashlib
 import secrets
+from datetime import datetime, timezone
 from typing import Optional, List, Dict
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, APIKeyHeader
@@ -209,6 +210,28 @@ def bucket_usage(bucket_id: str, window: float = 60.0) -> int:
     return len([t for t in _buckets.get(bucket_id, []) if now - t < window])
 
 
+async def rate_limit_shared(bucket_id: str, limit_per_min: int) -> dict:
+    """Cluster-wide fixed-window limiter (Mongo, atomic $inc): the in-memory limiter is per pod, so with N replicas
+    the effective limit would be N x limit. Used for API keys (Phase 11 finding on production). Falls back to the
+    local limiter if the database is unavailable, so a limit is ALWAYS enforced."""
+    from database import db
+    now = time.time()
+    minute = int(now // 60)
+    retry = max(1, int(60 - (now % 60)) + 1)
+    try:
+        doc = await db["rate_buckets"].find_one_and_update(
+            {"id": f"{bucket_id}:{minute}"},
+            {"$inc": {"count": 1}, "$setOnInsert": {"bucket": bucket_id, "minute": minute, "created_dt": datetime.now(timezone.utc)}},
+            upsert=True, return_document=True)
+        count = int(doc.get("count", 1))
+    except Exception:
+        return rate_limit(bucket_id, limit_per_min)
+    if count > limit_per_min:
+        raise err(429, "RATE_LIMITED", "Limite richieste superato. Riprova tra poco.", retry_after=retry,
+                  headers={"Retry-After": str(retry), "X-RateLimit-Limit": str(limit_per_min), "X-RateLimit-Remaining": "0"})
+    return {"limit": limit_per_min, "remaining": max(0, limit_per_min - count)}
+
+
 # ---------------- PRINCIPAL RESOLUTION ----------------
 async def resolve_principal(request: Request,
                             creds: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
@@ -242,7 +265,7 @@ async def resolve_principal(request: Request,
             "source": "chatgpt" if rec.get("source") in ("ai", "chatgpt") or role == "AI_OPERATOR" else "api",
             "rate_limit": int(rec.get("rate_limit_per_min") or DEFAULT_LIMIT_KEY), "ip": ip,
         }
-        rl = rate_limit(f"key:{rec['id']}", principal["rate_limit"])
+        rl = await rate_limit_shared(f"key:{rec['id']}", principal["rate_limit"])
         request.state.rate = rl
         request.state.principal = principal
         await api_keys_col.update_one({"id": rec["id"]}, {"$set": {"last_used_at": now_iso(), "last_ip": ip}, "$inc": {"uses": 1, "request_count": 1}})

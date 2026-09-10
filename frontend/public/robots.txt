@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /admin
 
-Sitemap: https://secret-side.preview.emergentagent.com/api/sitemap.xml
+Sitemap: https://secret-side.emergent.host/api/sitemap.xml
