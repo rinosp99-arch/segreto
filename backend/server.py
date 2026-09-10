@@ -30,6 +30,7 @@ from v1_health import health_router, alerts_router
 from v1_jobs import jobs_router, ensure_job_docs, start_scheduler, stop_scheduler
 from v1_config import config_router, webhooks_router, backup_router, auth_router, versions_router, get_config
 from v1_ai import ai_router
+from v1_capabilities import caps_router, verify_bindings   # Phase 12A: universal engine v2 (/api/v2/ai), Phase 10/11 routes untouched
 from v1_ai_policy import error_body, record_metric
 from v1_dashboard import dashboard_router
 
@@ -86,7 +87,7 @@ app.include_router(integrations_router)
 # SUPER API v1
 for r in (ai_router, models_router, media_router, model_media_router, seo_v1_router, tracking_router, landings_router, public_landings_router,
           experiments_router, public_experiments_router, health_router, alerts_router, jobs_router, config_router, webhooks_router,
-          backup_router, auth_router, versions_router, dashboard_router):
+          backup_router, auth_router, versions_router, dashboard_router, caps_router):
     app.include_router(r)
 
 
@@ -125,7 +126,7 @@ async def request_context(request: Request, call_next):
     # AI control layer observability + rate-limit headers + key error counters
     principal = getattr(request.state, "principal", None) or {}
     try:
-        if path.startswith("/api/v1/ai"):
+        if path.startswith("/api/v1/ai") or path.startswith("/api/v2/ai"):
             dur = (time.time() - t0) * 1000
             await record_metric(path, method, response.status_code, dur, principal.get("key_id"), bool(getattr(request.state, "ai_write", False)))
             if principal.get("type") == "api_key" and not path.endswith(("/control", "/test-connection")):
@@ -133,7 +134,7 @@ async def request_context(request: Request, call_next):
                 await ai_requests_col.insert_one({"id": str(uuid.uuid4()), "request_id": rid, "timestamp": now_iso(), "created_dt": now_dt(), "method": method, "path": path,
                                                   "status": response.status_code, "duration_ms": round(dur), "key_id": principal.get("key_id"), "actor": principal.get("name"),
                                                   "source": principal.get("source"), "kind": "dry_run" if getattr(request.state, "ai_dry_run", False) else ("write" if getattr(request.state, "ai_write", False) else "read")})
-        if principal.get("key_id") and response.status_code >= 400 and path.startswith("/api/v1"):
+        if principal.get("key_id") and response.status_code >= 400 and (path.startswith("/api/v1") or path.startswith("/api/v2")):
             from database import api_keys_col
             await api_keys_col.update_one({"id": principal["key_id"]}, {"$inc": {"error_count": 1}, "$set": {"last_error_at": now_iso(), "last_error_status": response.status_code, "last_error_path": path}})
     except Exception:
@@ -165,7 +166,7 @@ async def request_context(request: Request, call_next):
 
 # ---------------- AI ERROR CONTRACT ----------------
 def _is_ai(request: Request) -> bool:
-    return request.url.path.startswith("/api/v1/ai")
+    return request.url.path.startswith("/api/v1/ai") or request.url.path.startswith("/api/v2/ai")
 
 
 def _rid(request: Request) -> str:
@@ -243,7 +244,8 @@ async def startup():
         await get_config()
         await ensure_job_docs()
         start_scheduler()
-        logger.info("Startup completo: indici + seed + config + scheduler")
+        rep = verify_bindings()   # Phase 12A: unbound capabilities are disabled, never fatal
+        logger.info(f"Startup completo: indici + seed + config + scheduler + capability registry ({rep['bound']} bound / {rep['unbound']} unbound)")
     except Exception as e:
         logger.error(f"Errore startup: {e}")
 

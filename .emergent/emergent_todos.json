@@ -4,23 +4,31 @@
     "status": "completed"
   },
   {
-    "content": "Refactor minimi service: v1_media.slot_changes (shared preview/execute), v1_ai.log_action session_id, ai_confirm CAPABILITY, PATCH key capabilities",
-    "status": "in_progress"
+    "content": "Refactor minimi service: v1_media.slot_changes, v1_ai.log_action session_id, ai_confirm CAPABILITY, PATCH key capabilities",
+    "status": "completed"
   },
   {
-    "content": "Riscrivere v1_capabilities.py: registry con binding verificati, dispatcher v2, 12 primitive, idempotency, allow/deny, CRITICAL, UNBOUND",
+    "content": "Correggere binding errati (fetch_url_bytes, entity_id, variants, pellicola_home, categorie, backup) + 5 sospetti",
+    "status": "completed"
+  },
+  {
+    "content": "Dispatcher v2 + 12 primitive + startup binding verification + enforcement + idempotency + rollback.session secondarie",
+    "status": "completed"
+  },
+  {
+    "content": "Test 12A (19) + wiring server.py + smoke post-wiring (32) + regressioni Phase 10/11",
+    "status": "completed"
+  },
+  {
+    "content": "Copertura operativa 12A: verifica per-capability con payload reali (FULL solo in preview) e fix",
     "status": "pending"
   },
   {
-    "content": "OpenAPI v2 compatto separato + server.py wiring (middleware v2, startup verify_bindings)",
+    "content": "E2E TEST GIULIA formale: prepare_complete -> verifica -> rollback.session -> stato identico + storia",
     "status": "pending"
   },
   {
-    "content": "Pannello admin Capacita ChatGPT in /admin/motore",
-    "status": "pending"
-  },
-  {
-    "content": "Test pytest 12A + E2E TEST GIULIA + regressioni Phase 10/11",
+    "content": "Pannello admin Capacita ChatGPT in /admin/motore (+ allow/deny per chiave)",
     "status": "pending"
   },
   {
@@ -28,7 +36,7 @@
     "status": "pending"
   },
   {
-    "content": "Docs + report finale Phase 12A",
+    "content": "Docs (CHATGPT_API v2, SUPER_API) + report finale Phase 12A",
     "status": "pending"
   }
 ]

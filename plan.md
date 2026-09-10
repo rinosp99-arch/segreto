@@ -281,6 +281,13 @@ Scenario completo:
 8. OpenAPI v2 separato (`/api/v2/ai/openapi-chatgpt.json`) finché i test non sono completati: il GPT attuale (v1, 23 op) continua a funzionare.
 **Architettura:** `backend/v1_capabilities.py` (registry + dispatcher) montato su `/api/v2/ai/*`: getCapabilities, getCapability, previewCapability, executeCapability, listApprovals, approveApproval, rejectApproval, getJob, queryAnalytics, getSystemStatus, rollback, findModel. Idempotency per-capability (chiave + principal + hash body → 409 IDEMPOTENCY_CONFLICT se body diverso). `session_id` in `ai_actions` per rollback di sessione. Pannello `/admin/motore` → "Capacità ChatGPT" (conteggi, rischio, toggle, allow/deny per chiave).
 **Test:** `tests/test_phase12_capabilities.py` (registry/security/enforcement/E2E TEST GIULIA) + regressioni `test_ai_control.py`, `test_health_reconciliation.py`, `phase11_gpt_simulation.py`.
+**Stato avanzamento (step "dispatcher v2" COMPLETATO, preview):**
+- Binding corretti e verificati (30/30 `tests/phase12/verify_bindings_12a.py`); 5 sospetti risolti (landing.create → `build_landing_data`+`LandingIn`; seo.sitemap_status/opportunities con `principal=`; internal_links con `limit_per_model`; `unwrap_envelope` unico per status/analytics; approve ripete `_gate` READ_ONLY prima di consumare il token).
+- `verify_bindings()` a startup: 97 bound / 0 unbound (UNBOUND → 503 CAPABILITY_UNBOUND, mai fatale). Duplicati ID → RuntimeError a import.
+- Router v2 montato su `/api/v2/ai/*` (12 primitive GPT + openapi v2 pubblico + 2 endpoint admin nascosti). Middleware/error-handler AI estesi a v2. v1 (23 op) intatto.
+- Test: `test_phase12_capabilities.py` 19/19; smoke post-wiring `tests/phase12/smoke_v2_wiring.py` 32/32; regressioni 42/42 (ai_control), 5/5 (health), 42/42 (phase11 simulation).
+- Preview READ_ONLY ripristinata; chiavi temporanee revocate; nessun deploy.
+**Prossimo step:** copertura operativa 12A completa (verifica per-capability con payload reali in FULL-preview) + E2E TEST GIULIA formale (`models.prepare_complete` → verifica → `rollback.session`) + pannello admin "Capacità ChatGPT" + report finale.
 
 ## 3) Next Actions
 0. Fase successiva (NON ora, su richiesta utente): dominio latosegreto.it, redirect da Emergent, SSR/prerender, GSC, GA4 produzione, lancio SEO Italia. Tutto predisposto via Config Center (site.base_url, flags domain_it_migration/ssr_prerender/search_console_sync/ga4_production) e redirect engine.

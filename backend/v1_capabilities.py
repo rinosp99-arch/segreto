@@ -14,8 +14,13 @@ never reachable with an API key.
 import re
 import uuid
 import time
+import json
+import hashlib
 import fnmatch
 import asyncio
+import inspect
+import logging
+import importlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Callable, Awaitable
@@ -24,17 +29,20 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, ConfigDict
 
 from database import (models_col, files_col, categories_col, settings_col, config_col, alerts_col, jobs_col, job_runs_col,
-                      backups_col, versions_col, ai_actions_col, admins_col, landings_col, seo_issues_col, redirects_col, now_iso)
+                      backups_col, versions_col, ai_actions_col, admins_col, landings_col, seo_issues_col, redirects_col, idempotency_col, db as _db, now_iso)
 from v1_security import resolve_principal, has_scope, actor_of, request_id_of, rate_limit_shared, err
-from v1_ai_policy import (redact, ai_config, classify_model_changes, create_approval, approvals_col,
-                          missing_scopes_for, bump)
+from v1_ai_policy import (redact, ai_config, classify_model_changes, create_approval, list_pending_approvals, approvals_col,
+                          missing_scopes_for, bump, ERROR_CODES)
 from v1_models import (resolve_model, create_model, patch_model, transition, validate_model, deep_merge, enrich, workflow_status,
                        ALLOWED_FIELDS, unique_slug)
 from v1_versioning import record_version, audit_log, rollback_version, diff_fields
 
-caps_router = APIRouter(prefix="/api/v1/ai", tags=["AI - Universal engine"])
+logger = logging.getLogger("capabilities")
+
+caps_router = APIRouter(prefix="/api/v2/ai", tags=["AI v2 - Universal engine"])   # v2 namespace: Phase 10/11 routes under /api/v1/ai stay untouched
 
 SAFE, REVIEW, CRITICAL = "SAFE", "REVIEW_REQUIRED", "CRITICAL"
+BOUND, UNBOUND, CRITICAL_BLOCKED = "BOUND", "UNBOUND", "CRITICAL_BLOCKED"
 
 
 # =====================================================================================================================
@@ -56,15 +64,21 @@ class Capability:
     params: Dict[str, Any] = field(default_factory=dict)
     examples: List[dict] = field(default_factory=list)
     natural: List[str] = field(default_factory=list)
-    version: str = "1.0"
+    version: str = "1.0"        # stable capability version (declared, independent from the Python function name)
     read_only: bool = False     # pure read (never a mutation) -> allowed in READ_ONLY and never needs dry_run
+    status: str = BOUND         # BOUND | UNBOUND (binding verification failed at startup -> never executable) | CRITICAL_BLOCKED
+    unbound_reason: Optional[str] = None
+
+    @property
+    def executable(self) -> bool:
+        return self.status == BOUND and self.handler is not None and self.risk != CRITICAL
 
     def public(self) -> dict:
         return {"id": self.id, "category": self.category, "description": self.description, "required_scopes": self.scopes, "risk": self.risk,
                 "supports_dry_run": self.dry_run and not self.read_only, "supports_rollback": self.rollback and not self.read_only, "supports_batch": self.batch,
                 "requires_approval": self.requires_approval or self.risk == REVIEW, "read_only": self.read_only, "target": self.target,
                 "parameters_schema": {"type": "object", "properties": self.params}, "examples": self.examples, "natural_references": self.natural,
-                "capability_version": self.version}
+                "capability_version": self.version, "status": self.status}
 
 
 REGISTRY: Dict[str, Capability] = {}
@@ -72,6 +86,8 @@ REGISTRY: Dict[str, Capability] = {}
 
 def cap(id: str, category: str, description: str, scopes: List[str], **kw):
     def deco(fn):
+        if id in REGISTRY:
+            raise RuntimeError(f"Capability id duplicata nel registry: {id}")   # stable ids: a duplicate is a programming error, caught at import
         REGISTRY[id] = Capability(id=id, category=category, description=description, scopes=scopes, handler=fn, **kw)
         return fn
     return deco
@@ -101,9 +117,10 @@ class Ctx:
 
 def R(summary: str, data: Any = None, changes: Optional[List[dict]] = None, version_ids: Optional[List[str]] = None, before: Any = None, after: Any = None,
       warnings: Optional[List[str]] = None, next_steps: Optional[List[str]] = None, needs_approval: Optional[dict] = None, target: Optional[dict] = None,
-      rollback_ref: Optional[str] = None) -> dict:
+      rollback_ref: Optional[str] = None, secondary: Optional[List[dict]] = None) -> dict:
+    """`secondary`: non-versioned side effects the capability performed (e.g. file->model link), recorded in the audit so rollback.session can revert them."""
     return {"summary": summary, "data": data if data is not None else {}, "changes": changes or [], "version_ids": version_ids or [], "before": before, "after": after,
-            "warnings": warnings or [], "next_steps": next_steps or [], "needs_approval": needs_approval, "target": target, "rollback_ref": rollback_ref}
+            "warnings": warnings or [], "next_steps": next_steps or [], "needs_approval": needs_approval, "target": target, "rollback_ref": rollback_ref, "secondary": secondary or []}
 
 
 def _tgt(doc: dict, kind: str = "model") -> dict:
@@ -546,7 +563,7 @@ async def _media_inspect(ctx: Ctx):
     return R(f"{f.get('tipo')} {f.get('width')}x{f.get('height')}" + (f", {f.get('duration')}s" if f.get("duration") else ""), {**public_file(f), "usages": await _usages(f)})
 
 
-@cap("media.upload_url", "media", "Carica un media da URL pubblico (o base64) nella libreria: anti-SSRF, magic bytes, MIME, limiti, varianti. Non assegna a una modella (usa media.assign).", ["media:upload"], rollback=False,
+@cap("media.upload_url", "media", "Carica un media da URL pubblico (o base64) nella libreria: anti-SSRF, magic bytes, MIME, limiti, varianti. Non assegna a una modella (usa media.assign).", ["media:upload"], rollback=True, dry_run=False,
      params={"url": {"type": "string"}, "base64_data": {"type": "string"}, "content_type": {"type": "string"}, "filename": {"type": "string"}, "alt": {"type": "string"}, "seo_name": {"type": "string"}, "model": {"type": "string"}, "slot": {"type": "string", "description": "se indicato assegna subito allo slot (semantico o tecnico)"}},
      natural=["carica questa foto", "aggiungi il video da questo link"])
 async def _media_upload_url(ctx: Ctx):
@@ -573,12 +590,16 @@ async def _media_upload_url(ctx: Ctx):
     rec = await store_media(data, mime, original_filename=ctx.params.get("filename") or "", alt=ctx.params.get("alt") or "", seo_name=ctx.params.get("seo_name") or "",
                             model_id=model["id"] if model else None, slot=ctx.params.get("slot") or None, actor=ctx.actor, request_id=request_id_of(ctx.request))
     res = R(f"Media caricato: {rec.get('seo_name') or rec.get('original_filename')} ({rec.get('tipo')})", media_summary(rec), changes=[{"field": "file", "before": None, "after": rec["id"]}])
+    fver = await versions_col.find_one({"entity": "file", "entity_id": rec["id"]}, {"_id": 0, "id": 1}, sort=[("timestamp", -1)])
+    if fver:   # store_media records a `file` creation version -> included so rollback.session soft-deletes the upload too
+        res["version_ids"] = [fver["id"]]
+        res["rollback_ref"] = fver["id"]
     if model and ctx.params.get("slot"):
         url, poster = media_urls(rec)
         a = await apply_media_to_slot(ctx, model, url, ctx.params["slot"], alt=ctx.params.get("alt") or "", poster=poster, reason=f"Upload + slot {ctx.params['slot']}")
         res["summary"] += f"; assegnato a {ctx.params['slot']} di {model.get('nome_artistico') or model['slug']}"
-        res["version_ids"] = a["version_ids"]
-        res["rollback_ref"] = a["rollback_ref"]
+        res["version_ids"] = (res.get("version_ids") or []) + a["version_ids"]   # file version + model version
+        res["rollback_ref"] = a["rollback_ref"] or res.get("rollback_ref")
         res["target"] = a["target"]
         res["data"]["assignment"] = a["data"]
     return res
@@ -591,8 +612,11 @@ async def _media_assign(ctx: Ctx):
     f = await find_media(ctx.params.get("media") or "")
     url, poster = media_urls(f)
     r = await apply_media_to_slot(ctx, ctx.target, url, ctx.params["slot"], alt=ctx.params.get("alt") or f.get("alt") or "", poster=poster, reason=ctx.reason or f"Media {f['id']} → {ctx.params['slot']}")
-    if not ctx.dry and f.get("model_id") != ctx.target["id"]:
-        await files_col.update_one({"id": f["id"]}, {"$set": {"model_id": ctx.target["id"], "slot": ctx.params["slot"], "updated_at": now_iso()}})
+    if not ctx.dry and not r.get("needs_approval") and (f.get("model_id") != ctx.target["id"] or f.get("slot") != ctx.params["slot"]):
+        before = {"model_id": f.get("model_id"), "slot": f.get("slot")}
+        after = {"model_id": ctx.target["id"], "slot": ctx.params["slot"]}
+        await files_col.update_one({"id": f["id"]}, {"$set": {**after, "updated_at": now_iso()}})
+        r["secondary"] = [{"kind": "file_link", "file_id": f["id"], "before": before, "after": after}]   # reverted by rollback.session
     return r
 
 
@@ -1160,25 +1184,32 @@ async def _redir_delete(ctx: Ctx):
     return R(f"Redirect {fp} disattivato", {"id": r["id"]}, changes=[{"field": "active", "before": True, "after": False}])
 
 
-@cap("seo.sitemap_status", "seo", "Stato sitemap: URL inclusi, esclusi (noindex), errori.", ["seo:read"], read_only=True, natural=["com'è la sitemap"])
+@cap("seo.sitemap_status", "seo", "Stato sitemap: URL inclusi per tipo, modelle escluse (noindex), URL XML.", ["seo:read"], read_only=True, natural=["com'è la sitemap"])
 async def _sitemap(ctx: Ctx):
-    from v1_seo import sitemap_entries
-    entries = await sitemap_entries()
-    return R(f"Sitemap: {len(entries)} URL", {"count": len(entries), "urls": [e.get("loc") if isinstance(e, dict) else e for e in entries][:200]})
+    from v1_seo import sitemap_status
+    r = await sitemap_status(principal=ctx.principal)   # real route handler reused with explicit principal (dispatcher already enforced seo:read)
+    return R(f"Sitemap: {r.get('total', 0)} URL ({r.get('excluded_noindex_models', 0)} modelle noindex escluse)",
+             {"total": r.get("total"), "by_type": r.get("by_type"), "excluded_noindex_models": r.get("excluded_noindex_models"), "xml_url": r.get("xml_url"), "base_url": r.get("base_url"),
+              "urls": [e.get("loc") for e in (r.get("entries") or [])][:200]})
 
 
-@cap("seo.internal_links", "seo", "Suggerimenti di link interni per una modella.", ["seo:read"], target="model", read_only=True)
+@cap("seo.internal_links", "seo", "Grafo di link interni (modelle correlate/articoli) per il sito o filtrato su una modella.", ["seo:read"], target="model", read_only=True, params={"limit_per_model": {"type": "integer", "default": 4}})
 async def _internal_links(ctx: Ctx):
     from v1_seo import internal_link_suggestions
-    r = await internal_link_suggestions(ctx.target["id"]) if ctx.target else []
-    return R(f"{len(r)} suggerimenti di link interni", {"items": r}, target=_tgt(ctx.target) if ctx.target else None)
+    r = await internal_link_suggestions(limit_per_model=int(ctx.params.get("limit_per_model") or 4))   # real signature: (limit_per_model) -> {items, orphans, note}
+    items = r.get("items", [])
+    if ctx.target:
+        items = [g for g in items if g.get("model") == ctx.target.get("slug")]
+    return R(f"{len(items)} nodi del grafo link interni" + (f" per {ctx.target.get('nome_artistico') or ctx.target['slug']}" if ctx.target else f", {len(r.get('orphans', []))} orfane"),
+             {"items": items, "orphans": r.get("orphans", []), "note": r.get("note")}, target=_tgt(ctx.target) if ctx.target else None)
 
 
-@cap("seo.opportunities", "seo", "Opportunità SEO del sito (contenuti mancanti, pagine deboli).", ["seo:read"], read_only=True, natural=["opportunità SEO"])
+@cap("seo.opportunities", "seo", "Opportunità SEO del sito (issue di contenuto aperte, link interni, bozze pronte).", ["seo:read"], read_only=True, natural=["opportunità SEO"])
 async def _opps(ctx: Ctx):
     from v1_seo import opportunities
-    r = await opportunities()
-    return R(f"{len(r) if isinstance(r, list) else 'n/d'} opportunità", {"items": r})
+    r = await opportunities(principal=ctx.principal)   # real route handler reused with explicit principal
+    n = len(r.get("items", r.get("issues", []))) if isinstance(r, dict) else 0
+    return R(f"{n} opportunità SEO", r if isinstance(r, dict) else {"items": r})
 
 
 # =====================================================================================================================
@@ -1197,21 +1228,30 @@ async def _landing_get(ctx: Ctx):
     return R(f"Landing {ctx.target['slug']} ({ctx.target.get('stato')}), validazione {v.get('score')}", {**ctx.target, "validation": v}, target=_tgt(ctx.target, "landing"))
 
 
-@cap("landing.create", "landing", "Crea una landing editoriale italiana in bozza (model/models, h1, title, intro, cta_text, meta_description, keywords, faq). Mai geoblocking.", ["landing:create"], params={"fields": {"type": "object", "required": True}}, natural=["crea una landing italiana per Alessia"])
+@cap("landing.create", "landing", "Crea una landing editoriale italiana in bozza (model/models, h1, title, titolo, hero_text, intro, cta_text, cta_url, meta_description, keywords, topics, faq, noindex). Mai geoblocking.", ["landing:create"], params={"fields": {"type": "object", "description": "campi landing (oppure passali direttamente in parameters)"}}, natural=["crea una landing italiana per Alessia"])
 async def _landing_create(ctx: Ctx):
-    from v1_landings import create_landing
+    """Preview and execute share the SAME builder (v1_ai.build_landing_data) and the SAME validator (LandingIn + validate_landing)."""
+    from v1_landings import create_landing, validate_landing, LandingIn
+    from v1_ai import AILandingCreate, build_landing_data
     f = dict(ctx.params.get("fields") or ctx.params)
-    refs = f.pop("models", None) or ([f.pop("model")] if f.get("model") else [])
-    models = [await resolve_model(r) for r in refs]
-    data = {"titolo": f.get("title") or f.get("titolo") or f.get("h1") or "", "h1": f.get("h1") or f.get("title") or "", "sottotitolo": f.get("subtitle") or f.get("sottotitolo") or "", "hero_text": f.get("hero_text") or "",
-            "intro": f.get("intro") or "", "cta_text": f.get("cta_text") or "ENTRA NEL LATO SEGRETO", "cta_url": f.get("cta_url") or "", "meta_description": f.get("meta_description") or "", "keywords": f.get("keywords") or [],
-            "slug": f.get("slug") or "", "model_ids": [m["id"] for m in models], "faq": f.get("faq") or [], "noindex": bool(f.get("noindex", False)), "targeting": {"country": "IT", "language": "it", "geoblocking": False, "editorial_only": True}}
+    f.pop("dry_run", None)
+    body = AILandingCreate(**f)
+    refs = body.models or ([body.model] if body.model else [])
+    slugs, names = [], []
+    for r in refs:
+        d = await resolve_model(r)
+        slugs.append(d["slug"])
+        names.append(d.get("nome_artistico") or d.get("nome"))
+    data = build_landing_data(body, slugs, names)
+    try:
+        validated = LandingIn(**data).model_dump()   # same schema create_landing applies
+    except Exception as e:
+        raise err(422, "VALIDATION_FAILED", "Dati landing non validi", errors=str(e)[:400])
     if ctx.dry:
-        from v1_landings import validate_landing
-        return R(f"Anteprima landing '{data['h1']}'", {"dry_run": True, "proposed": data, "validation": validate_landing(data)})
+        return R(f"Anteprima landing '{data['titolo']}' (bozza, {len(slugs)} modelle)", {"dry_run": True, "proposed": {k: v for k, v in validated.items() if k != "reason"}, "validation": validate_landing(validated)})
     out = await create_landing(data, ctx.principal, ctx.request)
     ver = await versions_col.find_one({"entity": "landing", "entity_id": out["id"]}, {"_id": 0, "id": 1}, sort=[("timestamp", -1)])
-    return R(f"Landing '{out.get('h1')}' creata in bozza ({out['slug']})", out, version_ids=[ver["id"]] if ver else [], target=_tgt(out, "landing"), rollback_ref=ver["id"] if ver else None)
+    return R(f"Landing '{out.get('titolo')}' creata in bozza ({out['slug']})", out, version_ids=[ver["id"]] if ver else [], target=_tgt(out, "landing"), rollback_ref=ver["id"] if ver else None)
 
 
 @cap("landing.update", "landing", "Modifica campi di una landing.", ["landing:update"], target="landing", params={"changes": {"type": "object", "required": True}})
@@ -1440,52 +1480,102 @@ async def _rb_version(ctx: Ctx):
     return R(f"Rollback eseguito su {v['entity']} {v['entity_id']} (nuova versione {r.get('new_version_id') or r.get('version_id')})", r, version_ids=[r.get("new_version_id") or r.get("version_id")], rollback_ref=r.get("new_version_id") or r.get("version_id"))
 
 
-async def _versions_for_session(session_id: str) -> List[dict]:
-    acts = await ai_actions_col.find({"session_id": session_id, "ok": True}, {"_id": 0, "version_ids": 1, "timestamp": 1}).sort("timestamp", -1).to_list(500)
-    vids = []
+async def _session_actions(session_id: str) -> List[dict]:
+    return await ai_actions_col.find({"session_id": session_id, "ok": True}, {"_id": 0, "id": 1, "action": 1, "version_ids": 1, "timestamp": 1, "request_id": 1, "secondary": 1}).sort("timestamp", -1).to_list(500)
+
+
+async def _versions_for_session(session_id: str, acts: Optional[List[dict]] = None) -> List[dict]:
+    """All versions produced by a session: (a) those the capabilities reported in ai_actions.version_ids, (b) those the underlying
+    services tagged with meta.session_id, (c) those written by the same request_ids (e.g. `file` versions from store_media)."""
+    acts = acts if acts is not None else await _session_actions(session_id)
+    ids, rids = [], []
     for a in acts:
+        rids.append(a.get("request_id"))
         for v in a.get("version_ids") or []:
-            if v and v not in vids:
-                vids.append(v)
-    vers = []
-    for vid in vids:
-        v = await versions_col.find_one({"id": vid}, {"_id": 0})
-        if v:
-            vers.append(v)
-    vers.sort(key=lambda x: x.get("timestamp", ""), reverse=True)   # newest first -> undo in reverse order
-    return vers
+            if v and v not in ids:
+                ids.append(v)
+    q = {"$or": [{"id": {"$in": ids}}, {"meta.session_id": session_id}, {"request_id": {"$in": [r for r in rids if r]}, "source": {"$ne": "rollback"}}]}
+    vers = await versions_col.find(q, {"_id": 0}).to_list(2000)
+    seen, out = set(), []
+    for v in vers:
+        if v["id"] in seen or v.get("source") == "rollback":
+            continue
+        seen.add(v["id"])
+        out.append(v)
+    out.sort(key=lambda x: x.get("timestamp", ""), reverse=True)   # newest first -> undo in reverse order
+    return out
 
 
-@cap("rollback.session", "rollback", "Annulla TUTTE le modifiche di una sessione (session_id) in ordine inverso; ogni annullamento crea una nuova versione. Creazioni → eliminazione logica.", ["rollback:execute"],
-     params={"session_id": {"type": "string", "required": True}}, natural=["annulla tutto quello che hai appena fatto"])
+def _slug_paths(entity: str, slug: str) -> List[str]:
+    base = {"model": "/modelle", "category": "/categorie", "landing": "/landing", "article": "/articoli"}.get(entity)
+    return [f"{base}/{slug}"] if base and slug else []
+
+
+@cap("rollback.session", "rollback", "Annulla TUTTE le modifiche di una sessione (session_id) in ordine inverso, comprese le risorse secondarie (file/varianti, link media→slot, issue SEO, redirect da cambio slug). Ogni annullamento crea una nuova versione: storia e audit conservati.",
+     ["rollback:execute"], params={"session_id": {"type": "string", "description": "default: sessione corrente"}}, natural=["annulla tutto quello che hai appena fatto"])
 async def _rb_session(ctx: Ctx):
     sid = ctx.params.get("session_id") or ctx.session_id
-    vers = await _versions_for_session(sid)
-    if not vers:
+    acts = await _session_actions(sid)
+    vers = await _versions_for_session(sid, acts)
+    secondary = [s for a in acts for s in (a.get("secondary") or [])]
+    if not vers and not secondary:
         return R(f"Nessuna modifica trovata per la sessione {sid}", {"session_id": sid, "versions": 0})
-    plan = [{"version_id": v["id"], "entity": v["entity"], "entity_id": v["entity_id"], "changed_fields": v.get("changed_fields"), "created": v.get("before") is None, "timestamp": v.get("timestamp")} for v in vers]
+    plan = [{"version_id": v["id"], "entity": v["entity"], "entity_id": v["entity_id"], "changed_fields": v.get("changed_fields"), "operation": v.get("operation"),
+             "already_rolled_back": bool(v.get("rolled_back")), "timestamp": v.get("timestamp")} for v in vers]
+    plan_secondary = [{"kind": s.get("kind"), "id": s.get("file_id") or s.get("id"), "restore": s.get("before")} for s in secondary]
     if ctx.dry:
-        return R(f"Anteprima: verrebbero annullate {len(vers)} modifiche della sessione {sid}", {"dry_run": True, "plan": plan})
-    done, new_vids, errors = [], [], []
+        return R(f"Anteprima: verrebbero annullate {len([p for p in plan if not p['already_rolled_back']])} modifiche + {len(secondary)} effetti secondari della sessione {sid}",
+                 {"dry_run": True, "plan": plan, "secondary": plan_secondary})
+    done, new_vids, errors, created_entities, side_effects = [], [], [], [], []
+    rid = request_id_of(ctx.request)
     for v in vers:
         try:
-            if v.get("before") is None:  # creation -> soft delete (never destructive)
-                from v1_versioning import ENTITY_COLLECTIONS
-                col = ENTITY_COLLECTIONS.get(v["entity"])
-                cur = await col.find_one({"id": v["entity_id"]}, {"_id": 0}) if col is not None else None
-                if cur and not cur.get("is_deleted"):
-                    new = {**cur, "is_deleted": True, "deleted_at": now_iso(), "updated_at": now_iso()}
-                    await col.replace_one({"id": cur["id"]}, new)
-                    nv = await record_version(v["entity"], cur["id"], cur, new, ctx.actor, source="rollback", reason=f"Rollback sessione {sid}: creazione annullata", request_id=request_id_of(ctx.request), meta={"session_id": ctx.session_id, "rollback_of": v["id"]})
-                    new_vids.append(nv["id"])
-                done.append({"version_id": v["id"], "action": "soft_deleted"})
+            if v.get("rolled_back"):
+                done.append({"version_id": v["id"], "action": "already_rolled_back"})
+                continue
+            r = await rollback_version(v["id"], ctx.actor, rid, f"Rollback sessione {sid}")   # creation -> soft delete, update -> restore `before`; never destructive
+            new_vids.append(r.get("new_version_id") or r.get("version_id"))
+            done.append({"version_id": v["id"], "entity": v["entity"], "action": "soft_deleted" if v.get("before") is None else "restored"})
+            if v.get("before") is None:
+                created_entities.append((v["entity"], v["entity_id"]))
+                if v["entity"] == "file":   # derived variants share the parent's lifecycle
+                    n = (await files_col.update_many({"parent_id": v["entity_id"], "is_deleted": {"$ne": True}}, {"$set": {"is_deleted": True, "deleted_at": now_iso(), "updated_at": now_iso()}})).modified_count
+                    if n:
+                        side_effects.append({"kind": "file_variants_soft_deleted", "parent_id": v["entity_id"], "count": n})
             else:
-                r = await rollback_version(v["id"], ctx.actor, request_id_of(ctx.request), f"Rollback sessione {sid}")
-                new_vids.append(r.get("new_version_id") or r.get("version_id"))
-                done.append({"version_id": v["id"], "action": "restored"})
+                issue_id = (v.get("meta") or {}).get("issue_id")
+                if issue_id:   # an SEO fix was undone -> the issue is open again (unless its entity is being removed, handled below)
+                    await seo_issues_col.update_one({"id": issue_id}, {"$set": {"status": "open", "reopened_at": now_iso(), "reopened_by": "rollback"}, "$unset": {"fixed_at": "", "version_id": ""}})
+                    side_effects.append({"kind": "seo_issue_reopened", "issue_id": issue_id})
+                if "slug" in (v.get("changed_fields") or []) and (v.get("before") or {}).get("slug"):
+                    # a slug change created a redirect old->new; the old slug is live again, so that redirect must not fire
+                    paths = _slug_paths(v["entity"], v["before"]["slug"])
+                    if paths:
+                        n = (await redirects_col.update_many({"from_path": {"$in": paths}, "active": True}, {"$set": {"active": False, "updated_at": now_iso(), "deactivated_by": "rollback", "deactivated_reason": f"rollback sessione {sid}"}})).modified_count
+                        if n:
+                            side_effects.append({"kind": "redirect_deactivated", "paths": paths})
         except Exception as e:
             errors.append({"version_id": v["id"], "error": str(getattr(e, 'detail', e))[:160]})
-    return R(f"Sessione {sid}: {len(done)} modifiche annullate, {len(errors)} errori (storia conservata)", {"session_id": sid, "done": done, "errors": errors, "plan": plan}, version_ids=[x for x in new_vids if x], warnings=[e["error"] for e in errors])
+    # entities created in the session are gone (soft) -> their open SEO issues are no longer real
+    for ent, eid in created_entities:
+        n = (await seo_issues_col.update_many({"entity_id": eid, "status": {"$in": ["open", "fixed"]}}, {"$set": {"status": "resolved", "resolved_at": now_iso(), "resolved_by": "rollback"}})).modified_count
+        if n:
+            side_effects.append({"kind": "seo_issues_resolved", "entity": ent, "entity_id": eid, "count": n})
+        if ent == "model":   # files linked to a model that no longer exists lose the link (the files themselves keep their own version-based fate)
+            n = (await files_col.update_many({"model_id": eid, "is_deleted": {"$ne": True}}, {"$set": {"model_id": None, "slot": None, "updated_at": now_iso()}})).modified_count
+            if n:
+                side_effects.append({"kind": "file_links_cleared", "model_id": eid, "count": n})
+    # non-versioned side effects recorded by the capabilities (newest first) -> restore the `before` state
+    for s in secondary:
+        try:
+            if s.get("kind") == "file_link" and s.get("file_id"):
+                await files_col.update_one({"id": s["file_id"]}, {"$set": {**(s.get("before") or {"model_id": None, "slot": None}), "updated_at": now_iso()}})
+                side_effects.append({"kind": "file_link_restored", "file_id": s["file_id"]})
+        except Exception as e:
+            errors.append({"secondary": s.get("kind"), "error": str(e)[:160]})
+    await audit_log(ctx.actor, "rollback.session", "session", sid, {"versions": len(done), "side_effects": len(side_effects), "errors": len(errors)}, rid, "rollback")
+    return R(f"Sessione {sid}: {len([d for d in done if d['action'] != 'already_rolled_back'])} modifiche annullate, {len(side_effects)} effetti secondari ripristinati, {len(errors)} errori (storia e audit conservati)",
+             {"session_id": sid, "done": done, "side_effects": side_effects, "errors": errors, "plan": plan}, version_ids=[x for x in new_vids if x], warnings=[e["error"] for e in errors])
 
 
 @cap("rollback.window", "rollback", "Annulla le modifiche fatte a una modella negli ultimi N minuti (opz. solo da ChatGPT/attore), in ordine inverso.", ["rollback:execute"], target="model",
@@ -1582,6 +1672,118 @@ async def _prepare_complete(ctx: Ctx):
              version_ids=[x for x in vids if x], target=_tgt(doc), next_steps=["models.publish (separato, dopo la tua approvazione)", f"rollback.session {{session_id:'{ctx.session_id}'}} per annullare tutto"])
 
 
+
+
+# =====================================================================================================================
+# STARTUP BINDING VERIFICATION
+# =====================================================================================================================
+# Only these modules can be referenced by a binding (no dynamic import of arbitrary modules, no reflection on user input).
+_BINDING_MODULES = ("v1_models", "v1_media", "v1_seo", "v1_landings", "v1_health", "v1_jobs", "v1_config", "v1_versioning", "v1_ai", "v1_ai_policy", "sanitize", "schemas")
+
+# capability id (exact) or glob -> required service bindings. "module.func" or "module.func(param, param)" = params that MUST exist in the real signature.
+BINDINGS: Dict[str, List[str]] = {
+    "models.*": ["v1_models.resolve_model", "v1_models.patch_model(dry_run, expected_updated_at, source)", "v1_models.validate_model", "v1_versioning.record_version(meta, request_id)"],
+    "models.create": ["v1_models.create_model"],
+    "models.prepare_complete": ["v1_models.create_model", "v1_models.patch_model(dry_run)", "v1_media.slot_changes(url, slot, side, tipo, pair_index)", "v1_seo.apply_safe_fixes(entity_id, dry_run)"],
+    "models.publish": ["v1_models.transition(dry_run)"], "models.unpublish": ["v1_models.transition(dry_run)"], "models.submit_review": ["v1_models.transition(dry_run)"],
+    "models.approve": ["v1_models.transition(dry_run)"], "models.reject": ["v1_models.transition(dry_run)"], "models.back_to_draft": ["v1_models.transition(dry_run)"],
+    "tags.*": ["v1_models.patch_model(dry_run)"],
+    "media.*": ["v1_media.public_file", "v1_media.slot_changes(url, slot, side, tipo, pair_index)", "v1_models.patch_model(dry_run)"],
+    "media.upload_url": ["v1_media.fetch_url_bytes(url)", "v1_media.store_media(original_filename, alt, seo_name, model_id, slot, actor, request_id)", "v1_media.validate_bytes"],
+    "media.update": ["v1_media.patch_media", "v1_media.MediaPatch"], "media.optimize": ["v1_media.optimize_media"], "media.optimize_all": ["v1_media.optimize_media"],
+    "media.soft_delete": ["v1_media.delete_media"], "media.broken": ["v1_health.check_media"],
+    "home.*": ["v1_models.patch_model(dry_run)"], "filmstrip.*": ["v1_models.patch_model(dry_run)", "v1_versioning.record_version(meta)"],
+    "settings.*": ["v1_versioning.record_version(meta)", "v1_versioning.diff_fields"], "config.*": ["v1_versioning.record_version(meta)"], "flags.*": ["v1_versioning.record_version(meta)"],
+    "categories.*": ["sanitize.slugify", "schemas.CategoryIn", "v1_versioning.record_version(meta)"], "categories.assign_models": ["v1_models.patch_model(dry_run)"],
+    "seo.audit": ["v1_seo.run_audit(scope, entity_id)"], "seo.safe_fix": ["v1_seo.apply_safe_fixes(actor, request_id, scope, entity_id, dry_run, source)"],
+    "seo.safe_fix_all": ["v1_seo.apply_safe_fixes(entity_id, dry_run)"], "seo.fix_issue": ["v1_seo.apply_issue_fix"], "seo.redirect_create": ["v1_seo.ensure_redirect"],
+    "seo.sitemap_status": ["v1_seo.sitemap_status(principal)"], "seo.internal_links": ["v1_seo.internal_link_suggestions(limit_per_model)"], "seo.opportunities": ["v1_seo.opportunities(principal)"],
+    "landing.*": ["v1_landings.resolve_landing", "v1_landings.validate_landing_full"], "landing.create": ["v1_landings.create_landing", "v1_landings.LandingIn", "v1_landings.validate_landing", "v1_ai.build_landing_data", "v1_ai.AILandingCreate"],
+    "landing.update": ["v1_landings.patch_landing"], "landing.publish": ["v1_landings.set_landing_state"], "landing.unpublish": ["v1_landings.set_landing_state"],
+    "alerts.*": ["v1_ai.alerts_view(history_hours)"], "alerts.resolve": ["v1_health.run_health_checks(auto_fix)"],
+    "jobs.run": ["v1_jobs.run_job(name, trigger, actor)"], "jobs.*": ["v1_jobs.JOBS"],
+    "backup.create": ["v1_config.create_backup(actor, include_events, reason)"], "backup.verify": ["v1_config._load_backup"], "backup.restore_plan": ["v1_config.restore_backup(backup_id, body, principal)", "v1_config.RestoreBody"],
+    "system.health_run": ["v1_health.run_health_checks(auto_fix)"],
+    "rollback.*": ["v1_versioning.rollback_version(version_id, actor, request_id, reason)"],
+}
+_BIND_RX = re.compile(r"^(?P<mod>[a-z0-9_]+)\.(?P<attr>[A-Za-z_][A-Za-z0-9_]*)(?:\((?P<params>[^)]*)\))?$")
+
+
+def _check_binding(spec: str) -> Optional[str]:
+    """Return None if the binding resolves (module allowlisted, attribute exists, declared params present in the real signature), else the reason."""
+    m = _BIND_RX.match(spec.strip())
+    if not m:
+        return f"binding malformato: {spec}"
+    mod, attr, params = m.group("mod"), m.group("attr"), m.group("params")
+    if mod not in _BINDING_MODULES:
+        return f"modulo non consentito: {mod}"
+    try:
+        module = importlib.import_module(mod)
+    except Exception as e:
+        return f"modulo {mod} non importabile: {type(e).__name__}"
+    obj = getattr(module, attr, None)
+    if obj is None:
+        return f"{mod}.{attr} inesistente"
+    if params:
+        wanted = [p.strip() for p in params.split(",") if p.strip()]
+        try:
+            real = inspect.signature(obj).parameters
+        except (TypeError, ValueError):
+            return f"{mod}.{attr}: firma non ispezionabile"
+        missing = [p for p in wanted if p not in real]
+        if missing:
+            return f"{mod}.{attr}: parametri mancanti nella firma reale {missing}"
+    return None
+
+
+def bindings_for(cap_id: str) -> List[str]:
+    out: List[str] = []
+    for pat, specs in BINDINGS.items():
+        if pat == cap_id or (pat.endswith("*") and fnmatch.fnmatch(cap_id, pat)):
+            out += [s for s in specs if s not in out]
+    return out
+
+
+def verify_bindings() -> dict:
+    """Validate every capability at startup. A failure marks the capability UNBOUND (never executable) but NEVER crashes the server."""
+    report = {"bound": 0, "unbound": 0, "critical_blocked": 0, "problems": {}}
+    for c in REGISTRY.values():
+        problems: List[str] = []
+        try:
+            if c.risk == CRITICAL:
+                c.status, c.unbound_reason = CRITICAL_BLOCKED, "CRITICAL: solo amministratore umano dal pannello, mai via dispatcher"
+                report["critical_blocked"] += 1
+                continue
+            if c.handler is None or not inspect.iscoroutinefunction(c.handler):
+                problems.append("handler mancante o non asincrono")
+            elif len(inspect.signature(c.handler).parameters) != 1:
+                problems.append("handler deve accettare esattamente (ctx)")
+            for spec in bindings_for(c.id):
+                why = _check_binding(spec)
+                if why:
+                    problems.append(why)
+        except Exception as e:   # a broken capability must not take the whole engine down
+            problems.append(f"verifica fallita: {type(e).__name__}: {str(e)[:120]}")
+        if problems:
+            c.status, c.unbound_reason = UNBOUND, "; ".join(problems)[:400]
+            report["unbound"] += 1
+            report["problems"][c.id] = problems
+        else:
+            c.status, c.unbound_reason = BOUND, None
+            report["bound"] += 1
+    report["total"] = len(REGISTRY)
+    if report["unbound"]:
+        logger.warning(f"[capabilities] {report['unbound']} capability UNBOUND: {sorted(report['problems'])}")
+    logger.info(f"[capabilities] registry verified: {report['bound']} bound / {report['unbound']} unbound / {report['critical_blocked']} critical-blocked of {report['total']}")
+    return report
+
+
+def registry_status() -> dict:
+    return {"total": len(REGISTRY), "bound": len([c for c in REGISTRY.values() if c.status == BOUND]), "unbound": [c.id for c in REGISTRY.values() if c.status == UNBOUND],
+            "critical_blocked": [c.id for c in REGISTRY.values() if c.status == CRITICAL_BLOCKED],
+            "by_risk": {r: len([c for c in REGISTRY.values() if c.risk == r]) for r in (SAFE, REVIEW, CRITICAL)}}
+
+
 # =====================================================================================================================
 # DISPATCHER
 # =====================================================================================================================
@@ -1603,6 +1805,9 @@ TARGET_RESOLVERS = {
     "alert": lambda ref: resolve_alert(ref),
     "media": lambda ref: find_media(ref),
 }
+# capabilities whose target is optional (site-wide when omitted)
+OPTIONAL_TARGET = {"seo.audit", "seo.issues", "seo.internal_links", "models.undelete"}
+_PY_TYPES = {"string": (str,), "integer": (int,), "number": (int, float), "boolean": (bool,), "array": (list,), "object": (dict,)}
 
 
 async def _resolve_target(kind: str, ref: Optional[str], params: dict):
@@ -1627,6 +1832,7 @@ async def _resolve_target(kind: str, ref: Optional[str], params: dict):
 
 
 def key_allows(principal: dict, cap_id: str) -> Optional[str]:
+    """Per-key capability policy. DENY always wins; ALLOW (when set) is a further restriction on top of the scopes, never a grant."""
     allow, deny = principal.get("capability_allow") or [], principal.get("capability_deny") or []
     if any(fnmatch.fnmatch(cap_id, d) for d in deny):
         return "denied"
@@ -1640,74 +1846,155 @@ async def disabled_capabilities() -> List[str]:
     return list(((c.get("ai") or {}).get("capabilities_disabled")) or [])
 
 
-def _needs_approval(capability: Capability, result: dict) -> bool:
-    return bool(result.get("needs_approval"))
+def _validate_params(capability: Capability, params: dict):
+    missing = [k for k, spec in (capability.params or {}).items() if isinstance(spec, dict) and spec.get("required") and params.get(k) in (None, "", [], {})]
+    if missing:
+        raise err(422, "VALIDATION_FAILED", f"Parametri obbligatori mancanti per '{capability.id}'", missing=missing, parameters_schema=capability.params)
+    wrong = []
+    for k, spec in (capability.params or {}).items():
+        if k in params and params[k] is not None and isinstance(spec, dict) and spec.get("type") in _PY_TYPES:
+            ok_types = _PY_TYPES[spec["type"]]
+            v = params[k]
+            if not isinstance(v, ok_types) or (spec["type"] in ("integer", "number") and isinstance(v, bool)):
+                wrong.append({"param": k, "expected": spec["type"], "got": type(v).__name__})
+    if wrong:
+        raise err(422, "VALIDATION_FAILED", "Tipi parametro non validi", wrong_types=wrong)
+
+
+def _body_hash(body: ExecuteBody) -> str:
+    raw = json.dumps({"action": body.action, "target": body.target, "parameters": body.parameters, "reason": body.reason, "expected_updated_at": body.expected_updated_at}, sort_keys=True, default=str)
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def unwrap_envelope(env: Any) -> dict:
+    """Single normalizer for values returned by reused v1_ai route handlers (they return {ok, action, summary, data, warnings, next_steps, ...}).
+    Always yields {ok, summary, data, warnings, next_steps, code} with `data` being the PAYLOAD (never a nested envelope)."""
+    if isinstance(env, dict) and "ok" in env and "data" in env and "summary" in env:
+        return {"ok": bool(env.get("ok", True)), "summary": env.get("summary") or "", "data": env.get("data") if isinstance(env.get("data"), dict) else {"value": env.get("data")},
+                "warnings": list(env.get("warnings") or []), "next_steps": list(env.get("next_steps") or []), "code": env.get("code")}
+    if isinstance(env, dict):
+        return {"ok": True, "summary": "", "data": env, "warnings": [], "next_steps": [], "code": None}
+    return {"ok": True, "summary": "", "data": {"value": env}, "warnings": [], "next_steps": [], "code": None}
+
+
+async def _gate(principal: dict, request: Request, *scopes: str, write: bool = False):
+    """Enforcement for v2 primitives that reuse v1_ai route handlers directly (their `Depends(ai_guard)` is NOT executed when called
+    as plain functions): key status (kill switch) -> READ_ONLY -> rate limit -> scopes. Mirrors ai_guard semantics."""
+    is_machine = principal.get("type") == "api_key"
+    cfg = await ai_config()
+    if is_machine:
+        if not cfg["enabled"]:
+            raise err(503, "AI_API_DISABLED", "ChatGPT API disattivata (kill switch)")
+        if write and not cfg["write_enabled"]:
+            raise err(403, "READ_ONLY_MODE", "Modalità READ_ONLY: nessuna modifica reale possibile (nemmeno tramite approvazione)")
+        request.state.rate = await rate_limit_shared(f"ai:{principal['id']}", min(cfg["rate_limit_per_min"], principal.get("rate_limit", cfg["rate_limit_per_min"])))
+    missing = missing_scopes_for(principal, scopes, False)
+    if missing:
+        raise err(403, "INSUFFICIENT_SCOPE", "Permessi insufficienti", missing_scopes=missing)
+    return cfg
 
 
 async def run_capability(principal: dict, request: Request, body: ExecuteBody, *, force_dry: bool = False, approved: bool = False) -> dict:
-    """The whole chain. Returns the AI envelope. Raises HTTPException with machine-readable codes."""
+    """The whole enforcement chain, in this order:
+    registry (unknown/unbound) -> key status (kill switch, disabled capability) -> scopes -> capability allow/deny -> READ_ONLY/FULL -> risk (CRITICAL/batch)
+    -> rate limit -> target resolve -> params validation -> concurrency -> idempotency -> preview/approval -> service -> audit -> rollback metadata -> response."""
     from v1_ai import envelope, log_action
     t0 = time.time()
+    # 1. registry
     capability = REGISTRY.get(body.action)
     if not capability:
         sugg = [k for k in REGISTRY if body.action.split(".")[0] in k][:10]
-        raise HTTPException(status_code=404, detail={"code": "UNKNOWN_CAPABILITY", "message": f"Capability '{body.action}' inesistente", "suggestions": sugg, "hint": "GET /api/v1/ai/capabilities"})
+        raise HTTPException(status_code=404, detail={"code": "UNKNOWN_CAPABILITY", "message": f"Capability '{body.action}' inesistente", "suggestions": sugg, "hint": "GET /api/v2/ai/capabilities"})
+    if capability.status == UNBOUND:
+        raise err(503, "CAPABILITY_UNBOUND", f"Capability '{body.action}' non eseguibile: binding non valido", reason=capability.unbound_reason)
     is_machine = principal.get("type") == "api_key"
     cfg = await ai_config()
+    # 2. key status
     if is_machine and not cfg["enabled"]:
         raise err(503, "AI_API_DISABLED", "ChatGPT API disattivata (kill switch)")
     if body.action in await disabled_capabilities():
         raise err(403, "CAPABILITY_DISABLED", f"Capability '{body.action}' disattivata dall'amministratore")
-    why = key_allows(principal, body.action)
-    if why:
-        raise err(403, "CAPABILITY_NOT_ALLOWED", f"Capability '{body.action}' non consentita per questa chiave ({why})")
     dry = bool(force_dry or body.dry_run) and not capability.read_only
     write = not capability.read_only
-    if is_machine and capability.risk == CRITICAL:
-        raise err(403, "CRITICAL_ACTION_BLOCKED", "Operazione critica: solo amministratore umano")
-    if is_machine and write and not cfg["write_enabled"] and not dry:
-        raise err(403, "READ_ONLY_MODE", "Modalità READ_ONLY: usa dry_run=true (anteprima) o chiedi all'amministratore di attivare FULL")
-    if capability.batch and not cfg["batch_enabled"] and not dry:
-        raise err(403, "BATCH_DISABLED", "Operazioni batch disattivate")
-    if is_machine:
-        rl = await rate_limit_shared(f"ai:{principal['id']}", min(cfg["rate_limit_per_min"], principal.get("rate_limit", cfg["rate_limit_per_min"])))
-        request.state.rate = rl
+    # 3. scopes (allow-list can never replace them)
     missing = missing_scopes_for(principal, ("ai:execute", *capability.scopes), dry and write)
     if missing:
         raise err(403, "INSUFFICIENT_SCOPE", "Permessi insufficienti", missing_scopes=missing, capability=body.action, hint="Con dry_run=true bastano gli scope di lettura")
+    # 4. per-key capability policy (deny > allow > scopes)
+    why = key_allows(principal, body.action)
+    if why:
+        raise err(403, "CAPABILITY_DENIED" if why == "denied" else "CAPABILITY_NOT_ALLOWED", f"Capability '{body.action}' non consentita per questa chiave ({why})")
+    # 5. READ_ONLY / FULL (an approval never turns READ_ONLY into a mutation: `approved` is irrelevant here)
+    if is_machine and write and not cfg["write_enabled"] and not dry:
+        raise err(403, "READ_ONLY_MODE", "Modalità READ_ONLY: usa dry_run=true (anteprima) o chiedi all'amministratore di attivare FULL")
+    # 6. risk
+    if capability.risk == CRITICAL or capability.status == CRITICAL_BLOCKED:
+        raise err(403, "CRITICAL_ACTION_BLOCKED", "Operazione critica: mai automatizzabile, solo amministratore umano dal pannello (anche in modalità FULL)")
+    if capability.batch and not cfg["batch_enabled"] and not dry:
+        raise err(403, "BATCH_DISABLED", "Operazioni batch disattivate")
     if dry and write and not capability.dry_run:
         raise err(422, "VALIDATION_FAILED", f"'{body.action}' non supporta dry_run")
+    # 7. rate limit (machine keys)
+    if is_machine:
+        request.state.rate = await rate_limit_shared(f"ai:{principal['id']}", min(cfg["rate_limit_per_min"], principal.get("rate_limit", cfg["rate_limit_per_min"])))
     session_id = body.session_id or request.headers.get("X-Session-ID") or f"ses_{uuid.uuid4().hex[:12]}"
     request.state.session_id = session_id
     request.state.ai_write = write and not dry
     request.state.ai_dry_run = dry
-    target_doc = await _resolve_target(capability.target, body.target, body.parameters or {})
-    if capability.target != "none" and target_doc is None and capability.id not in ("seo.audit", "seo.issues", "seo.internal_links", "models.undelete"):
+    # 8. target
+    params = body.parameters or {}
+    target_doc = await _resolve_target(capability.target, body.target, params)
+    if capability.target != "none" and target_doc is None and capability.id not in OPTIONAL_TARGET:
         raise err(422, "VALIDATION_FAILED", f"'{body.action}' richiede un target ({capability.target})")
-    ctx = Ctx(principal=principal, request=request, params=body.parameters or {}, dry=dry, reason=body.reason or "", session_id=session_id, approved=approved,
+    # 9. params validation
+    _validate_params(capability, params)
+    # 10. concurrency (optimistic): the caller states the version it looked at
+    if body.expected_updated_at and target_doc and target_doc.get("updated_at") and target_doc["updated_at"] != body.expected_updated_at:
+        raise err(409, "CONFLICT", "Il target è cambiato rispetto alla versione indicata (expected_updated_at)", current_updated_at=target_doc["updated_at"], expected_updated_at=body.expected_updated_at)
+    # 11. idempotency (real mutations only)
+    idem_key = request.headers.get("Idempotency-Key")
+    idem_doc_key = None
+    if idem_key and write and not dry:
+        idem_doc_key = {"key": f"v2:{principal.get('id')}:{idem_key}"}
+        h = _body_hash(body)
+        cached = await idempotency_col.find_one(idem_doc_key, {"_id": 0})
+        if cached:
+            if cached.get("body_hash") != h:
+                raise err(409, "IDEMPOTENCY_CONFLICT", "Idempotency-Key già usata con un payload diverso", idempotency_key=idem_key)
+            replay = json.loads(cached["body"])
+            replay["request_id"] = request_id_of(request)
+            replay.setdefault("data", {})["idempotent_replayed"] = True
+            return replay
+    ctx = Ctx(principal=principal, request=request, params=params, dry=dry, reason=body.reason or "", session_id=session_id, approved=approved,
               expected_updated_at=body.expected_updated_at, target_ref=body.target, target=target_doc)
+    # 12. service (preview and execute go through the same handler -> same service/validator, `dry` decides)
     try:
         result = await capability.handler(ctx)
     except HTTPException as e:
-        await log_action(principal, request, body.action, {"target": body.target, "parameters": body.parameters, "dry_run": dry, "session_id": session_id}, f"Errore: {e.detail if isinstance(e.detail, str) else (e.detail or {}).get('code')}", ok=False,
-                         target={"ref": body.target}, started=t0, reason=body.reason or "")
+        await log_action(principal, request, body.action, {"target": body.target, "parameters": params, "dry_run": dry}, f"Errore: {e.detail if isinstance(e.detail, str) else (e.detail or {}).get('code')}", ok=False,
+                         target={"ref": body.target}, started=t0, reason=body.reason or "", session_id=session_id)
         raise
+    # 13. approval (REVIEW): proposal only, nothing written; confirm re-enters run_capability with approved=True
     approval = None
-    if _needs_approval(capability, result) and not dry:
+    if result.get("needs_approval") and not dry:
         na = result["needs_approval"]
-        payload = {"action": body.action, "target": body.target, "parameters": body.parameters, "reason": body.reason, "session_id": session_id, "expected_updated_at": na.get("expected_updated_at")}
+        payload = {"action": body.action, "target": body.target, "parameters": params, "reason": body.reason, "session_id": session_id, "expected_updated_at": na.get("expected_updated_at")}
         approval = await create_approval("CAPABILITY", actor_of(principal), result.get("target") or {"ref": body.target}, payload, na.get("before"), na.get("after"), body.reason or f"{body.action} ({', '.join(na.get('fields') or [])})", request_id_of(request))
-        approval["confirm_with"] = "POST /api/v1/ai/approvals/confirm {token} oppure POST /api/v1/ai/approvals/{id}/approve"
+        approval["id"] = approval.get("approval_id")   # alias: approveApproval/rejectApproval use the id in the path
+        approval["confirm_with"] = f"POST /api/v2/ai/approvals/{approval['id']}/approve {{token}}"
         approval["capability"] = body.action
-        result["next_steps"] = ["Mostra all'utente prima/dopo e chiedi conferma", "Conferma: approvals.confirm {token}"] + result.get("next_steps", [])
+        result["next_steps"] = ["Mostra all'utente prima/dopo e chiedi conferma esplicita", "Conferma: approveApproval {token}"] + result.get("next_steps", [])
+    # 14. audit
     version_ids = [v for v in result.get("version_ids") or [] if v]
-    await log_action(principal, request, body.action, {"target": body.target, "parameters": body.parameters, "dry_run": dry, "session_id": session_id, "approved": approved},
+    await log_action(principal, request, body.action, {"target": body.target, "parameters": params, "dry_run": dry, "approved": approved},
                      result["summary"], ok=True, target=result.get("target") or ({"ref": body.target} if body.target else None), changes=result.get("changes"), version_ids=version_ids, started=t0,
-                     rollback_ref=result.get("rollback_ref") or (version_ids[0] if version_ids else None), before=result.get("before"), after=result.get("after"), reason=body.reason or "")
+                     rollback_ref=result.get("rollback_ref") or (version_ids[0] if version_ids else None), before=result.get("before"), after=result.get("after"), reason=body.reason or "",
+                     session_id=session_id, extra={"secondary": result.get("secondary") or [], "capability_version": capability.version, "risk": capability.risk, "approval_id": approval.get("approval_id") if approval else None})
     if version_ids and not dry:
         bump("mutations")
+    # 15. rollback metadata + response
     data = dict(result.get("data") or {})
-    data.update({"capability": body.action, "capability_version": capability.version, "risk": capability.risk, "dry_run": dry, "session_id": session_id,
+    data.update({"capability": body.action, "capability_version": capability.version, "risk": capability.risk, "dry_run": dry, "session_id": session_id, "mode": cfg["mode"],
                  "rollback": {"available": bool(version_ids), "version_ids": version_ids, "undo": f"execute rollback.session {{session_id:'{session_id}'}}" if version_ids else None}})
     if result.get("before") is not None and "before" not in data:
         data["before"] = result["before"]
@@ -1715,79 +2002,39 @@ async def run_capability(principal: dict, request: Request, body: ExecuteBody, *
         data["after"] = result["after"]
     if result.get("target"):
         data["target"] = result["target"]
-    return envelope(body.action, request, result["summary"], data, result.get("warnings"), result.get("next_steps"), ok=True, changes=result.get("changes"), approval=approval)
-
-
-@caps_router.post("/execute", operation_id="executeCapability", summary="Esegue una capability strutturata (dispatcher deterministico)")
-async def execute(body: ExecuteBody, request: Request, principal: dict = Depends(resolve_principal)):
-    if body.run_async and REGISTRY.get(body.action) and REGISTRY[body.action].batch and not body.dry_run:
-        return await _enqueue(principal, request, body)
-    return await run_capability(principal, request, body)
-
-
-@caps_router.post("/preview", operation_id="previewCapability", summary="Anteprima (dry_run forzato): before/after/diff/warnings, nessuna modifica")
-async def preview(body: ExecuteBody, request: Request, principal: dict = Depends(resolve_principal)):
-    return await run_capability(principal, request, body, force_dry=True)
-
-
-# ---------------- async jobs (base) ----------------
-from database import db as _db
-ai_jobs_col = _db["ai_jobs"]
-
-
-async def _enqueue(principal: dict, request: Request, body: ExecuteBody) -> dict:
-    from v1_ai import envelope
-    job = {"id": f"aij_{uuid.uuid4().hex[:12]}", "status": "queued", "action": body.action, "target": body.target, "parameters": redact(body.parameters), "actor": actor_of(principal),
-           "created_at": now_iso(), "started_at": None, "finished_at": None, "progress": 0, "result": None, "error": None, "request_id": request_id_of(request), "session_id": body.session_id}
-    await ai_jobs_col.insert_one(dict(job))
-
-    async def _run():
-        await ai_jobs_col.update_one({"id": job["id"]}, {"$set": {"status": "running", "started_at": now_iso(), "progress": 10}})
+    out = envelope(body.action, request, result["summary"], data, result.get("warnings"), result.get("next_steps"), ok=True, changes=result.get("changes"), approval=approval)
+    if idem_doc_key:
         try:
-            res = await run_capability(principal, request, body)
-            await ai_jobs_col.update_one({"id": job["id"]}, {"$set": {"status": "done", "finished_at": now_iso(), "progress": 100, "result": redact({k: v for k, v in res.items() if k != "request_id"})}})
-        except Exception as e:
-            await ai_jobs_col.update_one({"id": job["id"]}, {"$set": {"status": "failed", "finished_at": now_iso(), "error": str(getattr(e, "detail", e))[:500]}})
-    asyncio.create_task(_run())
-    return envelope(body.action, request, f"Operazione '{body.action}' accodata (job {job['id']})", {"job_id": job["id"], "status": "queued", "poll": f"GET /api/v1/ai/jobs/{job['id']}"}, next_steps=[f"Controlla GET /api/v1/ai/jobs/{job['id']}"])
+            await idempotency_col.insert_one({**idem_doc_key, "body_hash": _body_hash(body), "status": 200, "body": json.dumps(redact(out), default=str), "request_id": request_id_of(request),
+                                              "created_dt": datetime.now(timezone.utc), "created_at": now_iso()})
+        except Exception:
+            pass
+    return out
 
 
-@caps_router.get("/jobs/{job_id}", operation_id="getJob", summary="Stato di un job asincrono AI")
-async def get_job(job_id: str, request: Request, principal: dict = Depends(resolve_principal)):
-    from v1_ai import envelope
-    j = await ai_jobs_col.find_one({"id": job_id}, {"_id": 0})
-    if not j:
-        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "Job non trovato"})
-    return envelope("jobs.get", request, f"Job {job_id}: {j['status']} ({j.get('progress', 0)}%)", j)
+# =====================================================================================================================
+# v2 PRIMITIVES (compact GPT surface: 12 operations)
+# =====================================================================================================================
+async def _kill_switch(principal: dict):
+    if principal.get("type") == "api_key" and not (await ai_config())["enabled"]:
+        raise err(503, "AI_API_DISABLED", "ChatGPT API disattivata (kill switch)")
 
 
-# ---------------- capability catalog ----------------
-@caps_router.get("/capabilities/{capability_id}", operation_id="getCapability", summary="Dettaglio di una capability (parametri, scope, rischio, esempi)")
-async def get_capability(capability_id: str, request: Request, principal: dict = Depends(resolve_principal)):
-    from v1_ai import envelope
-    c = REGISTRY.get(capability_id)
-    if not c:
-        raise HTTPException(status_code=404, detail={"code": "UNKNOWN_CAPABILITY", "message": f"Capability '{capability_id}' inesistente", "suggestions": [k for k in REGISTRY if capability_id.split('.')[0] in k][:10]})
-    cfg = await ai_config()
-    pub = c.public()
-    missing = missing_scopes_for(principal, ("ai:execute", *c.scopes), False)
-    pub["access"] = "full" if not missing else ("preview_only" if not missing_scopes_for(principal, ("ai:execute", *c.scopes), True) else "none")
-    pub["disabled"] = capability_id in await disabled_capabilities()
-    pub["key_restriction"] = key_allows(principal, capability_id)
-    pub["mode"] = cfg["mode"]
-    return envelope("capabilities.get", request, f"{c.id}: {c.description[:120]}", pub)
-
-
-def catalog_for(principal: dict, disabled: List[str], mode: str) -> dict:
+def catalog_for(principal: dict, disabled: List[str], mode: str, category: Optional[str] = None, q: Optional[str] = None, compact: bool = False) -> dict:
     items = []
     for c in REGISTRY.values():
+        if not c.executable:
+            continue   # UNBOUND / CRITICAL never advertised to machines
+        if category and c.category != category:
+            continue
+        if q and q.lower() not in (c.id + " " + c.description + " " + " ".join(c.natural)).lower():
+            continue
         missing = missing_scopes_for(principal, ("ai:execute", *c.scopes), False)
         access = "full" if not missing else ("preview_only" if (not c.read_only and c.dry_run and not missing_scopes_for(principal, ("ai:execute", *c.scopes), True)) else "none")
-        if access == "none":
+        if access == "none" or c.id in disabled or key_allows(principal, c.id):
             continue
-        if c.id in disabled or key_allows(principal, c.id):
-            continue
-        d = c.public()
+        d = c.public() if not compact else {"id": c.id, "category": c.category, "description": c.description, "risk": c.risk, "target": c.target, "read_only": c.read_only,
+                                             "parameters": sorted((c.params or {}).keys()), "capability_version": c.version}
         d["access"] = access
         if mode == "READ_ONLY" and not c.read_only:
             d["read_only_note"] = "Modalità READ_ONLY: solo dry_run=true"
@@ -1795,30 +2042,123 @@ def catalog_for(principal: dict, disabled: List[str], mode: str) -> dict:
     cats: Dict[str, int] = {}
     for i in items:
         cats[i["category"]] = cats.get(i["category"], 0) + 1
-    return {"capabilities": items, "count": len(items), "by_category": cats, "risk_levels": {SAFE: "eseguita subito", REVIEW: "anteprima + token di approvazione", CRITICAL: "mai via API key"}}
+    return {"capabilities": items, "count": len(items), "by_category": cats, "mode": mode,
+            "risk_levels": {SAFE: "eseguita subito (FULL) o anteprima (READ_ONLY)", REVIEW: "anteprima + approvazione esplicita", CRITICAL: "mai via API"},
+            "how_to": {"preview": "POST /api/v2/ai/preview {action, target, parameters}", "execute": "POST /api/v2/ai/execute {action, target, parameters, reason, session_id}",
+                       "undo": "POST /api/v2/ai/rollback {session_id}"}}
 
 
-# ---------------- approvals: approve / reject by id ----------------
+@caps_router.get("/capabilities", operation_id="getCapabilities", summary="Catalogo delle capability eseguibili da questa chiave (filtri: category, q, compact)")
+async def v2_get_capabilities(request: Request, category: Optional[str] = None, q: Optional[str] = None, compact: bool = True, principal: dict = Depends(resolve_principal)):
+    from v1_ai import envelope
+    cfg = await _gate(principal, request, "ai:execute")
+    cat = catalog_for(principal, await disabled_capabilities(), cfg["mode"], category, q, compact)
+    return envelope("capabilities.list", request, f"{cat['count']} capability disponibili ({cfg['mode']})", cat,
+                    next_steps=["Dettaglio: GET /api/v2/ai/capabilities/{id}", "Anteprima sempre prima di una modifica: POST /api/v2/ai/preview"])
+
+
+@caps_router.get("/capabilities/{capability_id}", operation_id="getCapability", summary="Dettaglio di una capability (parametri, scope, rischio, esempi, accesso)")
+async def v2_get_capability(capability_id: str, request: Request, principal: dict = Depends(resolve_principal)):
+    from v1_ai import envelope
+    cfg = await _gate(principal, request, "ai:execute")
+    c = REGISTRY.get(capability_id)
+    if not c:
+        raise HTTPException(status_code=404, detail={"code": "UNKNOWN_CAPABILITY", "message": f"Capability '{capability_id}' inesistente", "suggestions": [k for k in REGISTRY if capability_id.split('.')[0] in k][:10]})
+    pub = c.public()
+    missing = missing_scopes_for(principal, ("ai:execute", *c.scopes), False)
+    pub["access"] = "none" if not c.executable else ("full" if not missing else ("preview_only" if not missing_scopes_for(principal, ("ai:execute", *c.scopes), True) else "none"))
+    pub["disabled"] = capability_id in await disabled_capabilities()
+    pub["key_restriction"] = key_allows(principal, capability_id)
+    pub["mode"] = cfg["mode"]
+    if c.status != BOUND and principal.get("type") != "api_key":
+        pub["status_reason"] = c.unbound_reason
+    return envelope("capabilities.get", request, f"{c.id}: {c.description[:120]}", pub)
+
+
+@caps_router.post("/preview", operation_id="previewCapability", summary="Anteprima (dry_run forzato): before/after/diff/warnings, nessuna modifica scritta")
+async def v2_preview(body: ExecuteBody, request: Request, principal: dict = Depends(resolve_principal)):
+    return await run_capability(principal, request, body, force_dry=True)
+
+
+@caps_router.post("/execute", operation_id="executeCapability", summary="Esegue una capability (dispatcher deterministico: scope, policy, READ_ONLY, approvazione, audit, rollback)")
+async def v2_execute(body: ExecuteBody, request: Request, principal: dict = Depends(resolve_principal)):
+    if body.run_async and REGISTRY.get(body.action) and REGISTRY[body.action].batch and not body.dry_run:
+        return await _enqueue(principal, request, body)
+    return await run_capability(principal, request, body)
+
+
+# ---------------- async jobs (base) ----------------
+ai_jobs_col = _db["ai_jobs"]
+_bg_tasks: set = set()
+
+
+async def _enqueue(principal: dict, request: Request, body: ExecuteBody) -> dict:
+    from v1_ai import envelope
+    # enforce the whole chain in dry mode first: a job is never queued for something the caller could not execute
+    await run_capability(principal, request, ExecuteBody(**{**body.model_dump(), "dry_run": True, "run_async": False}), force_dry=True)
+    job = {"id": f"aij_{uuid.uuid4().hex[:12]}", "status": "queued", "action": body.action, "target": body.target, "parameters": redact(body.parameters), "actor": actor_of(principal),
+           "created_at": now_iso(), "started_at": None, "finished_at": None, "progress": 0, "result": None, "error": None, "request_id": request_id_of(request), "session_id": body.session_id}
+    await ai_jobs_col.insert_one(dict(job))
+
+    async def _run():
+        await ai_jobs_col.update_one({"id": job["id"]}, {"$set": {"status": "running", "started_at": now_iso(), "progress": 10}})
+        try:
+            res = await run_capability(principal, request, ExecuteBody(**{**body.model_dump(), "run_async": False}))
+            await ai_jobs_col.update_one({"id": job["id"]}, {"$set": {"status": "done", "finished_at": now_iso(), "progress": 100, "result": redact({k: v for k, v in res.items() if k != "request_id"})}})
+        except Exception as e:
+            await ai_jobs_col.update_one({"id": job["id"]}, {"$set": {"status": "failed", "finished_at": now_iso(), "error": str(getattr(e, "detail", e))[:500]}})
+    t = asyncio.create_task(_run())
+    _bg_tasks.add(t)
+    t.add_done_callback(_bg_tasks.discard)
+    return envelope(body.action, request, f"Operazione '{body.action}' accodata (job {job['id']})", {"job_id": job["id"], "status": "queued", "poll": f"GET /api/v2/ai/jobs/{job['id']}"}, next_steps=[f"Controlla GET /api/v2/ai/jobs/{job['id']}"])
+
+
+@caps_router.get("/jobs/{job_id}", operation_id="getJob", summary="Stato di un job asincrono AI")
+async def v2_get_job(job_id: str, request: Request, principal: dict = Depends(resolve_principal)):
+    from v1_ai import envelope
+    await _gate(principal, request, "ai:execute")
+    j = await ai_jobs_col.find_one({"id": job_id}, {"_id": 0})
+    if not j:
+        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "Job non trovato"})
+    if principal.get("type") == "api_key" and j.get("actor") != actor_of(principal):
+        raise err(403, "INSUFFICIENT_SCOPE", "Puoi consultare solo i tuoi job")
+    return envelope("jobs.get", request, f"Job {job_id}: {j['status']} ({j.get('progress', 0)}%)", j)
+
+
+# ---------------- approvals ----------------
 class ApproveBody(BaseModel):
     token: Optional[str] = None
     reason: Optional[str] = ""
 
 
+@caps_router.get("/approvals", operation_id="listApprovals", summary="Proposte in attesa di approvazione (le API key vedono solo le proprie)")
+async def v2_list_approvals(request: Request, principal: dict = Depends(resolve_principal)):
+    from v1_ai import envelope
+    await _gate(principal, request, "ai:execute")
+    items = await list_pending_approvals(actor_of(principal) if principal.get("type") == "api_key" else None)
+    return envelope("approvals.list", request, f"{len(items)} proposte in attesa", {"items": items, "count": len(items)})
+
+
 async def execute_approved_capability(doc: dict, principal: dict, request: Request) -> dict:
+    """Re-enter the SAME chain with approved=True. Scopes, READ_ONLY, CRITICAL, allow/deny, concurrency are all re-checked: an approval never bypasses enforcement."""
     p = doc.get("payload") or {}
     body = ExecuteBody(action=p["action"], target=p.get("target"), parameters=p.get("parameters") or {}, dry_run=False, reason=p.get("reason") or "", session_id=p.get("session_id"), expected_updated_at=p.get("expected_updated_at"))
     return await run_capability(principal, request, body, approved=True)
 
 
-@caps_router.post("/approvals/{approval_id}/approve", operation_id="approveApproval", summary="Approva ed esegue una proposta in attesa (token per API key; admin JWT senza token)")
-async def approve_by_id(approval_id: str, body: ApproveBody, request: Request, principal: dict = Depends(resolve_principal)):
+@caps_router.post("/approvals/{approval_id}/approve", operation_id="approveApproval", summary="Approva ed esegue una proposta (token per API key; admin JWT senza token). Mai in READ_ONLY.")
+async def v2_approve(approval_id: str, body: ApproveBody, request: Request, principal: dict = Depends(resolve_principal)):
     from v1_ai import ai_confirm, AIConfirm
-    doc = await approvals_col.find_one({"id": approval_id}, {"_id": 0})
+    doc = await approvals_col.find_one({"id": approval_id}, {"_id": 0, "token_hash": 0})
     if not doc:
         raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "Approvazione non trovata"})
+    # ai_confirm's Depends(ai_guard(...write=True)) does not run when called as a function -> enforce the same gate here, BEFORE the token is consumed
+    await _gate(principal, request, "ai:execute", write=True)
     if principal.get("type") == "api_key":
         if not body.token:
             raise err(400, "APPROVAL_INVALID", "Le API key devono fornire il token di approvazione")
+        if doc.get("actor") != actor_of(principal):
+            raise err(403, "APPROVAL_INVALID", "Puoi confermare solo le tue proposte")
         return await ai_confirm(AIConfirm(token=body.token, reason=body.reason or ""), request, principal)
     # human admin (JWT): approve without token
     if doc.get("status") != "pending":
@@ -1826,18 +2166,19 @@ async def approve_by_id(approval_id: str, body: ApproveBody, request: Request, p
     if doc.get("expires_at", "") < now_iso():
         await approvals_col.update_one({"id": doc["id"]}, {"$set": {"status": "expired"}})
         raise err(410, "APPROVAL_EXPIRED", "Approvazione scaduta")
+    if doc.get("type") != "CAPABILITY":
+        raise err(422, "VALIDATION_FAILED", f"Tipo approvazione {doc.get('type')}: usa /api/v1/ai/approvals/confirm con il token")
+    res = await execute_approved_capability(doc, principal, request)   # runs the chain first: if it fails the approval stays pending
     await approvals_col.update_one({"id": doc["id"]}, {"$set": {"status": "used", "used_at": now_iso(), "approved_by": actor_of(principal)}})
     bump("approvals_confirmed")
-    if doc.get("type") == "CAPABILITY":
-        res = await execute_approved_capability(doc, principal, request)
-        res["data"]["approval_id"] = approval_id
-        return res
-    raise err(422, "VALIDATION_FAILED", f"Tipo approvazione {doc.get('type')}: usa /approvals/confirm con il token")
+    res["data"]["approval_id"] = approval_id
+    return res
 
 
 @caps_router.post("/approvals/{approval_id}/reject", operation_id="rejectApproval", summary="Rifiuta una proposta in attesa (nessuna modifica)")
-async def reject_by_id(approval_id: str, body: ApproveBody, request: Request, principal: dict = Depends(resolve_principal)):
+async def v2_reject(approval_id: str, body: ApproveBody, request: Request, principal: dict = Depends(resolve_principal)):
     from v1_ai import envelope, log_action
+    await _gate(principal, request, "ai:execute")
     doc = await approvals_col.find_one({"id": approval_id}, {"_id": 0, "token_hash": 0})
     if not doc:
         raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "Approvazione non trovata"})
@@ -1850,31 +2191,163 @@ async def reject_by_id(approval_id: str, body: ApproveBody, request: Request, pr
     return envelope("approvals.reject", request, f"Proposta rifiutata: nessuna modifica applicata ({doc.get('type')})", {"approval_id": approval_id, "status": "rejected"})
 
 
-# ---------------- admin: capability governance (JWT) ----------------
+# ---------------- analytics / status / rollback / find (thin primitives over existing services) ----------------
+@caps_router.post("/analytics/query", operation_id="queryAnalytics", summary="Interroga le analytics (metric/group_by/model/range) riusando il motore Phase 10")
+async def v2_query_analytics(body: Dict[str, Any], request: Request, principal: dict = Depends(resolve_principal)):
+    from v1_ai import ai_query, AIQuery, envelope
+    await _gate(principal, request, "analytics:read")
+    u = unwrap_envelope(await ai_query(AIQuery(**(body or {})), request, principal))
+    data = dict(u["data"]); data["capability"] = "analytics.query"
+    return envelope("analytics.query", request, u["summary"], data, u["warnings"], u["next_steps"], ok=u["ok"], code=u["code"])
+
+
+@caps_router.get("/status", operation_id="getSystemStatus", summary="Stato sistema: modalità (READ_ONLY/FULL), salute, alert correnti, registry capability")
+async def v2_status(request: Request, principal: dict = Depends(resolve_principal)):
+    from v1_ai import ai_status, envelope
+    await _gate(principal, request, "system:status")
+    u = unwrap_envelope(await ai_status(request, principal))
+    data = dict(u["data"])
+    data["capabilities_registry"] = {k: (v if not isinstance(v, list) else len(v)) for k, v in registry_status().items()}
+    data["mode"] = (await ai_config())["mode"]   # top-level for GPT convenience (also in data.ai.mode)
+    data["capability"] = "system.status"
+    return envelope("system.status", request, u["summary"], data, u["warnings"], u["next_steps"], ok=u["ok"], code=u["code"])
+
+
+class RollbackBody(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    version_id: Optional[str] = None
+    session_id: Optional[str] = None
+    model: Optional[str] = None
+    minutes: Optional[int] = None
+    dry_run: bool = False
+    reason: Optional[str] = ""
+
+
+@caps_router.post("/rollback", operation_id="rollback", summary="Annulla: una versione (version_id), una sessione intera (session_id) o le modifiche a una modella negli ultimi N minuti")
+async def v2_rollback(body: RollbackBody, request: Request, principal: dict = Depends(resolve_principal)):
+    if body.version_id:
+        eb = ExecuteBody(action="rollback.version", parameters={"version_id": body.version_id}, dry_run=body.dry_run, reason=body.reason)
+    elif body.session_id:
+        eb = ExecuteBody(action="rollback.session", parameters={"session_id": body.session_id}, dry_run=body.dry_run, reason=body.reason)
+    elif body.model:
+        eb = ExecuteBody(action="rollback.window", target=body.model, parameters={"minutes": body.minutes or 20}, dry_run=body.dry_run, reason=body.reason)
+    else:
+        raise err(422, "VALIDATION_FAILED", "Indica version_id, session_id oppure model (+minutes)")
+    return await run_capability(principal, request, eb)
+
+
+class FindBody(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    reference: str
+
+
+@caps_router.post("/models/find", operation_id="findModel", summary="Risolve un riferimento (id, slug, nome, nome parziale) in una modella; 409 AMBIGUOUS_REFERENCE se più corrispondenze")
+async def v2_find_model(body: FindBody, request: Request, principal: dict = Depends(resolve_principal)):
+    from v1_ai import envelope
+    from v1_models import summary as model_summary
+    await _gate(principal, request, "models:read")
+    doc = await resolve_model(body.reference)
+    s = model_summary(doc)
+    s["etag"] = doc.get("updated_at")
+    return envelope("models.find", request, f"Trovata: {s.get('nome_artistico') or s.get('nome')} ({s['slug']}, {s['workflow_status']})", s,
+                    next_steps=["Dettaglio: execute models.get", "Modifica: preview models.update {changes}"])
+
+
+# ---------------- OpenAPI v2 (compact GPT Action schema, public document, separate from v1) ----------------
+def build_openapi_v2(base_url: str, mode: str) -> dict:
+    from v1_ai_openapi import _op, _p
+    EXEC = {"type": "object", "required": ["action"], "properties": {
+        "action": {"type": "string", "description": "Capability id from getCapabilities (e.g. models.update, media.assign, seo.safe_fix, models.prepare_complete)"},
+        "target": {"type": "string", "description": "Target reference (model id/slug/name, landing slug, category, alert id, job name). Ambiguous -> 409 AMBIGUOUS_REFERENCE with data.matches"},
+        "parameters": {"type": "object", "additionalProperties": True, "description": "Capability parameters (see parameters_schema in getCapability)"},
+        "dry_run": {"type": "boolean", "default": False, "description": "true = preview only, nothing written (the only mode accepted in READ_ONLY)"},
+        "reason": {"type": "string", "description": "Why (stored in audit/version history)"},
+        "session_id": {"type": "string", "description": "Group related changes so they can be undone together with rollback {session_id}"},
+        "expected_updated_at": {"type": "string", "description": "Optimistic concurrency: updated_at you last saw (409 CONFLICT if changed)"}}}
+    paths: Dict[str, Any] = {
+        "/api/v2/ai/capabilities": {"get": _op("getCapabilities", "List capabilities this key can run", "Compact catalog: id, category, description, risk, target, parameters, access. Filter with category/q. Call first.",
+                                              [_p("category", "query", "models|media|homepage|categories|seo|landing|alerts|jobs|backup|system|rollback|workflow"), _p("q", "query", "Free text filter"), _p("compact", "query", "true (default) = short form", typ="boolean", default=True)], tag="Capabilities")},
+        "/api/v2/ai/capabilities/{capability_id}": {"get": _op("getCapability", "Capability detail", "Full parameters_schema, required scopes, risk, dry-run/rollback support, examples and your access level.",
+                                                               [_p("capability_id", "path", "Capability id", True)], tag="Capabilities")},
+        "/api/v2/ai/preview": {"post": _op("previewCapability", "Preview a capability (no write)", "Same service and validation as execute, dry_run forced: before/after/changes/warnings. Always preview before executing.", body=EXEC, tag="Execute")},
+        "/api/v2/ai/execute": {"post": _op("executeCapability", "Execute a capability", "Deterministic: scopes, key policy, READ_ONLY, risk. REVIEW_REQUIRED returns approval_required with a token: show before/after and ask the user.", body=EXEC, tag="Execute")},
+        "/api/v2/ai/approvals": {"get": _op("listApprovals", "Pending approvals", "Your pending proposals (before/after, expiry).", tag="Approvals")},
+        "/api/v2/ai/approvals/{approval_id}/approve": {"post": _op("approveApproval", "Approve and apply a proposal", "Requires the token returned with approval_required. Blocked in READ_ONLY. Only after explicit user confirmation.",
+                                                                   [_p("approval_id", "path", "Approval id", True)], {"type": "object", "required": ["token"], "properties": {"token": {"type": "string"}, "reason": {"type": "string"}}}, tag="Approvals")},
+        "/api/v2/ai/approvals/{approval_id}/reject": {"post": _op("rejectApproval", "Reject a proposal", "Nothing is changed.", [_p("approval_id", "path", "Approval id", True)], {"type": "object", "properties": {"reason": {"type": "string"}}}, tag="Approvals")},
+        "/api/v2/ai/jobs/{job_id}": {"get": _op("getJob", "Async job status", "Poll a job returned by execute with run_async.", [_p("job_id", "path", "Job id", True)], tag="System")},
+        "/api/v2/ai/analytics/query": {"post": _op("queryAnalytics", "Query analytics", "metric (visits, model_views, secret_opens, cta_clicks, onlyfans_clicks, onlyfans_ctr, conversion_rate...), group_by (model, day, country, device), model, range (7g/30g/90g).",
+                                                   body={"type": "object", "properties": {"metric": {"type": "string"}, "group_by": {"type": "string"}, "model": {"type": "string"}, "range": {"type": "string", "default": "30g"}, "question": {"type": "string"}}}, tag="Analytics")},
+        "/api/v2/ai/status": {"get": _op("getSystemStatus", "System status", "Mode (READ_ONLY/FULL), health, current alerts, registry counts. Call when the user asks how the site is doing.", tag="System")},
+        "/api/v2/ai/rollback": {"post": _op("rollback", "Undo changes", "version_id = one change; session_id = everything done in that session (incl. media, SEO, links); model+minutes = recent changes to a model. dry_run for a plan.",
+                                            body={"type": "object", "properties": {"version_id": {"type": "string"}, "session_id": {"type": "string"}, "model": {"type": "string"}, "minutes": {"type": "integer"}, "dry_run": {"type": "boolean"}, "reason": {"type": "string"}}}, tag="Rollback")},
+        "/api/v2/ai/models/find": {"post": _op("findModel", "Find a model", "Resolve id/slug/name/partial name. 409 AMBIGUOUS_REFERENCE lists matches: show them, never pick one yourself.",
+                                               body={"type": "object", "required": ["reference"], "properties": {"reference": {"type": "string"}}}, tag="Models")},
+    }
+    n_ops = sum(len(v) for v in paths.values())
+    assert n_ops == 12, n_ops
+    return {
+        "openapi": "3.1.0",
+        "info": {"title": "LATO SEGRETO — Total Site Control API v2", "version": "2.0.0",
+                 "description": (f"12 universal operations. Discover capabilities with getCapabilities, preview with previewCapability, apply with executeCapability. Server mode: {mode}. "
+                                 "Auth: API key as Bearer token. Every response: {ok, summary, data, warnings, next_steps, request_id, changes, approval_required}. "
+                                 "Never state a change happened unless ok:true and data.rollback.version_ids is non-empty. In READ_ONLY only dry_run previews are possible.")},
+        "servers": [{"url": base_url, "description": "LATO SEGRETO API"}] if base_url else [],
+        "paths": paths,
+        "components": {
+            "securitySchemes": {"ApiKeyBearer": {"type": "http", "scheme": "bearer", "description": "API Key (ls_...) as Bearer token. Create it in /admin/motore → ChatGPT Control Layer."}},
+            "schemas": {
+                "AIResponse": {"type": "object", "properties": {"ok": {"type": "boolean"}, "action": {"type": "string"}, "summary": {"type": "string"}, "data": {"type": "object", "additionalProperties": True},
+                                                               "warnings": {"type": "array", "items": {"type": "string"}}, "next_steps": {"type": "array", "items": {"type": "string"}}, "request_id": {"type": "string"},
+                                                               "changes": {"type": "array", "items": {"type": "object", "additionalProperties": True}}, "approval_required": {"type": "boolean"},
+                                                               "approval": {"type": "object", "additionalProperties": True}, "code": {"type": "string"}}},
+                "AIError": {"type": "object", "properties": {"ok": {"type": "boolean"}, "code": {"type": "string", "enum": ERROR_CODES + ["UNKNOWN_CAPABILITY", "CAPABILITY_UNBOUND", "CAPABILITY_DISABLED", "CAPABILITY_DENIED", "CAPABILITY_NOT_ALLOWED"]},
+                                                            "summary": {"type": "string"}, "data": {"type": "object", "additionalProperties": True}, "request_id": {"type": "string"}}},
+            },
+        },
+        "security": [{"ApiKeyBearer": []}],
+        "tags": [{"name": "Capabilities"}, {"name": "Execute"}, {"name": "Approvals"}, {"name": "Analytics"}, {"name": "System"}, {"name": "Rollback"}, {"name": "Models"}],
+    }
+
+
+@caps_router.get("/openapi-chatgpt.json", operation_id="getAiOpenApiV2", include_in_schema=False)
+async def v2_openapi(request: Request):
+    """Public GPT Action schema for the v2 engine (no secrets; separate from /api/v1/ai/openapi-chatgpt.json which stays as-is)."""
+    from v1_ai import _public_base_url
+    cfg = await ai_config()
+    return build_openapi_v2(await _public_base_url(request), cfg["mode"])
+
+
+# ---------------- admin: capability governance (JWT only, hidden from the GPT schema) ----------------
 class CapToggle(BaseModel):
     capability_id: str
     disabled: bool
 
 
-@caps_router.get("/capabilities-admin", operation_id="adminCapabilities", include_in_schema=False)
-async def admin_capabilities(request: Request, principal: dict = Depends(resolve_principal)):
-    if principal.get("type") == "api_key":
-        raise err(403, "CRITICAL_ACTION_BLOCKED", "Solo amministratori")
+def _admin_only(principal: dict):
+    if principal.get("type") == "api_key" or principal.get("role") not in ("SUPER_ADMIN", "ADMIN"):
+        raise err(403, "CRITICAL_ACTION_BLOCKED", "Solo amministratori umani (JWT SUPER_ADMIN/ADMIN)")
+
+
+@caps_router.get("/admin/capabilities", operation_id="adminCapabilities", include_in_schema=False)
+async def v2_admin_capabilities(request: Request, principal: dict = Depends(resolve_principal)):
+    _admin_only(principal)
     disabled = await disabled_capabilities()
-    items = [{**c.public(), "disabled": c.id in disabled} for c in REGISTRY.values()]
+    items = [{**c.public(), "disabled": c.id in disabled, "status_reason": c.unbound_reason, "bindings": bindings_for(c.id)} for c in REGISTRY.values()]
     use = {}
     async for a in ai_actions_col.aggregate([{"$match": {"action": {"$in": list(REGISTRY.keys())}}}, {"$group": {"_id": "$action", "n": {"$sum": 1}, "err": {"$sum": {"$cond": ["$ok", 0, 1]}}}}]):
         use[a["_id"]] = {"count": a["n"], "errors": a["err"]}
     for i in items:
         i["usage"] = use.get(i["id"], {"count": 0, "errors": 0})
-    return {"items": items, "total": len(items), "disabled": len(disabled), "enabled": len(items) - len(disabled),
-            "by_risk": {r: len([i for i in items if i["risk"] == r]) for r in (SAFE, REVIEW, CRITICAL)}, "by_category": {c: len([i for i in items if i["category"] == c]) for c in sorted({i["category"] for i in items})}}
+    st = registry_status()
+    return {"items": items, "total": len(items), "disabled": len(disabled), "enabled": len([i for i in items if not i["disabled"] and i["status"] == BOUND]),
+            "bound": st["bound"], "unbound": st["unbound"], "critical_blocked": st["critical_blocked"], "by_risk": st["by_risk"],
+            "by_category": {c: len([i for i in items if i["category"] == c]) for c in sorted({i["category"] for i in items})}, "mode": (await ai_config())["mode"]}
 
 
-@caps_router.post("/capabilities-admin/toggle", operation_id="adminToggleCapability", include_in_schema=False)
-async def admin_toggle(body: CapToggle, request: Request, principal: dict = Depends(resolve_principal)):
-    if principal.get("type") == "api_key":
-        raise err(403, "CRITICAL_ACTION_BLOCKED", "Solo amministratori")
+@caps_router.post("/admin/capabilities/toggle", operation_id="adminToggleCapability", include_in_schema=False)
+async def v2_admin_toggle(body: CapToggle, request: Request, principal: dict = Depends(resolve_principal)):
+    _admin_only(principal)
     if body.capability_id not in REGISTRY:
         raise HTTPException(status_code=404, detail={"code": "UNKNOWN_CAPABILITY", "message": "Capability inesistente"})
     disabled = set(await disabled_capabilities())
