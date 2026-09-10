@@ -20,7 +20,7 @@ from v1_versioning import record_version, audit_log
 
 models_router = APIRouter(prefix="/api/v1/models", tags=["Models"])
 
-OF_RX = re.compile(r"^https://(www\.)?onlyfans\.com/[A-Za-z0-9_.\-]+/?$")
+OF_RX = re.compile(r"^https://(www\.)?onlyfans\.com/[A-Za-z0-9_.\-]+(/(c\d+|trial/[A-Za-z0-9_\-]+))?/?(\?[A-Za-z0-9_=&%.\-]*)?$")  # accepts real OF tracking links /c<N>, /trial/<code>, ?query
 REQUIRED_CODES = {
     "Creator maggiorenne confermata": "AGE_CONFIRMATION_MISSING",
     "Nome": "NAME_MISSING",

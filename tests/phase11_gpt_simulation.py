@@ -150,13 +150,21 @@ def main():
     r, j = gpt("GET", "/api/v1/ai/capabilities")
     row("capabilities per la chiave", r.status_code == 200 and j["data"]["mode"] == "READ_ONLY" and len(j["data"]["capabilities"]) > 10, f"{len(j['data']['capabilities'])} capacità, mode {j['data']['mode']}, preview_only={len([c for c in j['data']['capabilities'] if c.get('access')=='preview_only'])}")
 
-    # ---- TEST A: "Controlla Francesca Rossi" (resolve -> health) ----
-    r, j = gpt("POST", "/api/v1/ai/models/find", {"model": "Francesca"})
-    ok_a = r.status_code == 200 and j["data"]["slug"] == "francesca-rossi"
-    slug = j["data"].get("slug", "francesca-rossi")
+    # ---- TEST A: "Controlla <modella>" (resolve -> health) - model chosen from the REAL catalog of this deployment ----
+    r, j = gpt("GET", "/api/v1/ai/models")
+    catalog = j["data"]["items"] if r.status_code == 200 else []
+    pub = [m for m in catalog if m.get("workflow_status") in ("PUBLISHED", "ERROR", "READY")] or catalog
+    target = pub[0]
+    first_name = (target.get("nome_artistico") or target.get("nome") or target["slug"]).strip().split(" ")[0]
+    r, j = gpt("POST", "/api/v1/ai/models/find", {"model": first_name})
+    if r.status_code == 409:  # first name ambiguous in this catalog -> use the full name
+        r, j = gpt("POST", "/api/v1/ai/models/find", {"model": (target.get("nome_artistico") or target.get("nome")).strip()})
+    ok_a = r.status_code == 200 and j["data"]["slug"] == target["slug"]
+    slug = j.get("data", {}).get("slug") or target["slug"]
+    print(f"     target model: '{first_name}' -> {slug} (catalogo: {len(catalog)} modelle)")
     rid_a = f"gpt-A-{uuid.uuid4().hex[:6]}"
     r, j = gpt("GET", f"/api/v1/ai/models/{slug}/health", headers={"X-Request-ID": rid_a})
-    row("TEST A resolve 'Francesca' + model health", ok_a and r.status_code == 200 and j["ok"] and j["data"]["publication"]["workflow_status"], f"{j.get('summary','')[:100]}", request_id=rid_a)
+    row(f"TEST A resolve '{first_name}' + model health", ok_a and r.status_code == 200 and j["ok"] and j["data"]["publication"]["workflow_status"], f"{j.get('summary','')[:100]}", request_id=rid_a)
     logged = asyncio.run(db_find("ai_requests", {"request_id": rid_a}))
     row("TEST A richiesta nel log (actor/key/request_id/status/durata)", bool(logged) and logged[0]["key_id"] == KID and logged[0]["status"] == 200 and "duration_ms" in logged[0] and logged[0]["kind"] == "read", f"{ {k: logged[0][k] for k in ('actor','status','duration_ms','kind','path')} if logged else 'MISSING'}")
 
@@ -218,13 +226,21 @@ def main():
     else:
         # create a REVIEW proposal via model update preview (bio) - approval flow is prepared but nothing applied
         r, j = gpt("POST", "/api/v1/ai/models/update", {"model": slug, "changes": {"bio": "Bio di anteprima per la sessione READ_ONLY."}, "dry_run": True})
-        row("TEST I anteprima REVIEW_REQUIRED (update dry_run)", r.status_code == 200 and j["data"]["policy"]["level"] == "REVIEW_REQUIRED" and j["data"]["approval_required"], f"level={j['data']['policy']['level']} fields={j['data']['policy']['review_fields']}")
+        pol = (j.get("data") or {}).get("policy") or {}
+        row("TEST I anteprima REVIEW_REQUIRED (update dry_run)", r.status_code == 200 and pol.get("level") == "REVIEW_REQUIRED" and (j.get("data") or {}).get("approval_required"), f"level={pol.get('level')} fields={pol.get('review_fields')} code={j.get('code')}")
 
     # ---- ambiguous / not found ----
-    r, j = gpt("POST", "/api/v1/ai/models/find", {"model": "Mar"})
-    row("AMBIGUOUS_REFERENCE mostra alternative", r.status_code == 409 and j.get("code") == "AMBIGUOUS_REFERENCE" and len(j["data"]["matches"]) >= 2, f"matches={[m['nome'] for m in j.get('data',{}).get('matches',[])]}")
-    r, j = gpt("POST", "/api/v1/ai/models/find", {"model": "Alessia"})
-    row("NOT_FOUND per modella inesistente ('Alessia')", r.status_code == 404 and j.get("code") == "NOT_FOUND", f"status={r.status_code} code={j.get('code')} (nessun profilo inventato)")
+    # ambiguous reference: a word shared by >= 2 names in THIS catalog (fallback: 2-letter prefix shared)
+    import collections, re as _re
+    words = collections.Counter(w for m in catalog for w in set(_re.findall(r"[a-z]{3,}", ((m.get("nome_artistico") or "") + " " + (m.get("nome") or "")).lower())))
+    amb = next((w for w, n in words.most_common() if n >= 2), None)
+    if not amb:
+        pref = collections.Counter((m.get("nome_artistico") or m.get("nome") or "")[:2].lower() for m in catalog)
+        amb = next((w for w, n in pref.most_common() if n >= 2 and w.strip()), "a")
+    r, j = gpt("POST", "/api/v1/ai/models/find", {"model": amb})
+    row(f"AMBIGUOUS_REFERENCE mostra alternative ('{amb}')", r.status_code == 409 and j.get("code") == "AMBIGUOUS_REFERENCE" and len(j["data"]["matches"]) >= 2, f"matches={[m['nome'] for m in j.get('data',{}).get('matches',[])]}")
+    r, j = gpt("POST", "/api/v1/ai/models/find", {"model": "modella-inesistente-xyz"})
+    row("NOT_FOUND per modella inesistente", r.status_code == 404 and j.get("code") == "NOT_FOUND", f"status={r.status_code} code={j.get('code')} (nessun profilo inventato)")
 
     # ---- idempotency on dry-run ----
     ik = str(uuid.uuid4())

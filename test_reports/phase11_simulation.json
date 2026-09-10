@@ -1,8 +1,8 @@
 {
- "backend": "https://secret-side.preview.emergentagent.com",
- "public_host": "secret-side.preview.emergentagent.com",
+ "backend": "https://secret-side.emergent.host",
+ "public_host": "secret-side.emergent.host",
  "mode_left": "READ_ONLY",
- "key_prefix_masked": "ls_kSSpE8j…******",
+ "key_prefix_masked": "ls_yjAHH7p…******",
  "results": [
   {
    "test": "READ_ONLY forzato server-side",
@@ -12,12 +12,12 @@
   {
    "test": "Chiave READ_ONLY creata (mostrata una volta)",
    "result": "PASS",
-   "detail": "prefix ls_kSSpE8j…****** scopes=18"
+   "detail": "prefix ls_yjAHH7p…****** scopes=18"
   },
   {
    "test": "Kill switch OFF -> 503 AI_API_DISABLED",
    "result": "PASS",
-   "detail": "status=503 code=AI_API_DISABLED request_id=0f47ed23"
+   "detail": "status=503 code=AI_API_DISABLED request_id=c9c68069"
   },
   {
    "test": "Kill switch: API legacy JWT continuano",
@@ -37,13 +37,13 @@
   {
    "test": "STEP19 site-health (Controlla lo stato)",
    "result": "PASS",
-   "detail": "Sito: 10 modelle (10 online, 0 in lavorazione, 0 in errore); SEO 2 issue (0 critiche); hea",
-   "request_id": "gpt-sim-7cb66448"
+   "detail": "Sito: 10 modelle (0 online, 0 in lavorazione, 10 in errore); SEO 75 issue (20 critiche); h",
+   "request_id": "gpt-sim-88ac31d1"
   },
   {
    "test": "X-Request-ID coerente response/header",
    "result": "PASS",
-   "detail": "header=gpt-sim-7cb66448 body=gpt-sim-7cb66448"
+   "detail": "header=gpt-sim-88ac31d1 body=gpt-sim-88ac31d1"
   },
   {
    "test": "capabilities per la chiave",
@@ -51,21 +51,21 @@
    "detail": "33 capacità, mode READ_ONLY, preview_only=12"
   },
   {
-   "test": "TEST A resolve 'Francesca' + model health",
+   "test": "TEST A resolve 'VANESSA' + model health",
    "result": "PASS",
-   "detail": "Francesca Rossi: PUBLISHED, SEO score 94, 1 issue SEO, media 6+6 (ALT 100%), link OnlyFans ok, 19 vi",
-   "request_id": "gpt-A-8b6abc"
+   "detail": "VANESSA BELLA : ERROR, SEO score 45, 7 issue SEO, media 5+5 (ALT 100%), link OnlyFans invalid, 39 vi",
+   "request_id": "gpt-A-4baebd"
   },
   {
    "test": "TEST A richiesta nel log (actor/key/request_id/status/durata)",
    "result": "PASS",
-   "detail": "{'actor': 'ChatGPT Production READ_ONLY (simulazione)', 'status': 200, 'duration_ms': 17, 'kind': 'read', 'path': '/api/v1/ai/models/francesca-rossi/health'}"
+   "detail": "{'actor': 'ChatGPT Production READ_ONLY (simulazione)', 'status': 200, 'duration_ms': 189, 'kind': 'read', 'path': '/api/v1/ai/models/vanessa-bella/health'}"
   },
   {
    "test": "TEST B SEO audit (score, SAFE/REVIEW/CRITICAL)",
    "result": "PASS",
-   "detail": "score=94 counts={'SAFE_AUTO_FIX': 0, 'REVIEW_REQUIRED': 1, 'CRITICAL': 0}",
-   "request_id": "gpt-B-ff8482"
+   "detail": "score=45 counts={'SAFE_AUTO_FIX': 5, 'REVIEW_REQUIRED': 1, 'CRITICAL': 2}",
+   "request_id": "gpt-B-d86059"
   },
   {
    "test": "TEST B audit action con stesso request_id",
@@ -80,22 +80,22 @@
   {
    "test": "TEST C safe-fix dry_run -> anteprima",
    "result": "PASS",
-   "detail": "would_fix=0 score_before=94"
+   "detail": "would_fix=5 score_before=45"
   },
   {
    "test": "TEST D analytics strutturata IT 7d",
    "result": "PASS",
-   "detail": "sample_size=2 data_available=True rows=1 limitations=['Campione totale 2 < 20: percentuali non affidabili', 'Alcune righe hanno campione ridotto (reliable=false)', '270 eventi senza geolocalizzazione (header geo assenti)']"
+   "detail": "sample_size=1 data_available=True rows=1 limitations=['Campione totale 1 < 20: percentuali non affidabili', 'Alcune righe hanno campione ridotto (reliable=false)']"
   },
   {
    "test": "TEST E daily summary",
    "result": "PASS",
-   "detail": "Oggi: 7 sessioni, 5 profili visti (confronto con ieri non significativo), 1 click OnlyFans (CTR OF 20.0%), Ita"
+   "detail": "Oggi: 1 sessioni, 1 profili visti (confronto con ieri non significativo), 0 click OnlyFans (CTR OF 0.0%), Ital"
   },
   {
    "test": "TEST F recommendations deterministiche",
    "result": "PASS",
-   "detail": "2 raccomandazioni: 2 raccomandazioni: 0 HIGH, 0 MEDIUM, 1 eseguibili automaticamente."
+   "detail": "30 raccomandazioni: 33 raccomandazioni: 21 HIGH, 10 MEDIUM, 12 eseguibili automaticamente."
   },
   {
    "test": "TEST G publish reale bloccato",
@@ -105,7 +105,7 @@
   {
    "test": "TEST G publish dry_run = solo readiness",
    "result": "PASS",
-   "detail": "Francesca Rossi è già online."
+   "detail": "Impossibile pubblicare VANESSA BELLA : mancano: onlyfans_url."
   },
   {
    "test": "TEST H upload bloccato anche con dry_run",
@@ -113,27 +113,17 @@
    "detail": "status=403 code=READ_ONLY_MODE"
   },
   {
-   "test": "TEST I approval preview (token, before/after, TTL)",
+   "test": "TEST I anteprima REVIEW_REQUIRED (update dry_run)",
    "result": "PASS",
-   "detail": "type=SEO_REVIEW expires=2026-09-10T09:19 field=bio"
+   "detail": "level=REVIEW_REQUIRED fields=['bio'] code=None"
   },
   {
-   "test": "TEST I approvazione pending senza token esposto",
+   "test": "AMBIGUOUS_REFERENCE mostra alternative ('aurora')",
    "result": "PASS",
-   "detail": "1 pending"
+   "detail": "matches=['AURORA BIANCHINI', 'AURORA CARUSO']"
   },
   {
-   "test": "TEST I confirm bloccato in READ_ONLY",
-   "result": "PASS",
-   "detail": "status=403 code=READ_ONLY_MODE"
-  },
-  {
-   "test": "AMBIGUOUS_REFERENCE mostra alternative",
-   "result": "PASS",
-   "detail": "matches=['Martina Conte', 'Sofia Marino']"
-  },
-  {
-   "test": "NOT_FOUND per modella inesistente ('Alessia')",
+   "test": "NOT_FOUND per modella inesistente",
    "result": "PASS",
    "detail": "status=404 code=NOT_FOUND (nessun profilo inventato)"
   },
@@ -165,7 +155,7 @@
   {
    "test": "Rate limit 429 + Retry-After (chiave temp 12/min)",
    "result": "PASS",
-   "detail": "429=3/15 retry_after=59"
+   "detail": "429=1/15 retry_after=57"
   },
   {
    "test": "ZERO MUTATION collezioni business (hash before/after)",
@@ -175,12 +165,12 @@
   {
    "test": "Metriche AI incrementate",
    "result": "PASS",
-   "detail": "requests +42 errors +13 429 +3 mutations +0 p50=7.1 p95=34.5"
+   "detail": "requests +34 errors +9 429 +1 mutations +0 p50=43.2 p95=189.3"
   },
   {
    "test": "Attività pannello: richieste della chiave visibili",
    "result": "PASS",
-   "detail": "22 richieste visibili (kind: ['dry_run', 'read'])"
+   "detail": "21 richieste visibili (kind: ['dry_run', 'read'])"
   },
   {
    "test": "Pannello: last_used_at aggiornato, chiave non leggibile",
@@ -218,23 +208,23 @@
    "detail": "flags={'ai_api_enabled': True, 'ai_write_enabled': False, 'ai_batch_enabled': True, 'ai_approval_flow_enabled': True}"
   }
  ],
- "passed": 42,
- "total": 42,
+ "passed": 40,
+ "total": 40,
  "db_hash_before": {
-  "models": "273d361aeea2a554",
+  "models": "e2158288cfacac08",
   "landings": "80b849c08499f369",
-  "files": "a8df8475bd85a6d5",
-  "categories": "c88350545917ffac",
-  "articles": "93baca33e1050f47",
+  "files": "285ffe9939b7073e",
+  "categories": "435225ed8f78be84",
+  "articles": "85321786a778193b",
   "settings": "39c2007b19ed3380",
   "redirects": "2586e5a4affa4772"
  },
  "db_hash_after": {
-  "models": "273d361aeea2a554",
+  "models": "e2158288cfacac08",
   "landings": "80b849c08499f369",
-  "files": "a8df8475bd85a6d5",
-  "categories": "c88350545917ffac",
-  "articles": "93baca33e1050f47",
+  "files": "285ffe9939b7073e",
+  "categories": "435225ed8f78be84",
+  "articles": "85321786a778193b",
   "settings": "39c2007b19ed3380",
   "redirects": "2586e5a4affa4772"
  }

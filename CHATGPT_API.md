@@ -157,5 +157,8 @@ Vedi `/app/CHATGPT_INSTRUCTIONS.md` (nome, descrizione, Instructions, conversati
 - **503 AI_API_DISABLED**: kill switch OFF nel pannello.
 - **Nessuna richiesta nel pannello**: la chiamata non è arrivata al server (schema che punta a un altro host, deploy non aggiornato, conferma "Allow" non data in Preview).
 
+## Nota dati reali (dopo il primo redeploy)
+Il catalogo di produzione è diverso dal preview: 10 modelle reali (VANESSA BELLA, ALESSIA GOLOSA, AURORA BIANCHINI, ZAIRA, AURORA CARUSO, CHIARA GRECO, GRETA SALA, VERONICA, SUSI, LARA). "Controlla Alessia" funziona; "Aurora" è volutamente ambiguo (409 con 2 alternative). I link OnlyFans reali usano il formato tracking `https://onlyfans.com/<user>/c<N>`, ora accettato dal validator (prima: falso positivo ERROR/CRITICAL su tutte le modelle).
+
 ## Verifiche automatiche Phase 11
 `python tests/phase11_gpt_simulation.py` → simula le chiamate del GPT Action (Bearer) con una chiave READ_ONLY temporanea: 42/42 PASS (kill switch, READ_ONLY, dry-run, test A–I, ambiguo/inesistente, idempotenza, scope/auth negativi, rate limit, hash DB business before/after identico, metriche, attività, leak scan). Report: `/app/test_reports/phase11_simulation.json`.
