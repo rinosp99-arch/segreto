@@ -22,7 +22,7 @@ from database import (
 )
 from v1_security import require, actor_of, request_id_of, has_scope, ALL_SCOPES, AI_OPERATOR_SCOPES, AI_READ_ONLY_SCOPES, ROLE_OPTIONAL_SCOPES, generate_api_key, hash_key
 from v1_ai_policy import (
-    ai_guard, ai_config, classify_model_changes, create_approval, consume_approval, list_pending_approvals, metrics_snapshot, bump,
+    ai_guard, ai_config, classify_model_changes, create_approval, consume_approval, list_pending_approvals, metrics_snapshot, metrics_snapshot_shared, bump,
     SAFE, REVIEW, CRITICAL, ERROR_CODES, redact,
 )
 from v1_models import resolve_model, create_model, patch_model, transition, validate_model, summary as model_summary, ALLOWED_FIELDS, workflow_status, check_precondition
@@ -1097,7 +1097,7 @@ async def ai_site_health(request: Request, principal=Depends(ai_guard("system:st
     wh_fail = await webhook_deliveries_col.count_documents({"ok": False, "created_at": {"$gte": since}})
     last_backup = await backups_col.find_one({}, {"_id": 0, "id": 1, "created_at": 1, "size": 1}, sort=[("created_at", -1)])
     alerts = await alerts_col.find({"stato": "open"}, {"_id": 0, "titolo": 1, "severity": 1, "tipo": 1}).to_list(50)
-    m = metrics_snapshot()
+    m = await metrics_snapshot_shared()
     total = sum(counts.values())
     data = {"models": {"total": total, "published": counts.get("PUBLISHED", 0), "draft": counts.get("DRAFT", 0), "incomplete": counts.get("INCOMPLETE", 0), "ready": counts.get("READY", 0), "error": counts.get("ERROR", 0), "archived": counts.get("ARCHIVED", 0)},
             "broken_media": (checks.get("media") or {}).get("missing", []), "seo_issues": sum(seo_counts.values()), "critical_issues": seo_counts["CRITICAL"], "safe_issues": seo_counts["SAFE_AUTO_FIX"], "review_issues": seo_counts["REVIEW_REQUIRED"],
@@ -1153,7 +1153,7 @@ async def build_daily_summary() -> dict:
     new_landings = await landings_col.count_documents({"created_at": {"$gte": since24}})
     last_backup = await backups_col.find_one({}, {"_id": 0, "created_at": 1, "id": 1}, sort=[("created_at", -1)])
     counts = await _models_by_status()
-    m = metrics_snapshot()
+    m = await metrics_snapshot_shared()
     tv, yv = today["steps"][1]["value"], yesterday["steps"][1]["value"]
     text = (f"Oggi: {today['steps'][0]['value']} sessioni, {tv} profili visti" + (f" ({'+' if cmp(tv, yv) >= 0 else ''}{cmp(tv, yv)}% vs ieri)" if safe_cmp(tv, yv) is not None else " (confronto con ieri non significativo)") +
             f", {today['steps'][4]['value']} click OnlyFans (CTR OF {today['conversion_rate']}%), Italia {round(it_today['steps'][1]['value'] / tv * 100, 1) if tv else 0}%. "
@@ -1504,7 +1504,7 @@ async def _public_base_url(request: Request) -> str:
 @ai_router.get("/control", operation_id="getAiControl", include_in_schema=False)
 async def ai_control(request: Request, principal=Depends(require("config:read"))):
     cfg = await ai_config()
-    m = metrics_snapshot()
+    m = await metrics_snapshot_shared()
     from database import api_keys_col
     keys = await api_keys_col.find({"revoked_at": None, "internal_test": {"$ne": True}}, {"_id": 0, "key_hash": 0}).sort("created_at", -1).to_list(50)
     last = await ai_actions_col.find_one({"source": "chatgpt"}, {"_id": 0, "timestamp": 1, "action": 1, "ok": 1, "summary": 1}, sort=[("timestamp", -1)])

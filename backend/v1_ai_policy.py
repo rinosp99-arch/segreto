@@ -227,15 +227,48 @@ async def record_metric(path: str, method: str, status: int, latency_ms: float, 
     _caps[cap] = _caps.get(cap, 0) + 1
     day = now_iso()[:10]
     inc = {"requests": 1, "success": 1 if 200 <= status < 400 else 0, "errors": 0 if 200 <= status < 400 else 1, "rate_limited": 1 if status == 429 else 0,
+           "mutations": 1 if (200 <= status < 400 and is_write and method in ("POST", "PATCH", "PUT", "DELETE")) else 0,
+           "latency_sum_ms": round(latency_ms),
            f"caps.{cap.replace('.', '_').replace('/', '__')}": 1}
     try:
-        await ai_metrics_col.update_one({"day": day}, {"$inc": inc, "$set": {"updated_at": now_iso()}, "$setOnInsert": {"day": day}}, upsert=True)
+        await ai_metrics_col.update_one({"day": day}, {"$inc": inc, "$set": {"updated_at": now_iso()}, "$max": {"latency_max_ms": round(latency_ms)}, "$setOnInsert": {"day": day}}, upsert=True)
     except Exception:
         pass
 
 
 def bump(counter: str, n: int = 1):
     _counters[counter] = _counters.get(counter, 0) + n
+
+
+async def metrics_snapshot_shared() -> dict:
+    """Cluster-wide view: counters come from Mongo (all pods, all days); latency/p50/p95 from this pod's window.
+    Production runs several replicas, so in-memory counters alone would show only one pod (Phase 11 finding)."""
+    snap = metrics_snapshot()
+    try:
+        docs = await ai_metrics_col.find({}, {"_id": 0}).to_list(400)
+    except Exception:
+        docs = []
+    if docs:
+        tot = {"requests": 0, "success": 0, "errors": 0, "rate_limited": 0, "mutations": 0}
+        caps: Dict[str, int] = {}
+        for d in docs:
+            for k in tot:
+                tot[k] += int(d.get(k, 0) or 0)
+            for ck, cv in (d.get("caps") or {}).items():
+                name = ck.replace("__", "/")
+                caps[name] = caps.get(name, 0) + int(cv or 0)
+        # keep pod-only counters that Mongo does not track (approvals, rollbacks, critical blocked)
+        merged = dict(snap["counters"])
+        merged.update(tot)
+        snap["counters"] = merged
+        snap["counters_scope"] = "cluster (Mongo, tutti i pod)"
+        snap["top_capabilities"] = sorted(caps.items(), key=lambda x: -x[1])[:10] or snap["top_capabilities"]
+        today = next((d for d in docs if d.get("day") == now_iso()[:10]), None)
+        if today:
+            snap["today"] = {"requests": today.get("requests", 0), "errors": today.get("errors", 0), "rate_limited": today.get("rate_limited", 0), "mutations": today.get("mutations", 0),
+                             "avg_ms": round(today.get("latency_sum_ms", 0) / max(1, today.get("requests", 1)), 1), "max_ms": today.get("latency_max_ms", 0)}
+    snap["latency_scope"] = "questo pod (ultima ora)"
+    return snap
 
 
 def metrics_snapshot() -> dict:
