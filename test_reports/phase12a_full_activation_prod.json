@@ -1,0 +1,307 @@
+{
+ "base": "https://secret-side.emergent.host",
+ "started_at": "2026-09-11T10:20:06Z",
+ "real_models_before": [
+  "alessia-golosa",
+  "aurora-bianchini",
+  "aurora-caruso",
+  "chiara-marino",
+  "greta-sala",
+  "lara-destro",
+  "susi-milano",
+  "vanessa-bella",
+  "veronica",
+  "zaira"
+ ],
+ "full_scopes": [
+  "models:read",
+  "models:create",
+  "models:update",
+  "models:validate",
+  "models:publish",
+  "models:unpublish",
+  "models:archive",
+  "models:feature",
+  "media:read",
+  "media:upload",
+  "media:optimize",
+  "media:replace",
+  "seo:read",
+  "seo:audit",
+  "seo:safe_fix",
+  "seo:review_prepare",
+  "landing:read",
+  "landing:create",
+  "landing:update",
+  "landing:validate",
+  "analytics:read",
+  "system:status",
+  "system:daily_summary",
+  "rollback:read",
+  "rollback:execute",
+  "experiments:read",
+  "health:read",
+  "alerts:read",
+  "jobs:read",
+  "config:read",
+  "ai:execute",
+  "media:update",
+  "media:delete",
+  "categories:read",
+  "categories:write",
+  "settings:read",
+  "settings:update",
+  "config:update",
+  "seo:update",
+  "alerts:write",
+  "jobs:execute",
+  "backup:read",
+  "backup:create",
+  "users:read",
+  "health:run",
+  "content:read",
+  "landing:publish"
+ ],
+ "capabilities_visible": 97,
+ "capabilities_not_full": [],
+ "by_risk": {
+  "SAFE": 86,
+  "REVIEW_REQUIRED": 11,
+  "CRITICAL": 0
+ },
+ "review_required": [
+  "categories.archive",
+  "flags.set",
+  "jobs.pause",
+  "landing.publish",
+  "media.soft_delete",
+  "models.archive",
+  "models.soft_delete",
+  "models.unpublish",
+  "seo.ignore_issue",
+  "seo.redirect.create",
+  "seo.redirect.delete"
+ ],
+ "mode_after": "FULL",
+ "preview_plan": [
+  "models.create \u2192 bozza 'TEST V2 GIULIA' (slug test-v2-giulia)",
+  "models.update SAFE (['badge', 'badge_tipo', 'categorie', 'cta_temporizzata', 'cta_testo', 'messaggio_35s', 'regia', 'social', 'tag', 'teaser_copy', 'tema'])",
+  "models.update REVIEW \u2192 approvazione (['bio', 'bio_segreta', 'frase', 'nome_artistico', 'onlyfans_url', 'seo'])",
+  "seo.safe_fix",
+  "models.validate"
+ ],
+ "execute_summary": "'TEST V2 GIULIA' preparata (slug test-v2-giulia, stato DRAFT, NON pubblicata): 5 passi ok, 2 versioni, 6 campi REVIEW in attesa di approvazione. Mancano: Creator maggiorenne confermata, Foto card Home, 3 foto Lato Pubblico, 3 foto Lato Segreto, Video pubblico 1, Video segreto 1, Claim, Descrizione pubblica, Descrizione Lato Segreto, Link OnlyFans, Video Pellicola pubblico, Video Pellicola segreto",
+ "draft": {
+  "id": "0249d9a1-5e47-47a5-a9e2-b4238c9d024e",
+  "slug": "test-v2-giulia",
+  "stato": null,
+  "workflow_status": "DRAFT",
+  "fields_applied": null,
+  "fields_pending_approval": null
+ },
+ "approval": {
+  "id": "137e3252-1546-411b-8e55-0d36c26527a3",
+  "fields": null,
+  "result": "Test V2 Giulia aggiornata (bio, bio_segreta, frase, nome_artistico, onlyfans_url, seo); stato INCOMPLETE"
+ },
+ "audit_sample": [
+  {
+   "action": "models.update",
+   "actor": "ChatGPT Production FULL (verifica Emergent, temporanea)",
+   "ok": true,
+   "session_id": "ses_full_activation_01737750",
+   "request_id": "400c62c1-44b2-436c-b510-4574f255085b"
+  },
+  {
+   "action": "models.prepare_complete",
+   "actor": "ChatGPT Production FULL (verifica Emergent, temporanea)",
+   "ok": true,
+   "session_id": "ses_full_activation_01737750",
+   "request_id": "6e936b56-3b5c-4750-bb47-4ef961df8dda"
+  },
+  {
+   "action": "models.prepare_complete",
+   "actor": "ChatGPT Production FULL (verifica Emergent, temporanea)",
+   "ok": true,
+   "session_id": "ses_full_activation_01737750",
+   "request_id": "ab98d055-0113-41b8-99fa-721c082cb13a"
+  }
+ ],
+ "rollback_plan": {
+  "dry_run": true,
+  "secondary": []
+ },
+ "active_keys": [
+  "ChatGPT Production READ_ONLY"
+ ],
+ "flags_after": {
+  "ai_api_enabled": true,
+  "ai_write_enabled": true,
+  "ai_batch_enabled": true,
+  "ai_approval_flow_enabled": true
+ },
+ "checks": [
+  {
+   "check": "temporary FULL key created with the FULL business preset (47 scopes, role AI_OPERATOR)",
+   "result": "PASS",
+   "note": "47"
+  },
+  {
+   "check": "FULL key sees all 97 registry capabilities, every one execute_access=full, 0 CRITICAL exposed",
+   "result": "PASS",
+   "note": "(97, [])"
+  },
+  {
+   "check": "registry 97 bound / 0 unbound",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "CRITICAL/non-business 'backup.restore' not exposed (404 UNKNOWN_CAPABILITY)",
+   "result": "PASS",
+   "note": "{\"ok\":false,\"summary\":\"Capability 'backup.restore' inesistente\",\"code\":\"UNKNOWN_CAPABILITY\",\"data\":{\"suggestions\":[\"back"
+  },
+  {
+   "check": "CRITICAL/non-business 'models.hard_delete' not exposed (404 UNKNOWN_CAPABILITY)",
+   "result": "PASS",
+   "note": "{\"ok\":false,\"summary\":\"Capability 'models.hard_delete' inesistente\",\"code\":\"UNKNOWN_CAPABILITY\",\"data\":{\"suggestions\":[\""
+  },
+  {
+   "check": "CRITICAL/non-business 'keys.create' not exposed (404 UNKNOWN_CAPABILITY)",
+   "result": "PASS",
+   "note": "{\"ok\":false,\"summary\":\"Capability 'keys.create' inesistente\",\"code\":\"UNKNOWN_CAPABILITY\",\"data\":{\"suggestions\":[],\"hint\""
+  },
+  {
+   "check": "CRITICAL/non-business 'users.create' not exposed (404 UNKNOWN_CAPABILITY)",
+   "result": "PASS",
+   "note": "{\"ok\":false,\"summary\":\"Capability 'users.create' inesistente\",\"code\":\"UNKNOWN_CAPABILITY\",\"data\":{\"suggestions\":[],\"hint"
+  },
+  {
+   "check": "CRITICAL/non-business 'shell.exec' not exposed (404 UNKNOWN_CAPABILITY)",
+   "result": "PASS",
+   "note": "{\"ok\":false,\"summary\":\"Capability 'shell.exec' inesistente\",\"code\":\"UNKNOWN_CAPABILITY\",\"data\":{\"suggestions\":[],\"hint\":"
+  },
+  {
+   "check": "CRITICAL/non-business 'config.set_secret' not exposed (404 UNKNOWN_CAPABILITY)",
+   "result": "PASS",
+   "note": "{\"ok\":false,\"summary\":\"Capability 'config.set_secret' inesistente\",\"code\":\"UNKNOWN_CAPABILITY\",\"data\":{\"suggestions\":[\"m"
+  },
+  {
+   "check": "security flag ai_write_enabled not manageable by AI even in FULL preset",
+   "result": "PASS",
+   "note": "{\"ok\":false,\"summary\":\"Il flag 'ai_write_enabled' non \u00e8 gestibile via AI\",\"code\":\"CRITICAL_ACTION_BLOCKED\",\"data\":{\"ai_manageable\":[\"ab_testing\",\"italy_engine\","
+  },
+  {
+   "check": "PATCH ai_write_enabled=true (JWT, audited)",
+   "result": "PASS",
+   "note": "{\"flags\":{\"ai_api_enabled\":true,\"ai_write_enabled\":true,\"ai_batch_enabled\":true,\"ai_approval_flow_enabled\":true},\"mode\":\"FULL\",\"policy\":{\"review_fields\":[\"slug\""
+  },
+  {
+   "check": "getSystemStatus mode=FULL",
+   "result": "PASS",
+   "note": "FULL"
+  },
+  {
+   "check": "preview before execute (FULL key) -> 200, would_create, publishes=false",
+   "result": "PASS",
+   "note": "{\"ok\":true,\"action\":\"models.prepare_complete\",\"summary\":\"Anteprima workflow 'TEST V2 GIULIA': bozza + 11 campi SAFE + 6 campi REVIEW (approvazione) + 0 media + SEO safe + validate (nessuna pubblicazio"
+  },
+  {
+   "check": "EXECUTE models.prepare_complete -> 200, draft created, published=false",
+   "result": "PASS",
+   "note": "{\"ok\":true,\"action\":\"models.prepare_complete\",\"summary\":\"'TEST V2 GIULIA' preparata (slug test-v2-giulia, stato DRAFT, NON pubblicata): 5 passi ok, 2 versioni, 6 campi REVIEW in attesa di approvazione. Mancano: Creator maggiorenne confermata, Foto card Home, 3 foto Lato Pubblico, 3 foto Lato Segreto"
+  },
+  {
+   "check": "rollback metadata available for the session",
+   "result": "PASS",
+   "note": "{'available': True, 'version_ids': ['44fa98f1-3c37-4480-a897-b2bf3704b11e', 'bb15a37d-d671-4c7f-a78c-ad0822a4c8c8'], 'undo': \"execute rollback.session {session_id:'ses_full_activation_01737750'}\"}"
+  },
+  {
+   "check": "REVIEW fields approved via approveApproval (token) -> applied",
+   "result": "PASS",
+   "note": "{\"ok\":true,\"action\":\"models.update\",\"summary\":\"Test V2 Giulia aggiornata (bio, bio_segreta, frase, nome_artistico, onlyfans_url, seo); stato INCOMPLETE\",\"data\":{\"id\":\"0249d9a1-5e47-47a5-a9e2-b4238c9d0"
+  },
+  {
+   "check": "draft present in admin",
+   "result": "PASS",
+   "note": "test-v2-giulia"
+  },
+  {
+   "check": "draft NOT published (stato bozza)",
+   "result": "PASS",
+   "note": "bozza"
+  },
+  {
+   "check": "public site unchanged (same 10 published slugs, draft not public)",
+   "result": "PASS",
+   "note": "(10, False)"
+  },
+  {
+   "check": "public detail of the draft -> 404",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "10 real models untouched (admin docs hash identical)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "audit present: actions with session_id, actor = FULL key, prepare_complete + approval",
+   "result": "PASS",
+   "note": "[('models.update', 'ChatGPT Production FULL (verifica Emergent, temporanea)', True), ('models.prepare_complete', 'ChatGPT Production FULL (verifica Emergent, temporanea)', True), ('models.prepare_complete', 'ChatGPT Production FULL (verifica Emergent, temporanea)', True)]"
+  },
+  {
+   "check": "rollback available (dry_run plan only, NOT executed)",
+   "result": "PASS",
+   "note": "{\"ok\":true,\"action\":\"rollback.session\",\"summary\":\"Anteprima: verrebbero annullate 3 modifiche + 0 effetti secondari della sessione ses_full_activation_01737750\",\"data\":{\"dry_run\":true,\"plan\":[{\"versio"
+  },
+  {
+   "check": "draft still present after rollback preview",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "version history recorded for the draft",
+   "result": "PASS",
+   "note": "{'items': [{'id': '0c8d0592-3c0f-4395-ad0f-e98181e47808', 'entity': 'model', 'entity_id': '0249d9a1-5e47-47a5-a9e2-b4238"
+  },
+  {
+   "check": "FULL key executes 20 read/business capabilities (200)",
+   "result": "PASS",
+   "note": "[]"
+  },
+  {
+   "check": "FULL key previews 17 write capabilities (200 dry_run, nothing written)",
+   "result": "PASS",
+   "note": "[]"
+  },
+  {
+   "check": "10 real models still untouched after previews",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "public site still unchanged",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "temporary FULL key revoked",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "READ_ONLY key still active (fallback)",
+   "result": "PASS",
+   "note": "['ChatGPT Production READ_ONLY']"
+  },
+  {
+   "check": "ai_write_enabled=true left active (per user decision)",
+   "result": "PASS",
+   "note": "{'ai_api_enabled': True, 'ai_write_enabled': True, 'ai_batch_enabled': True, 'ai_approval_flow_enabled': True}"
+  }
+ ],
+ "pass": "32/32",
+ "conclusion": "FULL BUSINESS CONTROL READY: YES"
+}
