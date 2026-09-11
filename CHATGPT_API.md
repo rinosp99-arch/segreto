@@ -261,3 +261,47 @@ KPI (totale, bound/unbound, attive/disattivate, SAFE/REVIEW/CRITICAL, modalità)
 - `getCapability`: `required_parameters`, `example_parameters` (es. `{"nome":"TEST V2 GIULIA"}`), `request_example` (body previewCapability pronto), `how_to_call`.
 - 422 VALIDATION_FAILED ora restituisce `received` (body ricevuto, redatto) + `request_example`, ed è **auditato in `ai_actions` con il body** → la prossima richiesta reale del GPT è ispezionabile.
 **Test:** `tests/phase12/gpt_action_contract_v2.py` 34/34 (A–J: request_example→preview 200, missing nome 422, fields nested, media array senza download, boolean/integer/array/nested, execute stesso parsing, parameters_json, malformed 422, nessun bypass, zero mutation).
+
+---
+
+# PHASE 13 — GOOGLE SEO CORE (Search Console · sitemap · indicizzabilità · ispezione URL · Search Analytics)
+
+> Scopo ridotto su richiesta: nessuna dashboard/opportunity engine. Solo ciò che rende le pagine **scopribili, indicizzabili e verificabili** su Google, riusando il dispatcher v2 e il registry (ora **104 capability**, 7 nuove, tutte SAFE).
+
+## A. Modulo `backend/google_search/` (unico punto di contatto con Google)
+`config.py` (solo env) · `auth.py` (service account, scope `webmasters`, token cache) · `client.py` (httpx, timeout 20s, retry/backoff 429/5xx, quota → stop, log strutturato in `google_search_sync_log`: request_id/op/status/duration/error_type, **mai** token o credenziali) · `mock.py` (adapter deterministico per i test, `GOOGLE_SEARCH_MOCK=1`, mai in produzione) · `service.py` (status, sitemap sync con debounce, URL Inspection con cache 24h e budget giornaliero 300, Search Analytics con cache 6h, checklist indicizzabilità tecnica).
+Collections: `google_search_status` (1 doc per URL: snapshot indicizzabilità + snapshot Google + history ≤30), `google_search_sync_log` (TTL 30g), `google_search_analytics` (cache, TTL 7g), `google_search_state` (dirty flag sitemap, ultimo invio, contatore ispezioni/giorno).
+
+## B. Configurazione (solo variabili d'ambiente del server — MAI via API/GPT)
+| Variabile | Default | Uso |
+|---|---|---|
+| `GOOGLE_SEARCH_ENABLED` | `false` | master switch |
+| `GOOGLE_SEARCH_PROPERTY` | `https://secret-side.emergent.host/` | proprietà GSC (URL-prefix con `/` finale, oppure `sc-domain:…`) |
+| `GOOGLE_SEARCH_CREDENTIALS_JSON` **oppure** `GOOGLE_SEARCH_CREDENTIALS_FILE` | — | JSON del service account (inline o path) |
+| `GOOGLE_SEARCH_SYNC_ENABLED` / `_ANALYTICS_ENABLED` / `_INSPECTION_ENABLED` | `true` | feature switch |
+| `GOOGLE_SEARCH_INSPECTION_DAILY_BUDGET` | `300` | auto-limite (quota Google 2000/giorno/proprietà) |
+| `GOOGLE_SEARCH_SITEMAP_DEBOUNCE_HOURS` | `6` | nessun re-invio più frequente |
+| `PUBLIC_BASE_URL` | (config `site.base_url` → proprietà) | origine pubblica per sitemap/ispezioni |
+
+## C. Sitemap automatica (`GET /api/sitemap.xml`, dichiarata in robots.txt)
+Unica sorgente `v1_seo.sitemap_entries()`: home + modelle pubblicate (escluse `anteprima`, `seo.indexable=false`, robots noindex) + categorie pubblicate indicizzabili + articoli pubblicati + **landing pubblicate solo con flag `public_landing_routes` ON**; `<lastmod>` reale (updated_at), deduplicata, XML valido, cache 5 min. È calcolata a ogni richiesta ⇒ sempre aggiornata. Publish/unpublish/cambio slug/canonical/indexable marcano `sitemap_dirty` → job `google_sitemap_sync` (ogni ora) re-invia a Search Console **solo** se hash cambiato o dirty e non entro il debounce.
+
+## D. Nuove capability (categoria `google` + `seo`/`workflow`; scope esistenti riusati)
+| Capability | Scope | Cosa fa |
+|---|---|---|
+| `google.status` (read) | `system:status` | connessione SA / proprietà / sitemap registrata / budget ispezioni / conteggio URL per stato |
+| `google.sitemap.sync` (SAFE, dry-run) | `seo:update` | invio sitemap a GSC con debounce (`force=true`), mostra `lastSubmitted`/errori/indexed |
+| `google.url.inspect` (read) | `seo:audit` | URL Inspection reale: **INDEXED / NOT_INDEXED / BLOCKED_ERROR / UNKNOWN** (+ `NOT_PUBLIC`, `NOT_CONFIGURED`), coverage, canonical Google, ultimo crawl; target modella o `landing`/`url`/`home`/`models[≤10]`; cache 24h, `refresh=true` |
+| `google.analytics.summary` (read) | `analytics:read` | click/impressioni/CTR/posizione per sito o modella/landing/URL, `range` 7g/28g/3m o start/end, confronto periodo precedente |
+| `google.analytics.queries` (read) | `analytics:read` | dimensione `query|page|country|device|date`, `limit≤100` |
+| `seo.indexability` (read) | `seo:audit` | checklist tecnica (nostra, senza quota): pubblicata, HTTP 200, X-Robots-Tag, robots.txt, sitemap, canonical, title/meta/H1, JSON-LD, og:image, link interni; `all=true` per tutte le pagine pubbliche |
+| `growth.prepare_model` (SAFE, rollback, dry-run) | `models:update`, `seo:safe_fix` (+`seo:update` se `sync_sitemap`) | workflow: readiness → **MISSING_REAL_DATA** (conferma maggiorenne, OnlyFans…) e media mancanti (li carichi tu) → audit SEO + fix SAFE → link/landing (solo report, nessuna landing automatica) → indicizzabilità → sitemap → GSC sync se pubblicata → ispezione opzionale. **Non pubblica**: `models.publish` resta il gate (validator + sitemap + sync automatici) |
+
+Regole per il GPT: mai dire "indicizzata" senza `google.url.inspect` = INDEXED; la presenza in sitemap non è indicizzazione; dati reali mai inventati (`MISSING_REAL_DATA` → chiedere all'utente).
+
+## E. Landing pubbliche `/l/{slug}`
+Frontend `pages/LandingPage.js` (nuovo): SEO title/meta/canonical pulito, JSON-LD `CollectionPage`/`WebPage` (+`FAQPage` solo con FAQ reali), griglia `ModelCard`, CTA, FAQ. Backend `/api/landings/{slug}` risponde 404 se la landing non è pubblicata **o** il flag `public_landing_routes` è OFF ⇒ solo landing davvero pubblicate sono raggiungibili/indexabili e finiscono in sitemap. Il flag resta **OFF in produzione** finché non lo attivi (pannello/config).
+Canonical di tutte le pagine ora = origin + pathname (senza utm/query/hash).
+
+## F. Test
+`tests/test_phase13_google_core.py` 7/7 (mapping stati, cache+budget ispezioni, debounce/force sitemap, analytics cache/summary, regole sitemap, checklist indicizzabilità, HTTP: sitemap/robots/landing dietro flag/7 capability/contract/zero mutation) · workflow reale in FULL-preview: `growth.prepare_model` su bozza di test → 5 fix SAFE (score SEO 99), MISSING_REAL_DATA corretti, rollback 8 modifiche + 6 effetti secondari 0 errori · regressioni: Phase 12 22/22, pytest 76/76, smoke 35/35, binding 30/30, contract 34/34, sim v1 42/42, coverage 156/156, agent suite 47/47.

@@ -1,6 +1,6 @@
 {
- "base_url": "https://secret-side.emergent.host",
- "started_at": "2026-09-11T10:00:05Z",
+ "base_url": "https://secret-side.preview.emergentagent.com",
+ "started_at": "2026-09-11T12:03:16Z",
  "v2": [
   {
    "check": "getSystemStatus 200 + mode READ_ONLY",
@@ -8,12 +8,12 @@
    "note": ""
   },
   {
-   "check": "status: no double envelope, registry total 97",
+   "check": "status: no double envelope, registry total 104",
    "result": "PASS",
    "note": ""
   },
   {
-   "check": "status: registry bound 97 / unbound 0",
+   "check": "status: registry bound 104 / unbound 0",
    "result": "PASS",
    "note": ""
   },
@@ -73,12 +73,12 @@
    "note": ""
   },
   {
-   "check": "admin registry (JWT): 97 total / 97 bound / 0 unbound / 0 CRITICAL exposed",
+   "check": "admin registry (JWT): 104 total / 104 bound / 0 unbound / 0 CRITICAL exposed",
    "result": "PASS",
    "note": ""
   },
   {
-   "check": "findModel natural reference 'Vanessa' -> slug (or 409 AMBIGUOUS with candidates)",
+   "check": "findModel natural reference 'Francesca' -> slug (or 409 AMBIGUOUS with candidates)",
    "result": "PASS",
    "note": ""
   },
@@ -436,13 +436,13 @@
   },
   {
    "check": "sitemap.xml 200, production URLs, includes model page",
-   "result": "PASS",
-   "note": ""
+   "result": "FAIL",
+   "note": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n<url><loc>https://se"
   },
   {
    "check": "robots.txt 200 with production sitemap",
-   "result": "PASS",
-   "note": ""
+   "result": "FAIL",
+   "note": "# As a condition of accessing this website, you agree to abide by the following\n# content signals:\n\n# (a)  If a Content-Signal = yes, you may collect content fo"
   },
   {
    "check": "RSS 200 (xml)",
@@ -450,11 +450,53 @@
    "note": ""
   }
  ],
+ "p13": [
+  {
+   "check": "sitemap: XML with <lastmod>, only public URLs, no draft slug",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "google.status 200, no secrets, connection state explicit",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "google.url.inspect 200 with explicit state (never INDEXED without Google)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "google.analytics.summary 200 (totals or NOT_CONFIGURED)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "seo.indexability: published model technically indexable (HTTP 200, robots ok, in sitemap, no X-Robots noindex)",
+   "result": "FAIL",
+   "note": "['X_ROBOTS_TAG', 'ROBOTS_TXT']"
+  },
+  {
+   "check": "growth.prepare_model preview 200 (dry_run, publishes=false)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "google.sitemap.sync preview 200 (would_submit reported, nothing sent)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "public landing API: unknown/unpublished -> 404",
+   "result": "PASS",
+   "note": ""
+  }
+ ],
  "read_only": true,
- "openapi_v2_url": "https://secret-side.emergent.host/api/v2/ai/openapi-chatgpt.json",
+ "openapi_v2_url": "https://secret-side.preview.emergentagent.com/api/v2/ai/openapi-chatgpt.json",
  "openapi_v2_operations": 12,
- "capabilities_total": 97,
- "capabilities_bound": 97,
+ "capabilities_total": 104,
+ "capabilities_bound": 104,
  "capabilities_unbound": 0,
  "getjob_note": "async AI jobs are created only by FULL batch operations: in production READ_ONLY only auth + 404 path is exercisable (200 path verified in preview coverage).",
  "idempotency_note": "v2 per-capability replay (same key -> same result, different body -> 409 IDEMPOTENCY_CONFLICT) is only exercisable with real writes (FULL): verified in preview coverage, not in production READ_ONLY.",
@@ -488,7 +530,7 @@
    "capability": "models.prepare_complete",
    "capability_version": "1.0",
    "risk": "SAFE",
-   "session_id": "ses_a220b33ce6d7",
+   "session_id": "ses_0f3b50eb2213",
    "mode": "READ_ONLY",
    "rollback": {
     "available": false,
@@ -500,7 +542,7 @@
   "next_steps": [
    "Esegui senza dry_run (modalit\u00e0 FULL) per creare la bozza; i campi REVIEW richiederanno approvazione; annullabile con rollback.session"
   ],
-  "request_id": "f4e2a41b-b895-4509-8d6f-e3ef7c1c0148",
+  "request_id": "7520df8a-697a-4db6-a8b6-4c211038a9f9",
   "changes": [],
   "approval_required": false
  },
@@ -510,15 +552,38 @@
  "public_models": 10,
  "seo_open": {
   "SAFE_AUTO_FIX": 0,
-  "REVIEW_REQUIRED": 4,
+  "REVIEW_REQUIRED": 1,
   "CRITICAL": 0
  },
  "health_latest": {
   "overall": "ok",
-  "checked_at": "2026-09-11T09:52:44.160397+00:00"
+  "checked_at": "2026-09-11T12:03:09.138412+00:00"
  },
+ "google_connection": {
+  "status": "NOT_CONFIGURED",
+  "detail": "Imposta GOOGLE_SEARCH_ENABLED=true e GOOGLE_SEARCH_CREDENTIALS_JSON (service account) sul server; aggiungi l'email del service account come utente della propriet\u00e0 Search Console"
+ },
+ "inspection_sample": {
+  "url": "https://secret-side.preview.emergentagent.com/modelle/francesca-rossi",
+  "state": "NOT_CONFIGURED",
+  "source": "none",
+  "detail": "URL Inspection non disponibile: Search Console non configurata (o inspection disattivata)"
+ },
+ "indexability_sample": {
+  "url": "https://secret-side.preview.emergentagent.com/modelle/francesca-rossi",
+  "ok": false,
+  "failing": [
+   "X_ROBOTS_TAG",
+   "ROBOTS_TXT"
+  ]
+ },
+ "p13_pass": "7/8",
  "v2_pass": "59/59",
- "regressions_pass": "30/30",
- "problems": [],
- "conclusion": "PRODUCTION V2 READY FOR GPT REIMPORT"
+ "regressions_pass": "28/30",
+ "problems": [
+  "sitemap.xml 200, production URLs, includes model page: <?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n<url><loc>https://se",
+  "robots.txt 200 with production sitemap: # As a condition of accessing this website, you agree to abide by the following\n# content signals:\n\n# (a)  If a Content-Signal = yes, you may collect content fo",
+  "seo.indexability: published model technically indexable (HTTP 200, robots ok, in sitemap, no X-Robots noindex): ['X_ROBOTS_TAG', 'ROBOTS_TXT']"
+ ],
+ "conclusion": "PRODUCTION V2 NOT READY"
 }

@@ -93,6 +93,15 @@ async def j_sitemap():
     return {"entries": len(entries), "duplicates": dup}
 
 
+@job("google_sitemap_sync", 3600, "Search Console: re-invio sitemap solo se cambiata/dirty (debounce, quota-safe)")
+async def j_google_sitemap_sync():
+    from google_search.service import sitemap_sync, configured
+    if not configured():
+        return {"skipped": "Search Console non configurata"}
+    r = await sitemap_sync(force=False)
+    return {k: r.get(k) for k in ("submitted", "would_submit", "reason", "skipped_reason", "urls", "error")}
+
+
 @job("analytics_sync", 3600, "Aggregazione giornaliera analytics (Italy Engine)")
 async def j_analytics():
     from v1_tracking import aggregate_day

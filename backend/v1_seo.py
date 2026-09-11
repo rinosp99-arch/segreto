@@ -371,26 +371,56 @@ async def internal_link_suggestions(limit_per_model: int = 4) -> dict:
 
 
 # ---------------- SITEMAP MANAGER ----------------
-async def sitemap_entries() -> List[dict]:
-    base = await site_base_url()
+async def sitemap_entries(base: Optional[str] = None) -> List[dict]:
+    """Single source of truth for the sitemap (public /api/sitemap.xml, SEO status, Google layer).
+    Only public + indexable URLs: published models (no anteprima/noindex), indexable published categories/articles and
+    published landings ONLY while flags.public_landing_routes is on. Real lastmod, deduplicated."""
+    if base is None:
+        base = await site_base_url()
+        if not base:
+            from google_search.config import cfg as gcfg
+            base = gcfg.public_base
+    base = (base or "").rstrip("/")
     entries = [{"path": "/", "priority": "1.0", "changefreq": "daily", "type": "home"}]
-    async for m in models_col.find({"stato": "pubblicata", "is_deleted": {"$ne": True}}, {"_id": 0, "slug": 1, "seo": 1, "updated_at": 1}):
+    latest = ""
+    async for m in models_col.find({"stato": "pubblicata", "is_deleted": {"$ne": True}}, {"_id": 0, "slug": 1, "seo": 1, "updated_at": 1, "anteprima": 1, "data_pubblicazione": 1}):
         seo = m.get("seo") or {}
-        if seo.get("indexable", True) is False or "noindex" in (seo.get("robots") or "").lower():
+        if seo.get("indexable", True) is False or "noindex" in (seo.get("robots") or "").lower() or m.get("anteprima"):
             continue
-        entries.append({"path": f"/modelle/{m['slug']}", "priority": "0.9", "changefreq": "weekly", "type": "model", "lastmod": (m.get("updated_at") or "")[:10]})
-    async for c in categories_col.find({"stato": "pubblicata", "indicizzabile": True}, {"_id": 0, "slug": 1}):
-        entries.append({"path": f"/categorie/{c['slug']}", "priority": "0.7", "changefreq": "weekly", "type": "category"})
-    async for a in articles_col.find({"stato": "pubblicato", "indicizzabile": True}, {"_id": 0, "slug": 1, "data_aggiornamento": 1}):
-        entries.append({"path": f"/articoli/{a['slug']}", "priority": "0.6", "changefreq": "monthly", "type": "article", "lastmod": (a.get("data_aggiornamento") or "")[:10]})
-    cfg = await config_col.find_one({"id": "global"}, {"_id": 0}) or {}
-    if (cfg.get("landings") or {}).get("public_routes"):
-        async for l in landings_col.find({"stato": "pubblicata", "is_deleted": {"$ne": True}}, {"_id": 0, "slug": 1}):
-            if ((l.get("seo") or {}).get("indexable", True)):
-                entries.append({"path": f"/l/{l['slug']}", "priority": "0.8", "changefreq": "weekly", "type": "landing"})
+        lm = (m.get("updated_at") or m.get("data_pubblicazione") or "")[:10]
+        latest = max(latest, lm)
+        entries.append({"path": f"/modelle/{m['slug']}", "priority": "0.9", "changefreq": "weekly", "type": "model", "lastmod": lm or None})
+    async for c in categories_col.find({"stato": "pubblicata", "indicizzabile": True, "is_deleted": {"$ne": True}}, {"_id": 0, "slug": 1, "updated_at": 1}):
+        entries.append({"path": f"/categorie/{c['slug']}", "priority": "0.7", "changefreq": "weekly", "type": "category", "lastmod": (c.get("updated_at") or "")[:10] or None})
+    async for a in articles_col.find({"stato": "pubblicato", "indicizzabile": True}, {"_id": 0, "slug": 1, "data_aggiornamento": 1, "data_pubblicazione": 1}):
+        entries.append({"path": f"/articoli/{a['slug']}", "priority": "0.6", "changefreq": "monthly", "type": "article", "lastmod": (a.get("data_aggiornamento") or a.get("data_pubblicazione") or "")[:10] or None})
+    cfg = await config_col.find_one({"id": "global"}, {"_id": 0, "flags": 1}) or {}
+    if (cfg.get("flags") or {}).get("public_landing_routes"):
+        async for l in landings_col.find({"stato": "pubblicata", "is_deleted": {"$ne": True}}, {"_id": 0, "slug": 1, "seo": 1, "updated_at": 1}):
+            lseo = l.get("seo") or {}
+            if lseo.get("indexable", True) is False or "noindex" in (lseo.get("robots") or "").lower():
+                continue
+            entries.append({"path": f"/l/{l['slug']}", "priority": "0.8", "changefreq": "weekly", "type": "landing", "lastmod": (l.get("updated_at") or "")[:10] or None})
+    if latest:
+        entries[0]["lastmod"] = latest
+    seen, out = set(), []
     for e in entries:
         e["loc"] = f"{base}{e['path']}" if base else e["path"]
-    return entries
+        if e["loc"] in seen:
+            continue
+        seen.add(e["loc"])
+        out.append(e)
+    return out
+
+
+def sitemap_xml(entries: List[dict]) -> str:
+    from xml.sax.saxutils import escape
+    parts = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for e in entries:
+        lm = f"<lastmod>{escape(e['lastmod'])}</lastmod>" if e.get("lastmod") else ""
+        parts.append(f"<url><loc>{escape(e['loc'])}</loc>{lm}<changefreq>{e['changefreq']}</changefreq><priority>{e['priority']}</priority></url>")
+    parts.append("</urlset>")
+    return "\n".join(parts)
 
 
 # ---------------- BODIES ----------------

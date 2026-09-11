@@ -1,5 +1,5 @@
 """Phase 12A - Total Site Control API v2 Backend Testing
-Tests the universal capability engine under /api/v2/ai/* with 97 capabilities.
+Tests the universal capability engine under /api/v2/ai/* with 104 capabilities.
 Server must stay in READ_ONLY mode throughout.
 """
 import requests
@@ -139,12 +139,12 @@ class Phase12ATester:
                     self.log("   ✅ No CRITICAL capabilities listed", "PASS")
                     self.tests_passed += 1
                     
-                # Check count is 97
-                if count != 97:
-                    self.log(f"   ❌ Expected 97 capabilities, got {count}", "FAIL")
-                    self.tests_failed.append("97 capabilities count")
+                # Check count is 104
+                if count != 104:
+                    self.log(f"   ❌ Expected 104 capabilities, got {count}", "FAIL")
+                    self.tests_failed.append("104 capabilities count")
                 else:
-                    self.log("   ✅ Correct count: 97 capabilities", "PASS")
+                    self.log("   ✅ Correct count: 104 capabilities", "PASS")
                     self.tests_passed += 1
                     
         # Test without auth (should fail)
@@ -463,11 +463,11 @@ class Phase12ATester:
                     self.log("   ✅ Mode is READ_ONLY", "PASS")
                     self.tests_passed += 1
                     
-                if total != 97:
-                    self.log(f"   ❌ Expected 97 capabilities, got {total}", "FAIL")
+                if total != 104:
+                    self.log(f"   ❌ Expected 104 capabilities, got {total}", "FAIL")
                     self.tests_failed.append("Status capabilities count")
                 else:
-                    self.log("   ✅ Correct count: 97", "PASS")
+                    self.log("   ✅ Correct count: 104", "PASS")
                     self.tests_passed += 1
                     
                 # Check no nested 'ok' key (no double envelope)
@@ -808,7 +808,7 @@ class Phase12ATester:
                 self.log(f"   Total: {total}, Bound: {bound}, Unbound: {len(unbound)}")
                 self.log(f"   By risk: {json.dumps(by_risk)}")
                 
-                if total == 97 and bound == 97:
+                if total == 104 and bound == 104:
                     self.log("   ✅ Correct counts", "PASS")
                     self.tests_passed += 1
                     

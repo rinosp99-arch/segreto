@@ -105,8 +105,8 @@ async def keys():
 
 
 # ---------------------------------------------------------------- registry
-async def test_registry_loads_97():
-    assert len(C.REGISTRY) == 97
+async def test_registry_loads_104():
+    assert len(C.REGISTRY) == 104
 
 
 async def test_registry_no_duplicates_and_stable_ids():
@@ -121,7 +121,7 @@ async def test_registry_no_duplicates_and_stable_ids():
 
 async def test_startup_verification_all_bound():
     rep = C.verify_bindings()
-    assert rep["total"] == 97 and rep["unbound"] == 0 and rep["problems"] == {}
+    assert rep["total"] == 104 and rep["unbound"] == 0 and rep["problems"] == {}
     assert all(c.status == C.BOUND for c in C.REGISTRY.values())
 
 
@@ -139,7 +139,7 @@ async def test_unbound_capability_is_blocked_not_crashing(client, keys):
     C.BINDINGS["models.list"] = ["v1_models.this_function_does_not_exist"]
     try:
         rep = C.verify_bindings()
-        assert cap.status == C.UNBOUND and "models.list" in rep["problems"] and rep["bound"] == 96
+        assert cap.status == C.UNBOUND and "models.list" in rep["problems"] and rep["bound"] == 103
         r = await client.post("/api/v2/ai/execute", json={"action": "models.list"}, headers=_h(keys["full"]))
         assert r.status_code == 503 and _code(r) == "CAPABILITY_UNBOUND"
         r = await client.post("/api/v2/ai/preview", json={"action": "models.list"}, headers=_h(keys["full"]))
@@ -228,7 +228,7 @@ async def test_read_only_reads_ok_and_status_unwrapped(client, keys):
     assert r.status_code == 200
     j = r.json()
     assert j["ok"] and "data" in j and "ok" not in j["data"]   # no double envelope
-    assert j["data"]["capabilities_registry"]["total"] == 97 and j["data"]["capability"] == "system.status"
+    assert j["data"]["capabilities_registry"]["total"] == 104 and j["data"]["capability"] == "system.status"
     r = await client.post("/api/v2/ai/analytics/query", json={"metric": "model_views", "range": "7g"}, headers=_h(keys["full"]))
     assert r.status_code == 200 and "data" in r.json() and "summary" not in r.json()["data"]
     r = await client.post("/api/v2/ai/models/find", json={"reference": "Francesca"}, headers=_h(keys["full"]))

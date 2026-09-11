@@ -177,6 +177,9 @@ async def set_landing_state(doc: dict, stato: str, principal: dict, request: Opt
     if stato == "pubblicata" and not doc.get("data_pubblicazione"):
         new_doc["data_pubblicazione"] = now_iso()
     await landings_col.replace_one({"id": doc["id"]}, new_doc)
+    if "pubblicata" in (stato, doc.get("stato")):
+        from google_search.service import mark_sitemap_dirty
+        await mark_sitemap_dirty(f"landing {doc['slug']} -> {stato}")
     ver = await record_version("landing", doc["id"], doc, new_doc, actor_of(principal), source=principal.get("source", "manual"), reason=f"stato:{stato}", request_id=request_id_of(request))
     out = _enrich(new_doc)
     out["version_id"] = ver.get("id")

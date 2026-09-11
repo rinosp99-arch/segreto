@@ -293,10 +293,15 @@ async def patch_model(doc: dict, changes: dict, principal: dict, request: Option
     rid = request_id_of(request)
     ver = await record_version("model", doc["id"], doc, new_doc, actor_of(principal), source=src, reason=reason or "Aggiornamento modella", request_id=rid)
     await audit_log(actor_of(principal), "update", "model", doc["id"], {"changed": ver.get("changed_fields", []), "auto": auto}, rid, src)
-    # slug change -> safe redirect
+    # slug change -> safe redirect (+ sitemap re-submit scheduled)
     if new_doc["slug"] != doc["slug"]:
         from v1_seo import ensure_redirect
         await ensure_redirect(f"/modelle/{doc['slug']}", f"/modelle/{new_doc['slug']}", actor_of(principal), "slug_change")
+        from google_search.service import mark_sitemap_dirty
+        await mark_sitemap_dirty(f"slug change {doc['slug']} -> {new_doc['slug']}")
+    elif new_doc.get("stato") == "pubblicata" and ((new_doc.get("seo") or {}).get("indexable") != (doc.get("seo") or {}).get("indexable") or (new_doc.get("seo") or {}).get("canonical") != (doc.get("seo") or {}).get("canonical")):
+        from google_search.service import mark_sitemap_dirty
+        await mark_sitemap_dirty(f"seo indexable/canonical change {doc['slug']}")
     out = enrich(new_doc)
     out["version_id"] = ver.get("id")
     out["changed_fields"] = ver.get("changed_fields", [])
@@ -343,6 +348,9 @@ async def transition(doc: dict, action: str, principal: dict, request: Optional[
                 "changed_fields": ["stato"], "validation": validate_model(new_doc), "workflow_status": workflow_status(new_doc), "public_url": f"/modelle/{doc['slug']}" if new_doc["stato"] == "pubblicata" else None}
     new_doc["updated_at"] = now_iso()
     await models_col.replace_one({"id": doc["id"]}, new_doc)
+    if new_doc.get("stato") != doc.get("stato") and "pubblicata" in (new_doc.get("stato"), doc.get("stato")):
+        from google_search.service import mark_sitemap_dirty
+        await mark_sitemap_dirty(f"model {doc['slug']} {doc.get('stato')} -> {new_doc.get('stato')}")
     rid = request_id_of(request)
     ver = await record_version("model", doc["id"], doc, new_doc, actor_of(principal), source=src, reason=reason or action, request_id=rid)
     await audit_log(actor_of(principal), action, "model", doc["id"], {}, rid, src)

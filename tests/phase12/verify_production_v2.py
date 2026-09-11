@@ -32,7 +32,8 @@ SECRET_RX = re.compile(r"(key_hash|token_hash|password_hash|MONGO_URL|mongodb(\+
 
 def ok(section, name, cond, extra=""):
     RES.append((section, name, bool(cond)))
-    (REPORT["v2"] if section == "v2" else REPORT["regressions"]).append({"check": name, "result": "PASS" if cond else "FAIL", "note": str(extra)[:200] if not cond else ""})
+    REPORT.setdefault("p13", [])
+    (REPORT["v2"] if section == "v2" else REPORT["p13"] if section == "p13" else REPORT["regressions"]).append({"check": name, "result": "PASS" if cond else "FAIL", "note": str(extra)[:200] if not cond else ""})
     print(f"{'PASS' if cond else 'FAIL'} [{section}] {name}" + (f"  -> {str(extra)[:180]}" if not cond and extra else ""))
     if not cond:
         PROBLEMS.append(f"{name}: {str(extra)[:180]}")
@@ -85,8 +86,8 @@ try:
     st = j(S.get(f"{BASE}/api/v2/ai/status", headers=K, timeout=60))
     d = st.get("data", {})
     ok("v2", "getSystemStatus 200 + mode READ_ONLY", st.get("ok") and d.get("mode") == "READ_ONLY", json.dumps(st)[:200])
-    ok("v2", "status: no double envelope, registry total 97", "ok" not in d and d.get("capabilities_registry", {}).get("total") == 97, d.get("capabilities_registry"))
-    ok("v2", "status: registry bound 97 / unbound 0", d.get("capabilities_registry", {}).get("bound") == 97 and d.get("capabilities_registry", {}).get("unbound", 0) == 0, d.get("capabilities_registry"))
+    ok("v2", "status: no double envelope, registry total 104", "ok" not in d and d.get("capabilities_registry", {}).get("total") == 104, d.get("capabilities_registry"))
+    ok("v2", "status: registry bound 104 / unbound 0", d.get("capabilities_registry", {}).get("bound") == 104 and d.get("capabilities_registry", {}).get("unbound", 0) == 0, d.get("capabilities_registry"))
     REPORT["read_only"] = d.get("mode") == "READ_ONLY"
     # ------------------------------------------------------------------------------------------ OpenAPI v2 / v1
     r = S.get(f"{BASE}/api/v2/ai/openapi-chatgpt.json", timeout=60)
@@ -119,7 +120,7 @@ try:
     ok("v2", "getCapability unknown -> 404 UNKNOWN_CAPABILITY", S.get(f"{BASE}/api/v2/ai/capabilities/shell.exec", headers=K, timeout=60).status_code == 404)
     r = S.get(f"{BASE}/api/v2/ai/admin/capabilities", headers=JWT, timeout=60)
     adm = j(r)
-    ok("v2", "admin registry (JWT): 97 total / 97 bound / 0 unbound / 0 CRITICAL exposed", r.status_code == 200 and adm.get("total") == 97 and adm.get("bound") == 97 and not adm.get("unbound") and (adm.get("by_risk") or {}).get("CRITICAL", 0) == 0, {k: adm.get(k) for k in ("total", "bound", "unbound", "by_risk")})
+    ok("v2", "admin registry (JWT): 104 total / 104 bound / 0 unbound / 0 CRITICAL exposed", r.status_code == 200 and adm.get("total") == 104 and adm.get("bound") == 104 and not adm.get("unbound") and (adm.get("by_risk") or {}).get("CRITICAL", 0) == 0, {k: adm.get(k) for k in ("total", "bound", "unbound", "by_risk")})
     REPORT["capabilities_total"], REPORT["capabilities_bound"], REPORT["capabilities_unbound"] = adm.get("total"), adm.get("bound"), len(adm.get("unbound") or [])
     # ------------------------------------------------------------------------------------------ findModel (real production catalogue)
     pm0 = j(S.get(f"{BASE}/api/models", timeout=60))
@@ -327,6 +328,28 @@ try:
     if r.status_code == 404:
         r = S.get(f"{BASE}/api/rss.xml", timeout=60)
     ok("reg", "RSS 200 (xml)", r.status_code == 200 and "<rss" in r.text.lower(), (r.status_code, r.text[:80]))
+    # ------------------------------------------------------------------------------------------ PHASE 13 GOOGLE SEO CORE (read-only)
+    sm = S.get(f"{BASE}/api/sitemap.xml", timeout=60)
+    ok("p13", "sitemap: XML with <lastmod>, only public URLs, no draft slug", sm.status_code == 200 and "<lastmod>" in sm.text and "test-v2-giulia" not in sm.text and sm.text.count("<url>") >= 10, sm.text[:120])
+    r = post("/api/v2/ai/execute", {"action": "google.status"}, K)
+    gsd = j(r).get("data", {})
+    ok("p13", "google.status 200, no secrets, connection state explicit", r.status_code == 200 and gsd.get("connection", {}).get("status") in ("CONNECTED", "NOT_CONFIGURED", "PROPERTY_NOT_ACCESSIBLE", "ERROR") and "private_key" not in r.text, r.text[:160])
+    REPORT["google_connection"] = gsd.get("connection")
+    r = post("/api/v2/ai/execute", {"action": "google.url.inspect", "target": SLUG}, K)
+    ok("p13", "google.url.inspect 200 with explicit state (never INDEXED without Google)", r.status_code == 200 and j(r)["data"]["results"][0]["state"] in ("INDEXED", "NOT_INDEXED", "BLOCKED_ERROR", "UNKNOWN", "NOT_CONFIGURED"), r.text[:160])
+    REPORT["inspection_sample"] = {k: j(r)["data"]["results"][0].get(k) for k in ("url", "state", "source", "detail")} if r.status_code == 200 else r.text[:120]
+    r = post("/api/v2/ai/execute", {"action": "google.analytics.summary", "parameters": {"range": "28g"}}, K)
+    ok("p13", "google.analytics.summary 200 (totals or NOT_CONFIGURED)", r.status_code == 200, r.text[:160])
+    r = post("/api/v2/ai/execute", {"action": "seo.indexability", "target": SLUG}, K)
+    idx = j(r).get("data", {})
+    ok("p13", "seo.indexability: published model technically indexable (HTTP 200, robots ok, in sitemap, no X-Robots noindex)", r.status_code == 200 and idx.get("technically_indexable") is True, idx.get("failing"))
+    REPORT["indexability_sample"] = {"url": idx.get("url"), "ok": idx.get("technically_indexable"), "failing": idx.get("failing")}
+    r = post("/api/v2/ai/preview", {"action": "growth.prepare_model", "target": SLUG}, K)
+    ok("p13", "growth.prepare_model preview 200 (dry_run, publishes=false)", r.status_code == 200 and j(r)["data"].get("dry_run") is True and j(r)["data"].get("publishes") is False, r.text[:160])
+    r = post("/api/v2/ai/preview", {"action": "google.sitemap.sync", "parameters": {"force": True}}, K)
+    ok("p13", "google.sitemap.sync preview 200 (would_submit reported, nothing sent)", r.status_code == 200 and j(r)["data"].get("dry_run") is True, r.text[:160])
+    lr = S.get(f"{BASE}/api/landings/does-not-exist-zz", timeout=60)
+    ok("p13", "public landing API: unknown/unpublished -> 404", lr.status_code == 404)
     # ------------------------------------------------------------------------------------------ final mode invariant
     st2 = j(S.get(f"{BASE}/api/v2/ai/status", headers=K, timeout=60)).get("data", {})
     ok("v2", "mode still READ_ONLY at the end (no FULL, no mutation)", st2.get("mode") == "READ_ONLY")
@@ -343,6 +366,7 @@ finally:
 
 v2p = sum(1 for s, _, p in RES if s == "v2" and p); v2n = sum(1 for s, _, _ in RES if s == "v2")
 rp = sum(1 for s, _, p in RES if s == "reg" and p); rn = sum(1 for s, _, _ in RES if s == "reg")
+REPORT["p13_pass"] = f"{sum(1 for s, _, p in RES if s == 'p13' and p)}/{sum(1 for s, _, _ in RES if s == 'p13')}"
 REPORT.update({"v2_pass": f"{v2p}/{v2n}", "regressions_pass": f"{rp}/{rn}", "problems": PROBLEMS,
                "conclusion": "PRODUCTION V2 READY FOR GPT REIMPORT" if not PROBLEMS and REPORT.get("read_only") else "PRODUCTION V2 NOT READY"})
 os.makedirs("/app/test_reports", exist_ok=True)

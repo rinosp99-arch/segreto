@@ -1,26 +1,30 @@
 [
   {
-    "content": "Verifica stato: git, registry 97/0, servizi, preview READ_ONLY",
+    "content": "Audit GOOGLE SEO CORE",
     "status": "completed"
   },
   {
-    "content": "Testing agent: report letto; fix 2 issue LOW (concurrency hoist, select filter) - DONE, smoke 35/35",
+    "content": "backend/google_search package",
     "status": "completed"
   },
   {
-    "content": "Rerun suite: pytest 66/66, sim 42/42, smoke 35/35, coverage 156/156 + extra 22/22 (97/97 capability reali), residui puliti",
+    "content": "Sitemap unificata + dirty + job",
     "status": "completed"
   },
   {
-    "content": "Igiene: ruff clean, esbuild ok, screenshot pannello ok, residui 0, READ_ONLY",
+    "content": "7 capabilities Phase 13 (104 bound)",
     "status": "completed"
   },
   {
-    "content": "Docs: CHATGPT_API v2, SUPER_API, CHATGPT_INSTRUCTIONS, plan.md",
+    "content": "Frontend LandingPage /l/:slug + canonical",
     "status": "completed"
   },
   {
-    "content": "Report finale Fase 12A con verdetto ELIGIBLE",
+    "content": "Tests phase13 7/7 + regressioni verdi + lint/esbuild",
+    "status": "completed"
+  },
+  {
+    "content": "Report PHASE 13 + istruzioni Service Account",
     "status": "completed"
   }
 ]

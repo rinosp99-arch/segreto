@@ -40,6 +40,11 @@ webhook_deliveries_col = db['webhook_deliveries']
 backups_col = db['backups']
 ai_actions_col = db['ai_actions']
 ai_requests_col = db['ai_requests']   # Phase 11: access log of EVERY /api/v1/ai request made with an API key (reads included)
+# Phase 13 - GOOGLE SEO CORE
+google_search_status_col = db['google_search_status']          # one doc per public URL: indexability snapshot + Google inspection snapshot + history
+google_search_sync_log_col = db['google_search_sync_log']      # every Google API call (request_id, op, status, duration, error type) - never secrets
+google_search_analytics_col = db['google_search_analytics']    # cached Search Analytics results (range/dimension/filter) with TTL
+google_search_state_col = db['google_search_state']            # singleton: sitemap dirty flag, last submit, inspection daily budget counter
 analytics_daily_col = db['analytics_daily']
 
 
@@ -105,6 +110,13 @@ async def ensure_indexes():
     await ai_requests_col.create_index('timestamp')
     await ai_requests_col.create_index('created_dt', expireAfterSeconds=60 * 60 * 24 * 30)
     await ai_requests_col.create_index('request_id')
+    await google_search_status_col.create_index('url', unique=True)
+    await google_search_status_col.create_index([('entity_type', 1), ('entity_id', 1)])
+    await google_search_status_col.create_index('google.last_inspection_at')
+    await google_search_sync_log_col.create_index('timestamp')
+    await google_search_sync_log_col.create_index('created_dt', expireAfterSeconds=60 * 60 * 24 * 30)
+    await google_search_analytics_col.create_index('key', unique=True)
+    await google_search_analytics_col.create_index('created_dt', expireAfterSeconds=60 * 60 * 24 * 7)
     await db['rate_buckets'].create_index('created_dt', expireAfterSeconds=180)
     await db['rate_buckets'].create_index('id', unique=True)
     await analytics_daily_col.create_index([('giorno', 1), ('model_id', 1), ('country', 1)], unique=True)

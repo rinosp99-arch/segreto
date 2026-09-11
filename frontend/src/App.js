@@ -15,6 +15,7 @@ import { track } from '@/lib/api';
 import Home from '@/pages/Home';
 import ModelProfile from '@/pages/ModelProfile';
 import CategoryPage from '@/pages/CategoryPage';
+import LandingPage from '@/pages/LandingPage';
 import ArticlesList from '@/pages/ArticlesList';
 import ArticlePage from '@/pages/ArticlePage';
 import Legal from '@/pages/Legal';
@@ -70,6 +71,7 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/modelle/:slug" element={<ModelProfile />} />
             <Route path="/categorie/:slug" element={<CategoryPage />} />
+            <Route path="/l/:slug" element={<LandingPage />} />
             <Route path="/articoli" element={<ArticlesList />} />
             <Route path="/articoli/:slug" element={<ArticlePage />} />
             <Route path="/privacy" element={<Legal kind="privacy" />} />

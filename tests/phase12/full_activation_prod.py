@@ -2,7 +2,7 @@
 
 Steps (all through the public API, admin JWT + a TEMPORARY FULL key that is revoked at the end; the definitive
 'ChatGPT Production FULL' key is created by the admin in /admin/motore so the raw key is displayed once to a human only):
- 1. temporary key with the FULL business preset (AI_OPERATOR_SCOPES + landing:publish) -> catalog: 97 capabilities, all execute_access=full
+ 1. temporary key with the FULL business preset (AI_OPERATOR_SCOPES + landing:publish) -> catalog: 104 capabilities, all execute_access=full
  2. ai_write_enabled=true (mode FULL); READ_ONLY key stays active
  3. REAL creation of TEST V2 GIULIA via models.prepare_complete (draft, never published, no media), REVIEW fields approved
  4. verifications: admin presence, not public, actor, audit, session_id, rollback available (dry_run plan only), 10 real models untouched
@@ -94,9 +94,9 @@ try:
     REPORT["capabilities_not_full"] = not_full
     REPORT["by_risk"] = {k: sum(1 for c in caps if c["risk"] == k) for k in ("SAFE", "REVIEW_REQUIRED", "CRITICAL")}
     REPORT["review_required"] = sorted(c["id"] for c in caps if c["risk"] == "REVIEW_REQUIRED")
-    ok("FULL key sees all 97 registry capabilities, every one execute_access=full, 0 CRITICAL exposed", len(caps) == 97 and not not_full and REPORT["by_risk"]["CRITICAL"] == 0, (len(caps), not_full[:5]))
+    ok("FULL key sees all 104 registry capabilities, every one execute_access=full, 0 CRITICAL exposed", len(caps) == 104 and not not_full and REPORT["by_risk"]["CRITICAL"] == 0, (len(caps), not_full[:5]))
     adm = j(S.get(f"{BASE}/api/v2/ai/admin/capabilities", headers=JWT, timeout=60))
-    ok("registry 97 bound / 0 unbound", adm.get("bound") == 97 and not adm.get("unbound"))
+    ok("registry 104 bound / 0 unbound", adm.get("bound") == 104 and not adm.get("unbound"))
     # CRITICAL surface stays out even for FULL: not in registry -> UNKNOWN_CAPABILITY; security flags refused
     for act in ("backup.restore", "models.hard_delete", "keys.create", "users.create", "shell.exec", "config.set_secret"):
         rr = post("/api/v2/ai/preview", {"action": act, "parameters": {}}, K)

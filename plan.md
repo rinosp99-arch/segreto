@@ -7,16 +7,14 @@
 - Architettura “future‑proof SEO”: dati/slug/metadata/contenuti nel backend; frontend responsabile del rendering (migrazione futura a SSR/prerender possibile senza cloaking).
 - Performance mobile-first: lazy media, nessun jank, rispetto autoplay policy (muted/playsInline), fallback robusti.
 - **UX Home:** sezione “**IN MOVIMENTO**” come **pellicola cinematografica** seamless/infinita (non carosello), che si trasforma insieme allo switch Pubblico/Segreto.
-- **Nuovo obiettivo operativo (admin):** rendere **rapidissimo** sostituire contenuti DEMO con contenuti REALI per decine di creator, con:
-  - stato DEMO/REALE robusto (non solo heuristics URL)
-  - checklist “Pronta alla pubblicazione” basata SOLO su requisiti obbligatori
-  - blocco pubblicazione con messaggi chiari e lista campi mancanti
-  - import massivo media e strumenti di produttività (copia configurazione, anteprima admin bozza)
+- **Obiettivo operativo (admin + GPT):** tramite API v2 + Capability Registry + Universal Dispatcher, permettere a ChatGPT di gestire in modo sicuro operazioni business (testi/SEO/landing/categorie/internal linking/rollback/approvals) senza mai diventare un backdoor (no DB raw, no shell, no secrets).
+- **Nuovo obiettivo SEO (Phase 13 — GOOGLE SEO CORE):** rendere LATO SEGRETO tecnicamente “perfetto per Google” (scopribilità, indicizzabilità, sitemap corretta, landing pubbliche controllate) + integrazione Search Console (Sitemap sync, URL Inspection, Search Analytics) **minimizzando lo scope** e riusando Phase 9–12.
 
 **Stato attuale (snapshot)**
-- Phase 1–6: implementate (home griglia, profili con trasformazione, admin/auth, analytics base/funnel, categorie/articoli/SEO endpoints, campagne/referral). Agent-tested.
-- Phase 7 “IN MOVIMENTO”: **completata** end-to-end e verificata da testing agent (iteration_6).
-- Admin: aggiunto **controllo DEMO/REALE automatico** + badge/summary lista + pannello editor “Stato contenuti” (agent-tested via curl + screenshot). Da evolvere con override manuale e workflow PRONTA/INCOMPLETA.
+- Phase 1–8: completate (agent-tested). Pubblico + Admin stabili.
+- Phase 9–11: SUPER API + ChatGPT control layer v1: completate e verificate in produzione.
+- Phase 12A: Total Site Control API v2: completata, deployata in produzione, contratto GPT v2 robusto (parameters/parameters_json/request_example), FULL business mode abilitato (`ai_write_enabled=true`) con chiave READ_ONLY di fallback.
+- Stato produzione: `https://secret-side.emergent.host`
 
 ---
 
@@ -54,7 +52,7 @@
 4. Come admin, configuro CTA, timer/messaggio 35s, tema/palette del Lato Segreto.
 5. Come admin, imposto SEO title/meta e l’ordine in Home.
 
-**Stato:** completata (agent-tested). Nota: workflow pubblicazione verrà raffinato in Phase 8 con checklist e blocchi “solo obbligatori”.
+**Stato:** completata (agent-tested).
 
 ---
 
@@ -66,16 +64,16 @@
 4. Come owner, distinguo sorgenti click OnlyFans.
 5. Come owner, so quali articoli generano click verso modelle e OF.
 
-**Stato:** completata (agent-tested) + campagne/referral integrati.
+**Stato:** completata (agent-tested).
 
 ---
 
 ### Phase 5 — SEO tecnico + Categorie + Editorial/Blog + Webhook integrazione
 **User stories (SEO/Editoriale)**
 1. Come utente, apro /categorie/{slug} e trovo modelle pertinenti + breadcrumb.
-2. Come motore di ricerca, trovo sitemap.xml aggiornata con modelle/categorie/articoli pubblicati.
+2. Come motore di ricerca, trovo sitemap aggiornata con modelle/categorie/articoli pubblicati.
 3. Come admin, creo un articolo in bozza, lo anteprimo e lo pubblico.
-4. Come sistema esterno, invio un articolo via webhook e arriva come BOZZA (default OFF auto-publish).
+4. Come sistema esterno, invio un articolo via webhook e arriva come BOZZA.
 5. Come owner, misuro ARTICOLO→MODELLA→LATO SEGRETO→CLICK OF.
 
 **Stato:** completata (agent-tested).
@@ -85,244 +83,199 @@
 ### Phase 6 — Performance, Mobile Polish, Security Hardening, Final QA
 **User stories (Qualità)**
 1. Come utente mobile, scrollo fluido e i media caricano lazy senza layout shift.
-2. Come utente, vedo una UI accessibile (focus, contrasto, keyboard, reduced motion).
+2. Come utente, vedo una UI accessibile.
 3. Come owner, non espongo secrets nel frontend e l’admin è protetto.
-4. Come utente, la trasformazione resta fluida anche con video (poster + lazy).
+4. Come utente, la trasformazione resta fluida anche con video.
 5. Come utente, trovo pagine legali e un 404 coerente.
 
-**Stato:** completata in gran parte; quality gate continuo ad ogni nuova feature.
+**Stato:** completata in gran parte; quality gate continuo.
 
 ---
 
 ### Phase 7 — HOME “IN MOVIMENTO” (Pellicola cinematografica)
 **Scope**
-Nuova sezione in Home (dopo ~8–12 modelle) con fascia orizzontale di teaser video verticali (10–15s; demo ~12s) che scorre lentamente e continuamente da destra verso sinistra, senza reset visibile. Non è un carousel standard (niente frecce/pallini). Deve trasformarsi in modo cinematografico insieme allo switch Pubblico/Segreto senza scatti o video neri e mantenendo la posizione nel movimento.
+Sezione in Home con fascia orizzontale di teaser video verticali che scorre lentamente e continuamente, trasformazione Pubblico↔Segreto continua.
 
-**Stato:** COMPLETATA — implementata end-to-end e verificata dal testing agent (iteration_6): pellicola seamless, cap 8 video attivi rispettato, poster fallback (no black), pausa fuori viewport, trasformazione Pubblico↔Segreto continua, analytics impression/video_view/click attive, teaser demo rigenerati a ~12s seamless. Seconda fila predisposta ma OFF di default.
+**Stato:** COMPLETATA (agent-tested).
 
 ---
 
 ### Phase 8 — Admin Content Workflow (DEMO/REALE + INCOMPLETA/PRONTA + Produttività)
-**Vincolo:** non modificare il design pubblico già approvato. Questa iterazione riguarda soprattutto il workflow amministrativo.
+**Vincolo:** non modificare il design pubblico già approvato.
 
-#### 8.1 Concetti di stato (distinti e non sovrapposti)
-- **DEMO**: utilizza ancora contenuti temporanei (ma non necessariamente incompleta).
-- **INCOMPLETA**: mancano contenuti obbligatori.
-- **PRONTA**: tutti i contenuti obbligatori (e reali) sono presenti.
-- **PUBBLICATA**: è effettivamente visibile nel sito.
-
-#### 8.2 DEMO/REALE: rilevamento + override manuale per media
-**Problema:** non affidarsi solo al riconoscimento automatico dell’URL (CDN/URL esterni). 
-
-**Soluzione**
-- Mantenere heuristics automatiche (stock hosts + /media/ + *_demo), ma introdurre per ogni media un campo:
-  - `stato_contenuto`: `AUTO` | `DEMO` | `REALE` (default: `AUTO`)
-- Se `REALE` manuale: il sistema lo tratta come reale anche se URL “sospetto”.
-- Se `DEMO` manuale: forzare demo anche se URL sembra reale.
-
-**Copertura:**
-- Foto card / hero / teaser / secret hero
-- Media pairs (pubblico+segreto) incl. poster video
-- Pellicola Home (pubblico+segreto) incl. poster
-- Media messaggio segreto (foto/video)
-- (Opzionale) link esterni: mantenere solo AUTO demo-detection per “*_demo”, ma non bloccare PRONTA per social.
-
-#### 8.3 Checklist “Pronta alla pubblicazione” (SOLO obbligatori)
-**Default requisiti obbligatori**
-- conferma maggiorenne
-- nome
-- slug
-- foto card
-- **≥ 3 foto pubbliche** (da `media_pairs` tipo image lato pubblico)
-- **≥ 3 foto segrete** (da `media_pairs` tipo image lato segreto)
-- **≥ 1 video pubblico** (da `media_pairs` tipo video lato pubblico)
-- **≥ 1 video segreto** (da `media_pairs` tipo video lato segreto)
-- descrizione pubblica
-- descrizione segreta
-- claim (frase breve)
-- link OnlyFans
-
-**Requisiti condizionali (Pellicola)**
-- Se “Mostra nella pellicola” = SÌ:
-  - video pellicola pubblico
-  - video pellicola segreto
-
-**Non obbligatori (mai blocco):** Instagram/TikTok/social, 2° video opzionale, Snapchat ecc.
-
-#### 8.4 Blocco pubblicazione (solo obbligatori) + errore strutturato
-- Backend:
-  - quando si tenta di impostare stato `pubblicata`, validare la checklist obbligatoria.
-  - se mancano campi: rispondere **HTTP 400** con payload strutturato:
-    - `detail`: "NON PUOI ANCORA PUBBLICARE"
-    - `missing_required`: ["Foto Segreta 2", "Video Segreto", "Link OnlyFans", ...]
-    - `missing_count`: N
-- Frontend admin:
-  - mostrare dialog/alert premium con titolo, lista mancanti e CTA **COMPLETA PROFILO**.
-
-#### 8.5 Lista MODELLE: filtri + conteggi
-Aggiungere filtri:
-- TUTTE
-- SOLO DEMO
-- SOLO REALI
-- INCOMPLETE
-- PRONTE ALLA PUBBLICAZIONE
-
-Mostrare conteggi nel UI (es. “TUTTE 48 · DEMO 31 · REALI 17 · INCOMPLETE 8”).
-
-#### 8.6 Editor modella: checklist chiara + stato complessivo
-- Nuovo pannello “CHECKLIST PUBBLICAZIONE” (required + optional):
-  - ✅ / ⚠ / ❌ con label esplicite (come esempio utente)
-  - in fondo: “PRONTA ✅” oppure “MANCANO N ELEMENTI OBBLIGATORI”
-- Integrare con pannello DEMO già presente, ma separando:
-  - “DEMO/REALE” (per contenuti temporanei)
-  - “INCOMPLETA/PRONTA” (per requisiti)
-
-#### 8.7 Import Rapido media (multi-file drag & drop)
-Obiettivo: evitare 15 upload singoli.
-- UI: “IMPORT RAPIDO” nell’editor modella
-- supporto multi-selezione file + drag & drop
-- flow:
-  1) carica batch (object storage) 
-  2) mostra lista file con anteprima
-  3) assegnazione rapida a “slot” (Foto Pubblica 1, Foto Segreta 1, ... Video Pubblico, Video Segreto, Pellicola, poster)
-  4) supporto drag & drop + dropdown per slot
-
-#### 8.8 Import multiplo da URL (incolla più link)
-- UI: textarea “INCOLLA PIÙ LINK” (uno per riga)
-- backend service (o FE fetch) per scaricare e validare (dimensione/MIME), poi upload su storage
-- prima del salvataggio: **anteprima** + assegnazione a slot
-
-#### 8.9 Duplica configurazione (no contenuti personali)
-Funzione: “COPIA IMPOSTAZIONI DA UN’ALTRA MODELLA”
-- Copiare SOLO configurazione:
-  - preset tema segreto
-  - regia (fumo/luci/glow/movimento + suoni)
-  - CTA temporizzata (timer/copy/stile)
-  - messaggio 35s (timer/testo/CTA **senza** media)
-  - impostazioni pellicola (toggle/priorità/ordine, ma **senza** media)
-- Non copiare: foto/video/poster, bio, claim, onlyfans, social.
-
-#### 8.10 Anteprima completa admin per bozze (non indicizzabile)
-- Obiettivo: aprire il profilo come utente, anche se in bozza, ma **solo per admin**.
-- Backend:
-  - estendere GET model endpoints per accettare `stato=bozza` se request ha token admin valido.
-  - response con header/meta `noindex` (o flag API) per la pagina.
-- Frontend:
-  - bottone “ANTEPRIMA SITO” in ModelEditor
-  - apre `/modelle/{slug}?preview=1` (o route dedicata) e il frontend imposta `noindex` via `setSeo({noindex:true})`.
-
-#### 8.11 Test end-to-end (obbligatorio)
-Scenario completo:
-1) crea nuova modella → stato iniziale INCOMPLETA
-2) import rapido media (multi-file)
-3) pairing Pubblico↔Segreto + poster
-4) inserisci descrizioni + claim + link OF
-5) conferma maggiorenne
-6) attiva pellicola + inserisci video pellicola
-7) stato diventa PRONTA
-8) apri anteprima (solo admin, noindex)
-9) pubblica
-10) modella appare in Home
-11) Lato Segreto funziona
-12) Pellicola funziona
-13) analytics funzionano
-
-**Stato:** COMPLETATA — implementata end-to-end e verificata dal testing agent (iteration_7): backend 100% (46/46), frontend 100%. Override manuale per-media rispettato (nessun falso positivo con URL demo-looking), blocco pubblicazione solo su obbligatori con 400 strutturato + modale "COMPLETA PROFILO", filtri+conteggi lista, checklist editor, Import Rapido (file+URL), Copia configurazione (solo config), Anteprima admin bozze non indicizzabile. Design pubblico invariato.
+**Stato:** COMPLETATA (agent-tested) — override manuale DEMO/REALE per media, checklist required, blocco pubblicazione con 400 strutturato, filtri+conteggi, import rapido file+URL, copia configurazione, anteprima admin bozza noindex.
 
 ---
 
-### Phase 9 — SUPER API (motore API-first dietro il sito, pronto per ChatGPT) — Status: COMPLETATA (agent-tested, iteration_20: backend 101/108 poi fix restore dry-run + DELETE experiments/users; frontend ok; sito pubblico e admin invariati)
-
-**Vincoli utente:** NON rifare frontend/concept, NON dominio .it, NON SSR/prerender definitivo, NON GSC/GA produzione. Sito pubblico e admin devono restare identici e funzionanti. L'API è il motore, non un sostituto.
-
-**Audit codebase (eseguito):**
-- Stack: React 18 (CRA/craco, Tailwind, shadcn) · FastAPI 0.110 + Motor · MongoDB. ffmpeg/ffprobe e Pillow disponibili.
-- Collections esistenti: models, categories, articles, analytics_events, admin_users, settings, audit_logs, files.
-- API esistenti: /api (pubblico: models, segreto, categorie, articoli, settings, pellicola, track, uploads), /api/admin (login JWT, CRUD modelle/categorie/articoli, settings, upload Emergent Object Storage, audit, copy-config), /api/admin/analytics (overview, funnel, models, timeseries, campaigns, pellicola), /api/sitemap.xml, rss, robots, /api/integrations/seo/articles (webhook X-API-Key).
-- Auth esistente: JWT HS256 (ruolo unico "amministratore"), bcrypt, rate-limit login in memoria.
-- Media: upload → Emergent Object Storage → files_col → servito via /api/uploads/{path}. Nessuna variante/ottimizzazione/ALT lato server.
-- SEO attuale: campi seo {title, meta_description, alt_default, og_image} per modella; seo_title/meta per categorie/articoli; head client-side (lib/seo.js), sitemap dinamica. Nessun audit/autofix.
-- Analytics attuale: eventi legacy (page_view, secret_activate, of_click, cta_click, interazione, message_*, pellicola_*, landing). Nessuna geo/device/country.
-- Readiness: content_status.py (checklist obbligatori, DEMO/REALE) → RIUSATO come base della validazione.
-
-**Riuso:** database.py, auth.py (JWT/bcrypt), content_status.py (readiness), storage.py, sanitize.py, schemas.ModelIn, routes esistenti (non toccate salvo hook versioning + filtro is_deleted + ruoli su scritture).
-**Aggiunte (nuovi file backend, prefisso /api/v1):** v1_security (API keys, ruoli/scopes, rate limit, request-id, idempotency), v1_versioning (before/after/rollback), v1_models, v1_media, v1_seo (engine+autopilot+redirect+sitemap manager+internal linking), v1_tracking (Italy Engine, eventi canonici), v1_analytics, v1_landings, v1_experiments, v1_health (self-healing+alerts), v1_jobs (scheduler asyncio), v1_config (feature flags, config center, webhooks firmati, backup/restore), v1_ai (endpoint ChatGPT-friendly), v1_dashboard. OpenAPI su /api/docs.
-**Frontend (minimo, non invasivo):** nuova pagina admin "Motore API" (/admin/motore) + voce menu; evento cta_view nel profilo (IntersectionObserver); redirect resolve in NotFound.
-**Rischi:** scheduler in-process (single worker: ok); eventi legacy devono continuare a funzionare → doppio campo tipo/event; ruoli nuovi non devono bloccare l'admin esistente (amministratore → SUPER_ADMIN).
+### Phase 9 — SUPER API (motore API-first) — Status: COMPLETATA
+**Stato:** completata (agent-tested). API v1 /api/v1/* e pannello admin /admin/motore.
 
 ---
 
-### Phase 10 — CHATGPT CONTROL LAYER — Status: COMPLETATA (agent-tested: pytest 40/40 `tests/test_ai_control.py` + testing agent iteration_21 53/53 `tests/test_phase10_agent.py` + UI /admin/motore verificata; sito pubblico e API legacy invariati; in attesa di conferma utente e collegamento reale a ChatGPT)
-**Audit Phase 9 (verificato):** /api/v1/ai 22 endpoint con envelope {ok,action,request_id,summary,data,warnings,next_steps}; API key hashate sha256 + prefix + ruolo/scopes + rate limit per key + ip allowlist; JWT; `require(*scopes)`; rate limit sliding window; Idempotency-Key middleware (24h TTL); X-Request-ID; audit_log + versions (before/after, rollback non distruttivo); OpenAPI /api/openapi.json con securitySchemes. Manca: scopes fini, kill switch/read-only, approval token, dry_run, policy centrale, codici errore machine-readable, concurrency, metriche AI, openapi filtrato, health modella/sito, recommendations, batch, rollback query, test connection, setup panel.
-**Piano:** nuovo `v1_ai_policy.py` (errori standard, guard flag/modalità, approvals, metriche, policy SAFE/REVIEW/CRITICAL, scopes fini con alias legacy), estensione `v1_ai.py` (command, health, site-health, recommendations, batch, rollback query, review preview, landings, structured analytics, dry_run, operationId, openapi filtrato), `v1_security.py` (scopes fini, blocco CRITICAL per api key, metadata key: last_ip/error_count/rotate/disable), `v1_config.py` (rotate/disable/enable key), `v1_models.py` (expected_updated_at → 409, dry_run), `server.py` (exception handler contratto AI, metriche/rate headers), pannello Motore (kill switch, modalità, attività ChatGPT, setup, test connessione, metriche). Flag: ai_api_enabled, ai_write_enabled, ai_batch_enabled, ai_approval_flow_enabled. Test: /app/tests/test_ai_control.py (auth, scopes, refs, seo, models, landing, analytics, idempotency, concurrency, rollback, security) + 6 scenari E2E.
-**Eseguito (continuazione):** audit backend ok; fix: READ_ONLY consente `dry_run` (body/query) ma blocca sempre upload/confirm; test "target cambiato dopo anteprima → 409 CONFLICT"; `GET /api/landings/{slug}` dietro flag `public_landing_routes`; resolver con match a prefissi di parola; `SectionCard` accetta className; `ChatGptPanel` integrato in AdminMotore (chiave one-time con dismiss, revoca con conferma). Verifiche reali: chiave in chiaro assente da tutte le collection (scan DB), kill switch 503 + legacy 200, READ_ONLY, floor rate limit 10, revoca → API_KEY_REVOKED. Dati di test puliti (modelle/landing/chiavi/approvazioni). Docs: `CHATGPT_API.md` (nuovo), `SUPER_API.md` aggiornato.
-**Non attivato (per scelta):** dominio .it, SSR/prerender, GSC, GA4 produzione, rotta pubblica landing, Telegram.
+### Phase 10 — CHATGPT CONTROL LAYER (v1) — Status: COMPLETATA
+**Stato:** completata (agent-tested). READ_ONLY supportato. OpenAPI v1 (23 operazioni) ancora valido.
 
-### Phase 11 — CHATGPT REAL CONNECTION (READ_ONLY) — Status: COMPLETATA LATO PIATTAFORMA · MANUAL CHATGPT STEP REQUIRED + REDEPLOY PRODUZIONE
-**Fatto:** audit pre-connessione (prod online/TLS ok ma build senza Phase 9/10 → 404 su /api/v1/ai: redeploy necessario); `openapi-chatgpt.json` Action-ready (23 op ≤30, desc ≤300, Bearer unico, validata con openapi-spec-validator, 1:1 con endpoint esistenti); dry-run con scope di lettura (`PREVIEW_SCOPE`) + preset chiave READ_ONLY nel pannello; log richieste `ai_requests` + lista "Richieste ChatGPT" nel pannello; `principal_type` machine|user; simulazione GPT Action Bearer 42/42 (kill switch, READ_ONLY, dry-run, A–I, ambiguo, NOT_FOUND, idempotenza, auth/scope negativi, rate limit, hash DB business invariato, metriche, attività, leak scan); pytest 42/42; agent suite 53/53; server lasciato READ_ONLY; docs `CHATGPT_INSTRUCTIONS.md`, `CHATGPT_API.md` (REAL GPT CONNECTION + troubleshooting).
-**Redeploy #1 (10/09):** produzione aggiornata, simulazione GPT Action contro https://secret-side.emergent.host 40/40, test connessione 13/13, regressione ok, READ_ONLY. Emersi 2 bug pre-esistenti visibili solo con i dati reali: (a) validator OnlyFans troppo rigido (`/c<N>` tracking link → tutte le 10 modelle reali in ERROR/CRITICAL falso positivo) → fix `OF_RX` in v1_models/v1_seo; (b) `MediaImage` card restava opacity-0 quando l'immagine era in cache (race onLoad/useEffect) → fix con ref/complete. Default `ai_write_enabled=false` (produzione nasce READ_ONLY). Serve redeploy #2 e ri-verifica.
-**Redeploy #2 (10/09):** fix OF validator e card verificati in produzione (10/10 PUBLISHED, 0 CRITICAL dopo audit, card 30/30 anche da cache); simulazione GPT 38/40: rate limit in-memory è per pod → con più repliche in produzione i 429 non scattano → nuovo `rate_limit_shared` (Mongo atomico, fixed window, fallback locale) per API key; robots.txt statico puntava al sitemap del preview → corretto al dominio di produzione. Richiede redeploy #3 + ri-verifica.
-**Redeploy #3 (10/09) — VALIDAZIONE TECNICA CHIUSA:** rate limit cluster-wide verificato (20 richieste parallele → esattamente 12×200 + 8×429 con Retry-After), robots.txt ok, simulazione GPT Action produzione **40/40**, test connessione **13/13**, 10/10 modelle PUBLISHED, 0 CRITICAL, card 30/30 cold+cache, Lato Pubblico→Segreto+CTA ok, regressione completa ok, 0 chiavi attive, READ_ONLY. **PRODUCTION READY FOR MANUAL CHATGPT CONNECTION.** In preview (non deployato, opzionale, non bloccante): metriche pannello aggregate da Mongo (`metrics_snapshot_shared`) perché i contatori in-memory mostrano solo il pod interrogato.
-**Fix health/alert (10/09, segnalato dal GPT reale):** causa = terza copia della regex OnlyFans (vecchia) in `v1_health.py` usata dal check globale (job ogni 10 min → alert `health:onlyfans_links` riaperto 69 volte, `onlyfans_links` dal job link, health FAIL) + `seo_critical` alzato dal job SEO ma mai risolto + AI site-health/recommendations leggevano lo snapshot salvato e gli alert aperti. Fix: `onlyfans_url_status` canonico in v1_models (import in v1_seo/v1_health/tracking), `resolve_alerts` con resolved_at/current/updated_at/checked_at (storia conservata), riconciliazione anche di `onlyfans_links`/`seo_critical` a ogni run, `raise_alert` aggiorna meta/messaggio, `classify_reachability` (403/429/timeout = warning, mai URL invalido), `reconciled_health()` (ricalcolo se snapshot >10 min) + `alerts_view()` (open vs resolved_recent) in status/site-health/daily-summary/recommendations. Test `tests/test_health_reconciliation.py` 5/5 (scenari A–J). **Redeploy #4 verificato in produzione (10/09 20:06 UTC):** health ok, 10/10 link validi, 3 alert stale risolti (resolved_at/current=false, storia 5 doc conservata), SEO 0 CRITICAL / 4 REVIEW, recommendations senza falsi, daily-summary senza alert stale, regressione ok, READ_ONLY. HEALTH RECONCILIATION PRODUCTION VERIFIED.
-**Manuale (utente):** creazione chiave READ_ONLY da /admin/motore; creazione GPT + import schema + Authentication API Key/Bearer; primo prompt in Preview; verifica in "Richieste ChatGPT". FULL NON attivato.
-**Storico:** redeploy produzione da Emergent; creazione chiave READ_ONLY da /admin/motore; creazione GPT + import schema + Authentication API Key/Bearer; primo prompt in Preview; verifica in "Richieste ChatGPT". FULL NON attivato.
+---
 
-### Phase 12A — TOTAL SITE CONTROL API (universal engine v2) — Status: COMPLETATA IN PREVIEW (agent-tested, in attesa di conferma utente; produzione NON deployata e READ_ONLY; nessuna attivazione FULL)
-**Decisioni utente:** schema GPT v2 compatto (~12 primitive universali) al posto delle 23 operazioni; media library/URL come flusso primario + upload diretto sicuro mantenuto; 12A e 12B separate (12B: articoli, A/B avanzato, landing avanzate, clone/varianti, bulk/async pesanti); produzione READ_ONLY per tutta la Phase 12.
-**Audit eseguito:** `/app/PHASE12_AUDIT_MATRIX.md` (FUNZIONE ADMIN → SERVICE → CAPABILITY → SCOPE → RISK → DRY → RB → APPR → STATO).
-**Acceptance criteria obbligatori (utente):**
-1. capability senza binding valido = `UNBOUND` → mai eseguibile (503 CAPABILITY_UNBOUND), visibile nel pannello come disabilitata;
-2. preview ed execute condividono service + validator (stesso `patch_model(dry_run)`, stesso `slot_changes`, stesso `transition(dry_run)`, stesso planner per settings/config/categorie);
-3. ID e versione capability stabili (dichiarati nel registry, indipendenti dal nome della funzione Python);
-4. `capability_deny` prevale sempre su `capability_allow`; `capability_allow` restringe e non amplia mai gli scope (scope check resta obbligatorio); `expand_scopes` non gonfia più i fine scope (fix `media:upload`→`media:write`→`media:delete`);
-5. CRITICAL mai auto-eseguibile via dispatcher (anche in FULL, anche per JWT): solo pannello admin;
-6. `models.prepare_complete` = orchestrazione dei service (create → patch_model → slot_changes/patch_model → apply_safe_fixes → validate), mai publish, nessun bypass di validator/audit/approval (i campi REVIEW restano soggetti ad approvazione);
-7. E2E TEST GIULIA: prepara → verifica (campi, media, file, SEO, audit, sessione) → `rollback.session` → stato business identico (modella soft-deleted, file soft-deleted, issue SEO chiuse, slot vuoti) con versions/audit/ai_actions conservati;
-8. OpenAPI v2 separato (`/api/v2/ai/openapi-chatgpt.json`) finché i test non sono completati: il GPT attuale (v1, 23 op) continua a funzionare.
-**Architettura:** `backend/v1_capabilities.py` (registry + dispatcher) montato su `/api/v2/ai/*`: getCapabilities, getCapability, previewCapability, executeCapability, listApprovals, approveApproval, rejectApproval, getJob, queryAnalytics, getSystemStatus, rollback, findModel. Idempotency per-capability (chiave + principal + hash body → 409 IDEMPOTENCY_CONFLICT se body diverso). `session_id` in `ai_actions` per rollback di sessione. Pannello `/admin/motore` → "Capacità ChatGPT" (conteggi, rischio, toggle, allow/deny per chiave).
-**Test:** `tests/test_phase12_capabilities.py` (registry/security/enforcement/E2E TEST GIULIA) + regressioni `test_ai_control.py`, `test_health_reconciliation.py`, `phase11_gpt_simulation.py`.
-**Stato avanzamento (step "dispatcher v2" COMPLETATO, preview):**
-- Binding corretti e verificati (30/30 `tests/phase12/verify_bindings_12a.py`); 5 sospetti risolti (landing.create → `build_landing_data`+`LandingIn`; seo.sitemap_status/opportunities con `principal=`; internal_links con `limit_per_model`; `unwrap_envelope` unico per status/analytics; approve ripete `_gate` READ_ONLY prima di consumare il token).
-- `verify_bindings()` a startup: 97 bound / 0 unbound (UNBOUND → 503 CAPABILITY_UNBOUND, mai fatale). Duplicati ID → RuntimeError a import.
-- Router v2 montato su `/api/v2/ai/*` (12 primitive GPT + openapi v2 pubblico + 2 endpoint admin nascosti). Middleware/error-handler AI estesi a v2. v1 (23 op) intatto.
-- Test: `test_phase12_capabilities.py` 19/19; smoke post-wiring `tests/phase12/smoke_v2_wiring.py` 32/32; regressioni 42/42 (ai_control), 5/5 (health), 42/42 (phase11 simulation).
-- Preview READ_ONLY ripristinata; chiavi temporanee revocate; nessun deploy.
-**Prossimo step:** copertura operativa 12A completa (verifica per-capability con payload reali in FULL-preview) + E2E TEST GIULIA formale (`models.prepare_complete` → verifica → `rollback.session`) + pannello admin "Capacità ChatGPT" + report finale. → ESEGUITO, vedi sotto.
-**Chiusura 12A (11/09, preview):**
-- Copertura operativa reale `tests/phase12/coverage_12a.py` **156/156** (93 capability con payload validi; letture in READ_ONLY, mutazioni in FULL-preview per sessione con `rollback.session`; hash stato business identico per gruppi A modella/media/SEO/landing/clone, B home/filmstrip/settings/config/flag/categorie/redirect, C jobs/health/backup) + `tests/phase12/coverage_12a_extra.py` **22/22** (media.restore, filmstrip.reorder, alerts.inspect/ack/resolve, seo.ignore_issue) → **97/97 capability esercitate realmente**. Difetti reali trovati e corretti durante la copertura: parsing slot semantici card/cover, ordine cronologico degli effetti secondari nel rollback, semantica soft-delete/restore dei file nel rollback.
-- **E2E TEST GIULIA: PASS** (prepare_complete → bozza INCOMPLETE non pubblica, campi form, 7 slot media, SEO, approvazione campi REVIEW, audit/sessione, piano rollback 12 versioni + 7 link → rollback 0 errori → hash before/after identico, storia/audit conservati).
-- Pannello `/admin/motore → Capacità ChatGPT` (`CapabilitiesPanel.js`): 97 / 97-0 / READ_ONLY, filtri e toggle verificati via screenshot.
-- Testing agent (`test_reports/iteration_phase12a.json`): 47 test backend + UI, 0 bug critici, 2 minori LOW risolti (`expected_updated_at` dentro `parameters` → ora estratto e applicato → 409; filtro categoria pannello → `SelectInput` con opzioni stabili). Suite dell'agent `tests/backend_test_phase12a.py` ora 47/47 (68 asserzioni).
-- Regressioni finali: pytest 66/66 in un'unica sessione (`tests/conftest.py`: loop anyio di sessione condiviso — prima i test health fallivano se combinati con Phase 12 per loop motor diversi), `phase11_gpt_simulation.py` 42/42, smoke v2 35/35 (+3 check concorrenza), binding 30/30, `esbuild` ok, `ruff` (F/E9) **pulito su backend/tests/scripts** (85 import/f-string inutilizzati rimossi, nessun cambio funzionale).
-- Igiene: credenziali di test rimosse dai sorgenti (`tests/_creds.py` legge dal memory file), `scripts/smoke_v1.sh` legacy si rifiuta di girare in READ_ONLY (lasciava residui), purge residui condivisa `tests/_cleanup.py` (chiamata da conftest e script standalone), preview DB ripulita dai residui Phase 9–12 (63 modelle test soft-deleted, 77 landing test, 180 chiavi test revocate, 5 esperimenti test, categoria/redirect di coverage): ora 10 modelle live, 0 chiavi, 0 landing, 0 alert aperti, health ok, `ai_write_enabled=false`.
-- Docs: `CHATGPT_API.md` (sezione TOTAL SITE CONTROL API v2), `SUPER_API.md` (Phase 12A), `CHATGPT_INSTRUCTIONS.md` (re-import v2 dopo deploy).
-**Non fatto per scelta:** attivazione FULL, re-import schema v2 nel GPT (step manuali dell'utente). Phase 12B (articoli/content engine, A/B avanzato, landing avanzate/clone/varianti, bulk/async pesanti, restanti capability admin) resta separata e non iniziata.
-**Fix policy preview/execute (11/09, bug reale trovato in produzione dal test READ_ONLY):** `preview_scope_for` deterministico (`<area>:read` fallback) + `Capability.conditional_scopes` (media:upload solo con `media`, seo:safe_fix solo se non disattivato) + metadata `execute_access`/`preview_access`/`required_scopes_execute|preview`; 27 capability 12A prima non previewabili dal preset READ_ONLY ora `preview_only`. Test: phase12 22/22 (3 nuovi: scope deterministici, READ_ONLY preview TEST V2 GIULIA, FULL/scope/approval no-bypass/deny), pytest 69/69, sim 42/42, smoke 35/35, binding 30/30, agent suite 47/47, coverage 156/156, harness produzione su preview 59/59 v2. **Richiede redeploy produzione** (la produzione attuale riproduce ancora il bug) → poi rieseguire `verify_production_v2.py`.
-**Fix contratto GPT Action v2 (11/09, bug reale: il GPT chiamava previewCapability senza parameters.nome → 422):** evidenza nell'access log produzione (getCapability 200 → preview 422, request 68396043-…/4muf); causa: `parameters` free-form senza descrizione/required nello schema. Fix solo contratto+normalizzazione: schema (`parameters` required, descrizione esplicita, proprietà guida, example, `parameters_json` fallback, `target` nullable, descrizioni ≤300), backend (`capability` alias, `parameters_json` solo oggetto JSON, hoist chiavi top-level dichiarate, 422 con `received`+`request_example`, audit delle validation failure con body), getCapability (`required_parameters`, `example_parameters`, `request_example`, `how_to_call`). Test `gpt_action_contract_v2.py` 34/34 + suite invariate verdi. **Richiede redeploy + re-import schema v2 nel GPT** (lo schema è cambiato).
-**FULL BUSINESS ACCESS attivato in PRODUZIONE (11/09, autorizzato dall'utente):** `tests/phase12/full_activation_prod.py` 32/32 → preset FULL = `AI_OPERATOR_SCOPES` + `landing:publish` (47 scope reali, nessuno nuovo): 97/97 capability `execute_access=full`, 0 CRITICAL esposte (backup.restore/hard delete/keys/users/shell → 404), flag di sicurezza `ai_*` non gestibili dall'AI; `ai_write_enabled=true` impostato via PATCH /api/v1/ai/control (auditato); chiave `ChatGPT Production READ_ONLY` ancora attiva; **TEST V2 GIULIA creata realmente** via `models.prepare_complete` (bozza, 6 campi REVIEW approvati via approveApproval, non pubblica: 404 public, 10 modelle reali intatte per hash, audit con actor/session_id, rollback disponibile ma non eseguito); chiave temporanea di verifica revocata. La chiave definitiva `ChatGPT Production FULL` va creata dall'admin in /admin/motore (preset "full" + landing:publish) per la visualizzazione one-time del segreto.
-**Verifica post-deploy PRODUZIONE (11/09, utente ha deployato la build 12A):** `tests/phase12/verify_production_v2.py` contro https://secret-side.emergent.host → v2 **54/54**, regressioni **30/30** (v1/Phase 10-11, sito pubblico 10 modelle, admin, media, SEO 0 CRITICAL/4 REVIEW, health ok, alert reconciliation 0 aperti, sitemap 21 URL prod, robots, RSS), simulazione GPT v1 remota **40/40**, test-connection 13/13; OpenAPI v2 `https://secret-side.emergent.host/api/v2/ai/openapi-chatgpt.json` 12 operazioni, registry 97 bound / 0 unbound, READ_ONLY confermato prima/dopo, chiavi temporanee revocate (unica chiave attiva: quella del GPT reale), nessuna mutation reale. Report `test_reports/phase12a_production_verification.json`. **PRODUCTION V2 READY FOR GPT REIMPORT** (re-import v2 e FULL restano decisioni manuali dell'utente).
+### Phase 11 — CHATGPT REAL CONNECTION (READ_ONLY) — Status: COMPLETATA
+**Stato:** produzione verificate regressioni e health reconciliation. READ_ONLY stabile. Nessun deploy automatico.
+
+---
+
+### Phase 12A — TOTAL SITE CONTROL API v2 + FULL BUSINESS ACCESS — Status: COMPLETATA E VERIFICATA IN PRODUZIONE
+**Stato:**
+- v2 `/api/v2/ai/*` (12 primitive universali) + registry 97 capability.
+- Preview/execute policy corretta (preview scopes deterministici + conditional scopes).
+- Contratto GPT Action v2 robusto: `parameters` required, descrizioni esplicite, `parameters_json` fallback, `getCapability` include `required_parameters`, `example_parameters`, `request_example`, `execute_access`, `preview_access`.
+- Produzione: `ai_write_enabled=true` (FULL), chiave `ChatGPT Production READ_ONLY` ancora attiva; bozza `test-v2-giulia` presente, non pubblica.
+
+---
+
+### Phase 13 — GOOGLE SEO CORE — Status: IMPLEMENTATA IN PREVIEW (agent-tested; richiede deploy + env Google dell'utente) (reduced scope, user-approved) — Status: PLANNED
+**Obiettivo:** rendere il sito tecnicamente indicizzabile, scopribile e monitorabile con dati reali Google (Search Console: sitemap sync, URL inspection, analytics) senza costruire un “mega growth autopilot”.
+
+#### 13.0 Google SEO CORE — Audit (prima di modifiche)
+**Fatti osservati / rischi attuali (produzione)**
+- SEO head è **client-side** (SPA): `frontend/src/lib/seo.js`.
+- Canonical attuale di default = `window.location.href` (include query): rischio canonical non stabile.
+- Age gate: overlay `fixed` ma contenuto sotto esiste; va verificato se Google indicizza contenuto o vede ostacoli (non “cloaking”, ma può impattare rendering).
+- Sitemap: esistono **due implementazioni divergenti**:
+  - `/api/sitemap.xml` (routes_seo.py) senza `lastmod`, senza landing, e logica separata.
+  - `v1_seo.sitemap_entries()` ha `lastmod` e include landing ma usa **flag/config diverso** (oggi controlla `(cfg.get('landings') or {}).get('public_routes')`, mentre il gating reale è `flags.public_landing_routes`).
+- Root `/sitemap.xml` restituisce HTML SPA (non sitemap) → ok se robots punta a `/api/sitemap.xml`, ma è un footgun.
+- Robots: `frontend/public/robots.txt` punta correttamente a `https://secret-side.emergent.host/api/sitemap.xml`.
+- Landing: backend espone `GET /api/landings/{slug}` (pubblico) dietro flag `flags.public_landing_routes` (oggi OFF di default).
+- Frontend: **manca route `/l/:slug`** → anche se API pubblica fosse attiva, la pagina landing non sarebbe renderizzata come route SPA.
+- Google credentials: nessuna configurazione attiva lato env; Google libs presenti (google-auth, google-api-python-client) ma integrazione strutturata assente.
+
+**Deliverable audit:** `GOOGLE SEO CORE AUDIT` (doc) con:
+- sitemap/robots/canonical/noindex status
+- landing route status
+- readiness per GSC (property, service account)
+- elenco gap che blocca indicizzazione/monitoraggio
+
+#### 13.1 Sitemap Engine — consolidamento (core)
+**Obiettivo:** un’unica sorgente di verità sitemap, con lastmod e inclusione corretta delle landing.
+- Unificare `/api/sitemap.xml` per usare `v1_seo.sitemap_entries()` (o spostare la logica in un unico modulo) e includere:
+  - home
+  - modelle pubblicate e indexable (noindex/robots)
+  - landing pubblicate e indexable **solo se** `flags.public_landing_routes=true`
+  - categorie indicizzabili (se appropriato)
+- lastmod reale (almeno `updated_at` per modelle, `data_aggiornamento` per articoli, `updated_at` per landing se presente).
+- Escludere: draft, archived/is_deleted, noindex.
+- Validazione XML + deduplicazione.
+- Opzionale: sitemap index se URL crescono.
+
+#### 13.2 Landing pubbliche `/l/{slug}` (core)
+**Obiettivo:** render pubblico coerente + indexability controllata.
+- Frontend: aggiungere route SPA `/l/:slug` con pagina `LandingPage` che:
+  - chiama `/api/landings/{slug}`
+  - usa `setSeo()` con canonical pulito (senza query) e JSON-LD coerente con `LandingIn.seo`.
+- Backend: mantenere gating con `flags.public_landing_routes`.
+- Attivazione `flags.public_landing_routes=true` **solo dopo test**.
+
+#### 13.3 Google Search Console integration layer (core)
+**Struttura:** `backend/google_search/` (modulare, niente chiamate sparse)
+- `config.py`: flag e property url (solo admin umano modifica; AI non può gestire segreti)
+- `auth.py`: service account (ADC / JSON via env)
+- `client.py`: httpx + retry/backoff, timeout, user-agent, error mapping
+- `sitemap.py`: list/submit sitemap, debounce, sync log
+- `inspection.py`: URL Inspection (cache + quota guard)
+- `analytics.py`: Search Analytics (summary + queries)
+- `schemas.py`: dataclass/pydantic per risultati normalizzati
+- `mock.py`: adapter mock per test senza credenziali
+
+**Config (solo env, mai esposta):**
+- `GOOGLE_SEARCH_ENABLED`
+- `GOOGLE_SEARCH_PROPERTY` = `https://secret-side.emergent.host/`
+- `GOOGLE_APPLICATION_CREDENTIALS_JSON` (o path gestito dalla piattaforma)
+- `GOOGLE_SEARCH_SITEMAP_SYNC_ENABLED`
+- `GOOGLE_SEARCH_ANALYTICS_ENABLED`
+- `GOOGLE_SEARCH_INSPECTION_ENABLED`
+
+#### 13.4 Persistenza stato Google per URL (core minimal)
+Nuove collections (minime):
+- `google_search_status`: per URL (entity_type, entity_id/slug, indexability snapshot, google inspection snapshot, timestamps)
+- `google_search_sync_log`: submit/list sitemap + errori + last submit
+- `google_search_analytics_cache`: aggregati (28d) + top queries per pagina
+
+Retention e indici:
+- index su `url`, `entity_type+entity_id`, `last_inspection_at`, `last_sync_at`.
+
+#### 13.5 Capability v2 (solo indispensabili)
+Aggiungere capability al registry (no nuovi GPT endpoints, solo Universal Dispatcher):
+- `google.status` (connessione + property + quote status + ultimo sync)
+- `google.sitemap.sync` (submit/debounce; SAFE o REVIEW in base all’impatto)
+- `google.url.inspect` (inspect 1 url; cache-aware)
+- `google.analytics.summary` (clicks/impressions/ctr/position range)
+- `google.analytics.queries` (top queries for page)
+- `seo.indexability.audit` (HTTP 200, robots/noindex, canonical, title/meta/H1, JSON-LD validate, internal links count)
+- `growth.prepare_model` (workflow orchestrato: SEO fields + safe fixes + readiness + sitemap include + optional submit)
+
+Risk policy:
+- read/inspect/analytics: SAFE
+- sitemap submit: REVIEW_REQUIRED o SAFE con rate guard (da definire in audit)
+
+#### 13.6 Workflow “Completa e prepara per Google” (core)
+Nuovo workflow orchestrato (capability `growth.prepare_model`) che:
+1) find model
+2) audit readiness (mancanze real data segnate `MISSING_REAL_DATA`)
+3) aggiorna testi/SEO SAFE
+4) `seo.audit` + `seo.safe_fix` (solo SAFE)
+5) verifica indexability tecnica
+6) prepara landing solo se pubblicamente attivabile e utile (minimo: non creare spam)
+7) valida
+8) aggiorna sitemap
+9) se Google enabled: submit sitemap (debounced) + opzionale inspect (manual/limit)
+
+Invarianti:
+- Mai inventare OnlyFans/Instagram/TikTok/età (richiedere input).
+- Media upload non obbligatorio (utente carica manualmente).
+
+#### 13.7 Test (minimi indispensabili)
+- `tests/test_phase13_google_core.py`:
+  - sitemap unificata: no draft/archived/noindex, lastmod presente, landing incluse solo se flag ON
+  - landing route `/l/:slug` (frontend route + backend gating)
+  - google adapter mock: status/sitemap sync/inspection/analytics
+  - capabilities v2: parsing parameters/parameters_json, scopes, READ_ONLY/FULL invariati, no secrets
+  - regressioni Phase 12: `verify_production_v2.py`, `gpt_action_contract_v2.py`
+- Estendere `verify_production_v2.py` con check sitemap/robots/canonical/landing.
+
+#### 13.8 Deliverables
+- `PHASE13_GOOGLE_SEO_CORE_REPORT.md`:
+  - audit iniziale
+  - cosa riusato vs nuovo
+  - file modificati
+  - nuove collections + indici
+  - capabilities aggiunte + scopes + risk
+  - stato landing route
+  - istruzioni passo-passo per Service Account (azioni utente su Google)
+  - output test (PASS/FAIL) + regressioni
+
+---
 
 ## 3) Next Actions
-0. Fase successiva (NON ora, su richiesta utente): dominio latosegreto.it, redirect da Emergent, SSR/prerender, GSC, GA4 produzione, lancio SEO Italia. Tutto predisposto via Config Center (site.base_url, flags domain_it_migration/ssr_prerender/search_console_sync/ga4_production) e redirect engine.
-1. Implementare Phase 8 (override manuale per-media, checklist required, filtri lista, blocco pubblicazione con errori strutturati, import rapido file+URL, copia configurazione, anteprima admin bozza).
-2. Test end-to-end dello scenario di creazione modella fino a pubblicazione senza modificare codice.
-3. Aggiornare questo plan.md con stato “COMPLETATA” per Phase 8 solo dopo testing agent.
+1. Phase 13.0: produrre audit (no code changes) + checklist azioni utente per Service Account e proprietà GSC.
+2. Implementare Phase 13.1–13.3 (sitemap unificata + landing route SPA + layer google_search con mock).
+3. Aggiungere capabilities core Phase 13.5 e workflow Phase 13.6.
+4. Test minimi Phase 13.7 + regressioni Phase 12.
+5. Deploy controllato e verifica produzione (nessun segreto nei log; nessuna API pericolosa).
 
 ---
 
 ## 4) Success Criteria
-- Trasformazione Lato Pubblico→Segreto: stessa URL, zero refresh, 600–1200ms, percezione “luxury cinematic”, reverse ok, reduced-motion ok.
-- Home: griglia premium + filtri+search+Sorprendimi + stato “scoperto” persistente.
-- Conversion: CTA OnlyFans tracciate per sorgente + messaggio ~35s con regole corrette.
-- Admin: login sicuro + CRUD completo + pairing media + publish workflow robusto.
-- Analytics: funnel e leaderboard basati su eventi reali + campagne/referral.
-- SEO best-possible (senza SSR): meta dinamici, canonical, OG, structured data, sitemap/robots, categorie+articoli indicizzabili.
-- **IN MOVIMENTO:** pellicola seamless (nessun salto/reset/spazio vuoto), autoplay affidabile, poster fallback (no video neri), max 8 video attivi, pausa fuori viewport, trasformazione Pubblico↔Segreto continua e cinematografica, tracking completo (impression/view/click) e attribuzione end-to-end.
-- **Workflow contenuti (Phase 8):**
-  - DEMO/REALE affidabile con override manuale per-media
-  - distinzione chiara DEMO vs INCOMPLETA/PRONTA/PUBBLICATA
-  - blocco pubblicazione solo su required, con lista mancanti e CTA “Completa profilo”
-  - filtri admin con conteggi
-  - import rapido file/URL + assegnazione slot + anteprima
-  - copia configurazione senza contenuti personali
-  - anteprima admin bozza non indicizzabile
+- Trasformazione Lato Pubblico→Segreto: stessa URL, zero refresh, 600–1200ms, percezione “luxury cinematic”.
+- Home: griglia premium + filtri+search.
+- Conversion: CTA OnlyFans tracciate.
+- Admin: workflow publish robusto.
+- SEO best-possible (senza SSR): meta dinamici, canonical, OG, structured data, sitemap/robots.
+- ChatGPT control: universal dispatcher + registry + scopes + SAFE/REVIEW + audit/session + rollback; GPT contract v2 robusto.
+- **Phase 13 (GOOGLE SEO CORE) è completata solo se:**
+  1) sitemap corretta e automatica (modelle+landing pubblicate; no draft/archived/noindex; lastmod reale)
+  2) `robots.txt` coerente e punta alla sitemap corretta
+  3) landing `/l/{slug}` realmente raggiungibili **solo** per landing pubblicate e con flag ON
+  4) integrazione GSC pronta con service account (zero secrets via API)
+  5) GPT può chiedere URL Inspection/Analytics e ricevere dati reali (o `UNKNOWN` se non disponibile)
+  6) regressioni Phase 12 e API v1/v2 PASS
+
+**Chiusura 13 (11/09, preview):** modulo `backend/google_search/` (config env-only, auth SA, client retry/log, mock, service), 4 collection + indici, sitemap unificata con lastmod/landing-flag/dedupe + `sitemap_dirty` (publish/unpublish/slug/canonical) + job `google_sitemap_sync` (debounce 6h), 7 capability (`google.status`, `google.sitemap.sync`, `google.url.inspect`, `google.analytics.summary`, `google.analytics.queries`, `seo.indexability`, `growth.prepare_model`) → registry 104/104 bound, frontend `LandingPage` `/l/:slug` + canonical pulito. Test `test_phase13_google_core.py` 7/7 + regressioni tutte verdi; harness produzione esteso (sezione p13). Audit: produzione senza X-Robots noindex, robots ok, sitemap ok; preview è noindex per piattaforma (atteso). Google NON ancora configurato: servono service account + variabili env (vedi CHATGPT_API.md §B) e aggiunta del SA alla proprietà GSC. Flag `public_landing_routes` OFF in produzione fino a decisione utente.

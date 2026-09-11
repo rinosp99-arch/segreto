@@ -1,7 +1,7 @@
 {
- "run": "fbdb2f",
+ "run": "0df201",
  "base": "https://secret-side.preview.emergentagent.com",
- "started_at": "2026-09-11T08:54:39",
+ "started_at": "2026-09-11T11:42:30",
  "capabilities": {
   "models.list": [
    {
@@ -147,14 +147,14 @@
    {
     "mode": "read",
     "result": "PASS",
-    "note": "0 alert correnti (0 critici), 12 risolti nelle ultime 24h"
+    "note": "1 alert correnti (0 critici), 11 risolti nelle ultime 24h"
    }
   ],
   "jobs.list": [
    {
     "mode": "read",
     "result": "PASS",
-    "note": "9 job (0 in errore)"
+    "note": "10 job (0 in errore)"
    }
   ],
   "jobs.runs": [
@@ -194,7 +194,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model fbdb2f aggiornata (cta_testo); stato DRAFT"
+    "note": "Cov Model 0df201 aggiornata (cta_testo); stato DRAFT"
    }
   ],
   "models.set_secret_side": [
@@ -206,7 +206,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model fbdb2f aggiornata (tema); stato DRAFT"
+    "note": "Cov Model 0df201 aggiornata (tema); stato DRAFT"
    }
   ],
   "models.set_regia": [
@@ -218,7 +218,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model fbdb2f aggiornata (regia); stato DRAFT"
+    "note": "Cov Model 0df201 aggiornata (regia); stato DRAFT"
    }
   ],
   "models.set_cta": [
@@ -230,7 +230,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model fbdb2f aggiornata (cta_temporizzata); stato DRAFT"
+    "note": "Cov Model 0df201 aggiornata (cta_temporizzata); stato DRAFT"
    }
   ],
   "models.set_secret_message": [
@@ -242,7 +242,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model fbdb2f aggiornata (messaggio_35s); stato DRAFT"
+    "note": "Cov Model 0df201 aggiornata (messaggio_35s); stato DRAFT"
    }
   ],
   "models.set_social": [
@@ -254,7 +254,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model fbdb2f aggiornata (social); stato DRAFT"
+    "note": "Cov Model 0df201 aggiornata (social); stato DRAFT"
    }
   ],
   "models.set_seo": [
@@ -266,7 +266,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model fbdb2f aggiornata (seo); stato DRAFT"
+    "note": "Cov Model 0df201 aggiornata (seo); stato DRAFT"
    }
   ],
   "models.feature": [
@@ -278,7 +278,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model fbdb2f aggiornata (badge); stato DRAFT"
+    "note": "Cov Model 0df201 aggiornata (badge); stato DRAFT"
    }
   ],
   "models.unfeature": [
@@ -290,7 +290,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model fbdb2f aggiornata (badge, badge_tipo); stato DRAFT"
+    "note": "Cov Model 0df201 aggiornata (badge, badge_tipo); stato DRAFT"
    }
   ],
   "models.publish": [
@@ -332,12 +332,12 @@
    {
     "mode": "preview",
     "result": "PASS",
-    "note": "Anteprima: verrebbe creata la bozza 'Clone fbdb2f' clonando francesca-rossi"
+    "note": "Anteprima: verrebbe creata la bozza 'Clone 0df201' clonando francesca-rossi"
    },
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Clone creato: 'Cov Clone fbdb2f' (slug cov-clone-fbdb2f, bozza)"
+    "note": "Clone creato: 'Cov Clone 0df201' (slug cov-clone-0df201, bozza)"
    }
   ],
   "models.copy_config": [
@@ -349,7 +349,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model fbdb2f aggiornata (regia, tema); stato INCOMPLETE"
+    "note": "Cov Model 0df201 aggiornata (regia, tema); stato INCOMPLETE"
    }
   ],
   "models.tags.add": [
@@ -361,7 +361,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model fbdb2f aggiornata (tag); stato DRAFT"
+    "note": "Cov Model 0df201 aggiornata (tag); stato DRAFT"
    }
   ],
   "models.tags.remove": [
@@ -373,7 +373,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model fbdb2f aggiornata (tag); stato DRAFT"
+    "note": "Cov Model 0df201 aggiornata (tag); stato DRAFT"
    }
   ],
   "tags.normalize": [
@@ -385,7 +385,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "tag 'cov-fbdb2f' \u2192 'cov2-fbdb2f' su 1 modelle"
+    "note": "tag 'cov-0df201' \u2192 'cov2-0df201' su 1 modelle"
    }
   ],
   "media.assign": [
@@ -397,32 +397,32 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media assegnato a public_photo_1 di Cov Model fbdb2f"
+    "note": "Media assegnato a public_photo_1 di Cov Model 0df201"
    },
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media assegnato a secret_photo_1 di Cov Model fbdb2f"
+    "note": "Media assegnato a secret_photo_1 di Cov Model 0df201"
    },
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media assegnato a card di Cov Model fbdb2f"
+    "note": "Media assegnato a card di Cov Model 0df201"
    },
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media assegnato a cover di Cov Model fbdb2f"
+    "note": "Media assegnato a cover di Cov Model 0df201"
    },
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media assegnato a secret_hero di Cov Model fbdb2f"
+    "note": "Media assegnato a secret_hero di Cov Model 0df201"
    },
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media assegnato a public_photo_2 di Cov Model fbdb2f"
+    "note": "Media assegnato a public_photo_2 di Cov Model 0df201"
    }
   ],
   "media.replace_slot": [
@@ -434,7 +434,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media assegnato a public_photo_1 di Cov Model fbdb2f"
+    "note": "Media assegnato a public_photo_1 di Cov Model 0df201"
    }
   ],
   "media.remove_from_slot": [
@@ -446,7 +446,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model fbdb2f aggiornata (media_pairs); stato INCOMPLETE"
+    "note": "Cov Model 0df201 aggiornata (media_pairs); stato INCOMPLETE"
    }
   ],
   "media.reorder_pairs": [
@@ -458,7 +458,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model fbdb2f aggiornata (media_pairs); stato INCOMPLETE"
+    "note": "Cov Model 0df201 aggiornata (media_pairs); stato INCOMPLETE"
    }
   ],
   "media.update": [
@@ -537,7 +537,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model fbdb2f aggiornata (pellicola_home); stato DRAFT"
+    "note": "Cov Model 0df201 aggiornata (pellicola_home); stato DRAFT"
    }
   ],
   "settings.update": [
@@ -575,12 +575,12 @@
    {
     "mode": "preview",
     "result": "PASS",
-    "note": "Anteprima: categoria 'Cat fbdb2f' (cat-fbdb2f)"
+    "note": "Anteprima: categoria 'Cat 0df201' (cat-0df201)"
    },
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Categoria 'Cov Cat fbdb2f' creata (cov-cat-fbdb2f)"
+    "note": "Categoria 'Cov Cat 0df201' creata (cov-cat-0df201)"
    }
   ],
   "categories.update": [
@@ -592,7 +592,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Categoria cov-cat-fbdb2f aggiornata (descrizione, seo_title)"
+    "note": "Categoria cov-cat-0df201 aggiornata (descrizione, seo_title)"
    }
   ],
   "categories.archive": [
@@ -611,7 +611,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Categoria cov-cat-fbdb2f aggiornata (stato)"
+    "note": "Categoria cov-cat-0df201 aggiornata (stato)"
    }
   ],
   "categories.reorder": [
@@ -623,7 +623,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "ordine categorie: ['cov-cat-fbdb2f', 'eleganti']"
+    "note": "ordine categorie: ['cov-cat-0df201', 'eleganti']"
    }
   ],
   "categories.assign_models": [
@@ -635,7 +635,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "categoria cov-cat-fbdb2f assegnata a 1 modelle"
+    "note": "categoria cov-cat-0df201 assegnata a 1 modelle"
    }
   ],
   "models.categories.set": [
@@ -647,7 +647,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model fbdb2f aggiornata (categorie); stato DRAFT"
+    "note": "Cov Model 0df201 aggiornata (categorie); stato DRAFT"
    }
   ],
   "seo.safe_fix": [
@@ -659,7 +659,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "5 fix SAFE su Cov Model fbdb2f (0 saltati)"
+    "note": "5 fix SAFE su Cov Model 0df201 (0 saltati)"
    }
   ],
   "seo.safe_fix_all": [
@@ -685,12 +685,12 @@
    {
     "mode": "preview",
     "result": "PASS",
-    "note": "Anteprima landing 'Landing fbdb2f' (bozza, 1 modelle)"
+    "note": "Anteprima landing 'Landing 0df201' (bozza, 1 modelle)"
    },
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Landing 'Landing cov fbdb2f' creata in bozza (landing-cov-fbdb2f)"
+    "note": "Landing 'Landing cov 0df201' creata in bozza (landing-cov-0df201)"
    }
   ],
   "alerts.resolve": [
@@ -735,7 +735,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Backup creato (31bc6800-d418-43b1-84e6-52b1db5a58d5)"
+    "note": "Backup creato (cc9355fe-fbd7-4d84-a727-575683854092)"
    }
   ],
   "system.health_run": [
@@ -754,14 +754,14 @@
    {
     "mode": "preview",
     "result": "PASS",
-    "note": "Anteprima: 1 modifiche su francesca-rossi verrebbero annullate"
+    "note": "Anteprima: 2 modifiche su francesca-rossi verrebbero annullate"
    }
   ],
   "models.prepare_complete": [
    {
     "mode": "preview",
     "result": "PASS",
-    "note": "Anteprima workflow 'Anteprima fbdb2f': bozza + 1 campi SAFE + 1 campi REVIEW (approvazione) + 1 media + SEO safe + validate (nessuna pubblicazione, nessuna scrittura)"
+    "note": "Anteprima workflow 'Anteprima 0df201': bozza + 1 campi SAFE + 1 campi REVIEW (approvazione) + 1 media + SEO safe + validate (nessuna pubblicazione, nessuna scrittura)"
    }
   ],
   "media.upload_url": [
@@ -773,7 +773,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media caricato:  (image); assegnato a public_photo_3 di Cov Model fbdb2f"
+    "note": "Media caricato:  (image); assegnato a public_photo_3 di Cov Model 0df201"
    }
   ],
   "READ_ONLY enforcement": [
@@ -787,7 +787,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Bozza 'Cov Model fbdb2f' creata (slug cov-model-fbdb2f); stato DRAFT"
+    "note": "Bozza 'Cov Model 0df201' creata (slug cov-model-0df201); stato DRAFT"
    }
   ],
   "models.update (REVIEW\u2192approval)": [
@@ -801,28 +801,28 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model fbdb2f aggiornata (frase, onlyfans_url); stato DRAFT"
+    "note": "Cov Model 0df201 aggiornata (frase, onlyfans_url); stato DRAFT"
    }
   ],
   "media.assign (video\u2192filmstrip pair)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media assegnato a public_video_1 di Cov Model fbdb2f"
+    "note": "Media assegnato a public_video_1 di Cov Model 0df201"
    }
   ],
   "media.assign (filmstrip_public)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media assegnato a filmstrip_public di Cov Model fbdb2f"
+    "note": "Media assegnato a filmstrip_public di Cov Model 0df201"
    }
   ],
   "seo.audit (test model)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "SEO Cov Model fbdb2f: score 95 \u2014 {'SAFE_AUTO_FIX': 5, 'REVIEW_REQUIRED': 0, 'CRITICAL': 0}"
+    "note": "SEO Cov Model 0df201: score 95 \u2014 {'SAFE_AUTO_FIX': 5, 'REVIEW_REQUIRED': 0, 'CRITICAL': 0}"
    }
   ],
   "seo.fix_issue": [
@@ -836,7 +836,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Landing landing-cov-fbdb2f (bozza), validazione 79"
+    "note": "Landing landing-cov-0df201 (bozza), validazione 79"
    }
   ],
   "landing.validate": [
@@ -850,21 +850,21 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Landing landing-cov-fbdb2f aggiornata (subtitle)"
+    "note": "Landing landing-cov-0df201 aggiornata (subtitle)"
    }
   ],
   "landing.unpublish": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Landing landing-cov-fbdb2f in bozza"
+    "note": "Landing landing-cov-0df201 in bozza"
    }
   ],
   "landing.publish (validator/approval)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Landing landing-cov-fbdb2f pubblicata"
+    "note": "Landing landing-cov-0df201 pubblicata"
    }
   ],
   "models.publish (dry, test model)": [
@@ -878,35 +878,35 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "cov-model-fbdb2f eliminata logicamente (recuperabile)"
+    "note": "cov-model-0df201 eliminata logicamente (recuperabile)"
    }
   ],
   "models.undelete": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "cov-model-fbdb2f recuperata (bozza)"
+    "note": "cov-model-0df201 recuperata (bozza)"
    }
   ],
   "rollback.version": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Rollback eseguito su model 73d10a45-df8c-4a66-a257-7c37b9f5833b (nuova versione None)"
+    "note": "Rollback eseguito su model 6bd1b949-679b-4bb3-bf49-720255b7d845 (nuova versione None)"
    }
   ],
   "rollback.window (dry)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Anteprima: 36 modifiche su cov-model-fbdb2f verrebbero annullate"
+    "note": "Anteprima: 36 modifiche su cov-model-0df201 verrebbero annullate"
    }
   ],
   "rollback.session (gruppo A)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Sessione ses_covA_fbdb2f: 44 modifiche annullate, 17 effetti secondari ripristinati, 0 errori (storia e audit conservati)"
+    "note": "Sessione ses_covA_0df201: 44 modifiche annullate, 17 effetti secondari ripristinati, 0 errori (storia e audit conservati)"
    }
   ],
   "flags.set (REVIEW\u2192approve)": [
@@ -934,42 +934,42 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Categoria cov-cat-fbdb2f aggiornata (stato)"
+    "note": "Categoria cov-cat-0df201 aggiornata (stato)"
    }
   ],
   "seo.redirect.create (REVIEW\u2192approve)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Redirect /vecchia-fbdb2f \u2192 /modelle/francesca-rossi creato"
+    "note": "Redirect /vecchia-0df201 \u2192 /modelle/francesca-rossi creato"
    }
   ],
   "seo.redirect.delete (REVIEW\u2192approve)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Redirect /vecchia-fbdb2f disattivato"
+    "note": "Redirect /vecchia-0df201 disattivato"
    }
   ],
   "rollback.session (gruppo B)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Sessione ses_covB_fbdb2f: 21 modifiche annullate, 0 effetti secondari ripristinati, 0 errori (storia e audit conservati)"
+    "note": "Sessione ses_covB_0df201: 21 modifiche annullate, 0 effetti secondari ripristinati, 0 errori (storia e audit conservati)"
    }
   ],
   "jobs.run (health_check)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Job health_check: ok in 1096 ms"
+    "note": "Job health_check: ok in 1133 ms"
    }
   ],
   "jobs.run (media_check)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Job media_check: ok in 3087 ms"
+    "note": "Job media_check: ok in 3183 ms"
    }
   ],
   "jobs.pause (REVIEW\u2192approve)": [
@@ -990,7 +990,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Backup 31bc6800-d418-43b1-84e6-52b1db5a58d5 del 2026-09-11T08:55: 13 collection, integrit\u00e0 OK"
+    "note": "Backup cc9355fe-fbd7-4d84-a727-575683854092 del 2026-09-11T11:43: 13 collection, integrit\u00e0 OK"
    }
   ],
   "backup.restore_plan": [
@@ -1018,7 +1018,7 @@
      "step": "models.create",
      "ok": true,
      "slug": "test-giulia",
-     "version_id": "e061780b-7491-42f2-9bb5-ecab24ba2574"
+     "version_id": "81688219-65c1-4616-8073-57251bc00ab1"
     },
     {
      "step": "models.update",
@@ -1037,7 +1037,7 @@
       "teaser_copy",
       "tema"
      ],
-     "version_id": "129e8b4c-fe09-4fe9-b584-7db1ed4c1a33"
+     "version_id": "9d363955-77c4-4fdf-bb18-6d31357c17d2"
     },
     {
      "step": "models.update (REVIEW)",
@@ -1051,49 +1051,49 @@
       "onlyfans_url",
       "seo"
      ],
-     "approval_id": "da921348-1468-4c5f-9c11-8e6ed54c6d9b"
+     "approval_id": "110a9a57-a88d-4387-a895-1e039fd249ff"
     },
     {
      "step": "media.assign",
      "ok": true,
      "slot": "card",
-     "version_id": "f96c1f15-27e6-4760-ba4d-fc949576b4d0"
+     "version_id": "08aa31a8-7e78-440b-947d-a72caed2e7f8"
     },
     {
      "step": "media.assign",
      "ok": true,
      "slot": "cover",
-     "version_id": "2525fe7d-98f5-4ef8-a51b-804897ee4bec"
+     "version_id": "e064c9f8-4605-4422-a009-abec6488f7fa"
     },
     {
      "step": "media.assign",
      "ok": true,
      "slot": "public_photo_1",
-     "version_id": "98cecfea-dbcf-406d-8dd2-ed41db5731f3"
+     "version_id": "9d738164-d27d-4026-8e55-c09e8dfbb9d5"
     },
     {
      "step": "media.assign",
      "ok": true,
      "slot": "secret_photo_1",
-     "version_id": "dc6492af-9052-4a92-85b4-a38280d9120c"
+     "version_id": "ad93c358-7f29-4ded-b644-5b6693b8a473"
     },
     {
      "step": "media.assign",
      "ok": true,
      "slot": "secret_hero",
-     "version_id": "bf8e2edf-81bd-4162-b50a-6b3b9fc48e0b"
+     "version_id": "53b16dc9-cb63-42d8-9d52-cfaeb8df33ff"
     },
     {
      "step": "media.assign",
      "ok": true,
      "slot": "public_video_1",
-     "version_id": "3061e14f-5d6e-4d33-92d9-68516cb5b82c"
+     "version_id": "ee47fd18-2027-4fc2-9c37-e315fd938402"
     },
     {
      "step": "media.assign",
      "ok": true,
      "slot": "filmstrip_public",
-     "version_id": "d3ae5025-cbe3-429a-a8db-f979dc0a856c"
+     "version_id": "22d6ea01-6361-47c6-9aef-2656b42891df"
     },
     {
      "step": "seo.safe_fix",
@@ -1120,7 +1120,7 @@
    "approval_required": true
   },
   "model": {
-   "id": "9ab095e8-43de-4a8e-9041-be33422c610b",
+   "id": "c38e86be-ea59-411b-b2bb-c1e66733cd06",
    "slug": "test-giulia",
    "workflow_status": "INCOMPLETE",
    "published": false,
@@ -1184,7 +1184,7 @@
    "capability_version": "1.0",
    "risk": "SAFE",
    "dry_run": false,
-   "session_id": "ses_f8f99f7230a5",
+   "session_id": "ses_e784f3b5353c",
    "mode": "FULL",
    "rollback": {
     "available": false,
@@ -1193,10 +1193,10 @@
    },
    "target": {
     "type": "model",
-    "id": "9ab095e8-43de-4a8e-9041-be33422c610b",
+    "id": "c38e86be-ea59-411b-b2bb-c1e66733cd06",
     "slug": "test-giulia",
     "nome": "Test Giulia",
-    "etag": "2026-09-11T08:55:11.087594+00:00"
+    "etag": "2026-09-11T11:43:10.818548+00:00"
    }
   },
   "state_after_prepare": {
@@ -1264,19 +1264,19 @@
   },
   "rollback": {
    "status": 200,
-   "summary": "Sessione ses_giulia_fbdb2f: 12 modifiche annullate, 8 effetti secondari ripristinati, 0 errori (storia e audit conservati)",
+   "summary": "Sessione ses_giulia_0df201: 12 modifiche annullate, 8 effetti secondari ripristinati, 0 errori (storia e audit conservati)",
    "done": 12,
    "side_effects": [
     {
      "kind": "file_links_cleared",
-     "model_id": "9ab095e8-43de-4a8e-9041-be33422c610b",
+     "model_id": "c38e86be-ea59-411b-b2bb-c1e66733cd06",
      "count": 3
     },
     {
      "kind": "file_link_restored",
      "file_id": "ccae8058-187a-4fac-8a00-b49440a2d0fe",
      "to": {
-      "model_id": "9ab095e8-43de-4a8e-9041-be33422c610b",
+      "model_id": "c38e86be-ea59-411b-b2bb-c1e66733cd06",
       "slot": "public_video_1"
      }
     },
@@ -1292,7 +1292,7 @@
      "kind": "file_link_restored",
      "file_id": "1e08a563-5f1d-4723-ae56-f52000b56628",
      "to": {
-      "model_id": "9ab095e8-43de-4a8e-9041-be33422c610b",
+      "model_id": "c38e86be-ea59-411b-b2bb-c1e66733cd06",
       "slot": "secret_photo_1"
      }
     },
@@ -1300,7 +1300,7 @@
      "kind": "file_link_restored",
      "file_id": "1e08a563-5f1d-4723-ae56-f52000b56628",
      "to": {
-      "model_id": "9ab095e8-43de-4a8e-9041-be33422c610b",
+      "model_id": "c38e86be-ea59-411b-b2bb-c1e66733cd06",
       "slot": "cover"
      }
     },
@@ -1308,7 +1308,7 @@
      "kind": "file_link_restored",
      "file_id": "d5f02f70-bb02-417e-87fc-5083ff539723",
      "to": {
-      "model_id": "9ab095e8-43de-4a8e-9041-be33422c610b",
+      "model_id": "c38e86be-ea59-411b-b2bb-c1e66733cd06",
       "slot": "card"
      }
     },
@@ -1343,7 +1343,7 @@
     "categories": "08bfb6f2b4d348fe",
     "settings": "4b855c4586a12dd7",
     "config": "db032b5d87f65a79",
-    "jobs": "57b4105f6b39587a"
+    "jobs": "20a79791a8d998c6"
    },
    "after": {
     "models": "3ca734904040926e",
@@ -1355,7 +1355,7 @@
     "categories": "08bfb6f2b4d348fe",
     "settings": "4b855c4586a12dd7",
     "config": "db032b5d87f65a79",
-    "jobs": "57b4105f6b39587a"
+    "jobs": "20a79791a8d998c6"
    }
   },
   "model_soft_deleted": true,
@@ -1382,7 +1382,7 @@
     "categories": "08bfb6f2b4d348fe",
     "settings": "4b855c4586a12dd7",
     "config": "db032b5d87f65a79",
-    "jobs": "57b4105f6b39587a"
+    "jobs": "20a79791a8d998c6"
    },
    "after": {
     "models": "3ca734904040926e",
@@ -1394,7 +1394,7 @@
     "categories": "08bfb6f2b4d348fe",
     "settings": "4b855c4586a12dd7",
     "config": "db032b5d87f65a79",
-    "jobs": "57b4105f6b39587a"
+    "jobs": "20a79791a8d998c6"
    },
    "diff": {}
   },
@@ -1411,7 +1411,7 @@
     "categories": "08bfb6f2b4d348fe",
     "settings": "4b855c4586a12dd7",
     "config": "db032b5d87f65a79",
-    "jobs": "57b4105f6b39587a"
+    "jobs": "20a79791a8d998c6"
    },
    "after": {
     "models": "3ca734904040926e",
@@ -1423,7 +1423,7 @@
     "categories": "08bfb6f2b4d348fe",
     "settings": "4b855c4586a12dd7",
     "config": "db032b5d87f65a79",
-    "jobs": "57b4105f6b39587a"
+    "jobs": "20a79791a8d998c6"
    },
    "diff": {}
   },
@@ -1440,7 +1440,7 @@
     "categories": "08bfb6f2b4d348fe",
     "settings": "4b855c4586a12dd7",
     "config": "db032b5d87f65a79",
-    "jobs": "57b4105f6b39587a"
+    "jobs": "20a79791a8d998c6"
    },
    "after": {
     "models": "3ca734904040926e",
@@ -1452,7 +1452,7 @@
     "categories": "08bfb6f2b4d348fe",
     "settings": "4b855c4586a12dd7",
     "config": "db032b5d87f65a79",
-    "jobs": "57b4105f6b39587a"
+    "jobs": "20a79791a8d998c6"
    },
    "diff": {}
   },
@@ -1469,7 +1469,7 @@
     "categories": "08bfb6f2b4d348fe",
     "settings": "4b855c4586a12dd7",
     "config": "db032b5d87f65a79",
-    "jobs": "57b4105f6b39587a"
+    "jobs": "20a79791a8d998c6"
    },
    "after": {
     "models": "3ca734904040926e",
@@ -1481,13 +1481,13 @@
     "categories": "08bfb6f2b4d348fe",
     "settings": "4b855c4586a12dd7",
     "config": "db032b5d87f65a79",
-    "jobs": "57b4105f6b39587a"
+    "jobs": "20a79791a8d998c6"
    },
    "diff": {}
   }
  ],
  "notes": [
-  "RATE_LIMITED on landing.unpublish: waited 3s"
+  "RATE_LIMITED on landing.unpublish: waited 11s"
  ],
  "final_mode_read_only": true,
  "temp_key_revoked": true,

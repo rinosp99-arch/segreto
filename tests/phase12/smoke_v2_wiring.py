@@ -32,7 +32,7 @@ try:
     # mode must be READ_ONLY
     r = s.get(f"{BASE}/api/v2/ai/status", headers=K, timeout=30)
     ok("v2 getSystemStatus 200 + READ_ONLY", r.status_code == 200 and r.json()["data"].get("mode") == "READ_ONLY", r.text[:200])
-    ok("v2 status: registry 97, no double envelope", r.json()["data"]["capabilities_registry"]["total"] == 97 and "ok" not in r.json()["data"])
+    ok("v2 status: registry 104, no double envelope", r.json()["data"]["capabilities_registry"]["total"] == 104 and "ok" not in r.json()["data"])
     # catalog
     r = s.get(f"{BASE}/api/v2/ai/capabilities", headers=K, timeout=30)
     d = r.json().get("data", {})
@@ -82,7 +82,7 @@ try:
     ok("v2 wrong key -> 401", s.get(f"{BASE}/api/v2/ai/capabilities", headers={"Authorization": "Bearer ls_wrongwrongwrong"}, timeout=30).status_code == 401)
     ok("v2 admin endpoint denied to API key", s.get(f"{BASE}/api/v2/ai/admin/capabilities", headers=K, timeout=30).status_code == 403)
     r = s.get(f"{BASE}/api/v2/ai/admin/capabilities", headers=H, timeout=30)
-    ok("v2 admin capabilities (JWT) 97 total / 97 bound", r.status_code == 200 and r.json()["total"] == 97 and r.json()["bound"] == 97, r.text[:200])
+    ok("v2 admin capabilities (JWT) 104 total / 104 bound", r.status_code == 200 and r.json()["total"] == 104 and r.json()["bound"] == 104, r.text[:200])
     # ---- Phase 10/11 regressions (v1 untouched)
     r = s.get(f"{BASE}/api/v1/ai/openapi-chatgpt.json", timeout=30)
     ops1 = [o["operationId"] for p in r.json()["paths"].values() for o in p.values()]

@@ -32,7 +32,8 @@ export function setSeo({ title, description, canonical, image, type = 'website',
   upsertMeta('property', 'og:description', description);
   upsertMeta('property', 'og:type', type);
   if (image) upsertMeta('property', 'og:image', image);
-  const url = canonical || window.location.href;
+  // canonical = clean URL (origin + pathname, no utm/ref/query/hash) unless explicitly provided by the page
+  const url = canonical || `${window.location.origin}${window.location.pathname.replace(/\/+$/, '') || '/'}`;
   upsertMeta('property', 'og:url', url);
   upsertMeta('property', 'og:site_name', 'LATO SEGRETO');
 

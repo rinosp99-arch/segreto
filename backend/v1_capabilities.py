@@ -1959,6 +1959,260 @@ def registry_status() -> dict:
 # =====================================================================================================================
 # DISPATCHER
 # =====================================================================================================================
+
+# =====================================================================================================================
+# PHASE 13 — GOOGLE SEO CORE: Search Console (status / sitemap sync / URL inspection / analytics), technical indexability
+# and the orchestrated "prepara per Google" workflow. Every Google call goes through backend/google_search (never secrets).
+# =====================================================================================================================
+REAL_DATA_CODES = {"AGE_CONFIRMATION_MISSING": "conferma_maggiorenne", "ONLYFANS_URL_MISSING": "onlyfans_url", "ONLYFANS_URL_INVALID": "onlyfans_url"}
+MEDIA_CODES = {"CARD_PHOTO_MISSING", "PUBLIC_PHOTOS_LT_3", "SECRET_PHOTOS_LT_3", "PUBLIC_VIDEO_MISSING", "SECRET_VIDEO_MISSING", "PELLICOLA_PUBLIC_VIDEO_MISSING", "PELLICOLA_SECRET_VIDEO_MISSING"}
+
+
+async def _entity_from_params(ctx: Ctx, allow_all: bool = False) -> Optional[dict]:
+    """Resolve the public URL to work on from target/model/landing/url/entity_type params (deterministic, no guessing)."""
+    from google_search.service import resolve_entity_url, public_base
+    p = ctx.params or {}
+    if ctx.target:
+        return await resolve_entity_url("model", ctx.target["slug"])
+    if p.get("model"):
+        doc = await resolve_model(str(p["model"]))
+        return await resolve_entity_url("model", doc["slug"])
+    if p.get("landing"):
+        e = await resolve_entity_url("landing", str(p["landing"]))
+        if not e:
+            raise err(404, "NOT_FOUND", f"Landing '{p['landing']}' non trovata")
+        return e
+    if p.get("category"):
+        e = await resolve_entity_url("category", str(p["category"]))
+        if not e:
+            raise err(404, "NOT_FOUND", f"Categoria '{p['category']}' non trovata")
+        return e
+    if p.get("url"):
+        u = str(p["url"]).strip()
+        base = public_base()
+        if not u.startswith(base):
+            raise err(422, "VALIDATION_FAILED", f"Solo URL del sito ({base}/...) possono essere ispezionati", received_url=u)
+        path = u[len(base):]
+        for prefix, et in (("/modelle/", "model"), ("/l/", "landing"), ("/categorie/", "category")):
+            if path.startswith(prefix):
+                e = await resolve_entity_url(et, path[len(prefix):].strip("/"))
+                if e:
+                    return e
+        if path in ("", "/"):
+            return await resolve_entity_url("home", "")
+        return {"url": u, "entity_type": "url", "entity_id": u, "slug": None, "published": True, "indexable": True}
+    if p.get("home"):
+        return await resolve_entity_url("home", "")
+    if allow_all:
+        return None
+    raise err(422, "VALIDATION_FAILED", "Indica la pagina: target (modella) oppure parameters.model / landing / category / url / home=true", missing=["target|model|landing|url"])
+
+
+@cap("google.status", "google", "Stato Search Console: connessione (service account), proprietà, sitemap registrata/ultimo invio, budget ispezioni, conteggio URL per stato Google. Mai credenziali.",
+     ["system:status"], read_only=True, natural=["Google è collegato?", "stato Search Console", "la sitemap è stata inviata a Google?"])
+async def _google_status(ctx: Ctx):
+    from google_search.service import status, public_entities
+    st = await status()
+    ents = await public_entities()
+    st["public_urls"] = {"total": len(ents), "by_google_state": {k: sum(1 for e in ents if e["google_state"] == k) for k in ("INDEXED", "NOT_INDEXED", "BLOCKED_ERROR", "UNKNOWN", "NOT_INSPECTED")}}
+    conn = st["connection"]["status"]
+    summ = {"CONNECTED": "Search Console COLLEGATA", "NOT_CONFIGURED": "Search Console NON configurata (serve il service account sul server)", "PROPERTY_NOT_ACCESSIBLE": "Service account senza accesso alla proprietà",
+            "ERROR": "Errore Google"}.get(conn, conn)
+    warn = [] if conn == "CONNECTED" else [st["connection"].get("detail") or st["connection"].get("message") or conn]
+    return R(f"{summ} · proprietà {st['property']} · sitemap {st['sitemap_url']} ({'dirty' if st['sitemap']['dirty'] else 'in sync'}, ultimo invio {st['sitemap']['last_submitted_at'] or 'mai'}) · URL pubblici {len(ents)}",
+             st, warnings=[w for w in warn if w], next_steps=[] if conn == "CONNECTED" else ["Configura GOOGLE_SEARCH_ENABLED + GOOGLE_SEARCH_CREDENTIALS_JSON sul server e aggiungi il service account alla proprietà Search Console"])
+
+
+@cap("google.sitemap.sync", "google", "Invia/re-invia la sitemap a Search Console solo se cambiata o marcata dirty (debounce 6h; force=true per forzare). Mostra la sitemap registrata (lastSubmitted, errori, URL indicizzati).",
+     ["seo:update"], rollback=False, params={"force": {"type": "boolean", "default": False}}, examples=[{"action": "google.sitemap.sync", "parameters": {"force": False}, "dry_run": True}],
+     natural=["invia la sitemap a Google", "sincronizza la sitemap con Search Console", "re-invia la sitemap"])
+async def _google_sitemap_sync(ctx: Ctx):
+    from google_search.service import sitemap_sync
+    r = await sitemap_sync(force=bool(ctx.params.get("force")), dry_run=ctx.dry)
+    if ctx.dry:
+        s = f"Anteprima: {'INVIEREI' if r['would_submit'] else 'NON invierei'} la sitemap ({r['urls']} URL) — {r.get('reason') or r.get('skipped_reason')}"
+    elif r.get("submitted"):
+        s = f"Sitemap inviata a Search Console ({r['urls']} URL) — motivo: {r['reason']}"
+    else:
+        s = f"Sitemap NON inviata: {r.get('skipped_reason') or (r.get('error') or {}).get('message') or 'nessun motivo per re-inviare'}"
+    return R(s, {**r, "dry_run": ctx.dry}, warnings=[r["error"]["message"]] if r.get("error") else [],
+             next_steps=[] if r.get("configured") else ["Search Console non configurata: l'invio è simulato/saltato finché il service account non è impostato"])
+
+
+@cap("google.url.inspect", "google", "Stato REALE su Google di una pagina (URL Inspection API, cache 24h, refresh=true per forzare): INDEXED / NOT_INDEXED / BLOCKED_ERROR / UNKNOWN + coverage, canonical Google, ultimo crawl. Target = modella, oppure parameters.landing/url/home. models=[..] per un gruppo (max 10).",
+     ["seo:audit"], target="model", read_only=True,
+     params={"model": {"type": "string"}, "landing": {"type": "string"}, "url": {"type": "string"}, "home": {"type": "boolean"}, "models": {"type": "array", "items": {"type": "string"}, "description": "gruppo di modelle (max 10)"}, "refresh": {"type": "boolean", "default": False}},
+     examples=[{"action": "google.url.inspect", "target": "Federica Chiatti", "parameters": {"refresh": False}}, {"action": "google.url.inspect", "parameters": {"models": ["vanessa-bella", "alessia-golosa"]}}],
+     natural=["Federica è indicizzata su Google?", "Google ha indicizzato Vanessa?", "quali modelle non sono indicizzate?"])
+async def _google_url_inspect(ctx: Ctx):
+    from google_search.service import inspect, resolve_entity_url, public_entities
+    p = ctx.params or {}
+    refresh = bool(p.get("refresh"))
+    targets: List[dict] = []
+    if p.get("models"):
+        for ref in list(p["models"])[:10]:
+            d = await resolve_model(str(ref))
+            e = await resolve_entity_url("model", d["slug"])
+            if e:
+                targets.append(e)
+    elif p.get("all_published"):
+        targets = (await public_entities())[:20]
+    else:
+        targets = [await _entity_from_params(ctx)]
+    results = []
+    for e in targets:
+        if not e.get("published") and e["entity_type"] != "url":
+            results.append({"url": e["url"], "slug": e.get("slug"), "state": "NOT_PUBLIC", "detail": "pagina non pubblicata: Google non può indicizzarla (bozza/archiviata)", "entity_type": e["entity_type"]})
+            continue
+        r = await inspect(e["url"], entity=e, refresh=refresh)
+        r["slug"], r["entity_type"], r["indexable_by_us"] = e.get("slug"), e["entity_type"], e.get("indexable")
+        results.append(r)
+    icons = {"INDEXED": "✅", "NOT_INDEXED": "🟡", "BLOCKED_ERROR": "🔴", "UNKNOWN": "⚪", "NOT_CONFIGURED": "⚪", "NOT_PUBLIC": "⛔"}
+    lines = [f"{icons.get(r['state'], '⚪')} {r.get('slug') or r['url']}: {r['state']}" + (f" ({(r.get('google') or {}).get('coverage_state')})" if (r.get('google') or {}).get('coverage_state') else "") for r in results]
+    counts = {k: sum(1 for r in results if r["state"] == k) for k in ("INDEXED", "NOT_INDEXED", "BLOCKED_ERROR", "UNKNOWN", "NOT_CONFIGURED", "NOT_PUBLIC")}
+    warns = [r.get("detail") for r in results if r.get("detail") and r["state"] in ("NOT_CONFIGURED", "UNKNOWN")] [:2]
+    return R(" · ".join(lines) if len(lines) <= 3 else f"{len(results)} URL: {counts}", {"results": results, "counts": counts, "source_note": "stato derivato SOLO da Google URL Inspection (cache 24h); la presenza in sitemap non significa indicizzata"},
+             warnings=[w for w in warns if w], target=_tgt(ctx.target) if ctx.target else None)
+
+
+@cap("google.analytics.summary", "google", "Search Analytics reali (Search Console): click, impressioni, CTR, posizione media per sito / modella / landing / URL. range 7g|28g|3m o start/end; compare=true = periodo precedente.",
+     ["analytics:read"], target="model", read_only=True,
+     params={"range": {"type": "string", "enum": ["7g", "28g", "3m"], "default": "28g"}, "start": {"type": "string"}, "end": {"type": "string"}, "model": {"type": "string"}, "landing": {"type": "string"}, "url": {"type": "string"}, "compare": {"type": "boolean", "default": True}},
+     examples=[{"action": "google.analytics.summary", "target": "Federica Chiatti", "parameters": {"range": "28g"}}, {"action": "google.analytics.summary", "parameters": {"range": "7g"}}],
+     natural=["quante impressioni riceve Federica?", "quanti click da Google negli ultimi 28 giorni?", "posizione media di Vanessa"])
+async def _google_analytics_summary(ctx: Ctx):
+    from google_search.service import analytics, summarize
+    e = await _entity_from_params(ctx, allow_all=True)
+    p = ctx.params or {}
+    r = await analytics([], p.get("range"), p.get("start"), p.get("end"), page=e["url"] if e else None, compare=p.get("compare", True))
+    if not r.get("available"):
+        return R(f"Search Analytics non disponibile ({r.get('state')})", r, warnings=[r.get("detail") or (r.get("error") or {}).get("message") or "Search Console non configurata"])
+    tot = summarize(r["rows"])
+    prev = summarize(r["previous"]["rows"]) if r.get("previous") else None
+    delta = {k: (tot[k] - prev[k]) if isinstance(tot.get(k), (int, float)) and isinstance(prev.get(k), (int, float)) else None for k in ("clicks", "impressions", "ctr", "position")} if prev else None
+    label = e.get("slug") or e["entity_type"] if e else "sito"
+    return R(f"Google {label} ({r['start']}→{r['end']}): {tot['clicks']} click, {tot['impressions']} impressioni, CTR {tot['ctr']}%, posizione {tot['position']}" + (f" · vs precedente: click {delta['clicks']:+}, impressioni {delta['impressions']:+}" if delta else ""),
+             {"entity": e, "range": {"start": r["start"], "end": r["end"]}, "totals": tot, "previous": prev, "delta": delta, "cached": r.get("cached"), "note": "dati Search Console con ~3 giorni di ritardo; nessun valore inventato"},
+             target=_tgt(ctx.target) if ctx.target else None)
+
+
+@cap("google.analytics.queries", "google", "Query Google (o pagine/paesi/dispositivi/giorni) con click, impressioni, CTR e posizione: per il sito o per una modella/landing/URL. dimension=query|page|country|device|date, limit≤100.",
+     ["analytics:read"], target="model", read_only=True,
+     params={"range": {"type": "string", "enum": ["7g", "28g", "3m"], "default": "28g"}, "start": {"type": "string"}, "end": {"type": "string"}, "model": {"type": "string"}, "landing": {"type": "string"}, "url": {"type": "string"},
+             "dimension": {"type": "string", "enum": ["query", "page", "country", "device", "date"], "default": "query"}, "limit": {"type": "integer", "default": 20}},
+     examples=[{"action": "google.analytics.queries", "target": "Federica Chiatti", "parameters": {"dimension": "query", "limit": 10}}, {"action": "google.analytics.queries", "parameters": {"dimension": "page", "range": "28g"}}],
+     natural=["quali query portano traffico?", "pagine che ricevono più impressioni", "query Google principali di Federica"])
+async def _google_analytics_queries(ctx: Ctx):
+    from google_search.service import analytics
+    e = await _entity_from_params(ctx, allow_all=True)
+    p = ctx.params or {}
+    dim = p.get("dimension") or "query"
+    r = await analytics([dim], p.get("range"), p.get("start"), p.get("end"), page=e["url"] if (e and dim != "page") else None, page_contains=None, limit=min(int(p.get("limit") or 20), 100))
+    if not r.get("available"):
+        return R(f"Search Analytics non disponibile ({r.get('state')})", r, warnings=[r.get("detail") or (r.get("error") or {}).get("message") or "Search Console non configurata"])
+    rows = [{dim: x["keys"][0] if x["keys"] else None, "clicks": x["clicks"], "impressions": x["impressions"], "ctr": x["ctr"], "position": x["position"]} for x in r["rows"]]
+    rows.sort(key=lambda x: (-x["clicks"], -x["impressions"]))
+    top = ", ".join(f"{x[dim]} ({x['clicks']} click)" for x in rows[:3])
+    return R(f"{len(rows)} {dim} per {e.get('slug') if e else 'sito'} ({r['start']}→{r['end']})" + (f": {top}" if top else ": nessun dato ancora"), {"entity": e, "dimension": dim, "range": {"start": r["start"], "end": r["end"]}, "rows": rows, "cached": r.get("cached")},
+             target=_tgt(ctx.target) if ctx.target else None)
+
+
+@cap("seo.indexability", "seo", "Checklist tecnica di indicizzabilità di una pagina (nessuna quota Google): pubblicata, HTTP 200, robots.txt, X-Robots-Tag, noindex, canonical, presenza in sitemap, title/meta/H1, structured data, og:image, internal links. all=true per tutte le pagine pubbliche (senza fetch HTTP).",
+     ["seo:audit"], target="model", read_only=True,
+     params={"model": {"type": "string"}, "landing": {"type": "string"}, "category": {"type": "string"}, "url": {"type": "string"}, "home": {"type": "boolean"}, "all": {"type": "boolean", "default": False}, "fetch": {"type": "boolean", "default": True}},
+     examples=[{"action": "seo.indexability", "target": "Federica Chiatti", "parameters": {}}, {"action": "seo.indexability", "parameters": {"all": True}}],
+     natural=["Federica è tecnicamente indicizzabile?", "controlla tutte le pagine pubblicate e mostrami quelle con problemi"])
+async def _seo_indexability(ctx: Ctx):
+    from google_search.service import indexability, public_entities
+    p = ctx.params or {}
+    if p.get("all"):
+        ents = (await public_entities())[:60]
+        out = [await indexability(e, fetch=False) for e in ents]
+        bad = [o for o in out if not o["technically_indexable"]]
+        return R(f"{len(out)} pagine pubbliche: {len(out) - len(bad)} tecnicamente indicizzabili, {len(bad)} con problemi" + (f" ({', '.join(o['slug'] or o['url'] for o in bad[:5])})" if bad else ""),
+                 {"pages": out, "problems": [{"slug": o["slug"], "url": o["url"], "failing": o["failing"]} for o in bad]})
+    e = await _entity_from_params(ctx)
+    r = await indexability(e, fetch=p.get("fetch", True))
+    return R(("Tecnicamente indicizzabile" if r["technically_indexable"] else f"NON indicizzabile: {', '.join(r['failing'])}") + f" — {e.get('slug') or e['url']}", r,
+             warnings=[c["detail"] for c in r["checks"] if not c["ok"]][:6], target=_tgt(ctx.target) if ctx.target else None)
+
+
+@cap("growth.prepare_model", "workflow", "Workflow 'completa e prepara per Google' (target = modella): readiness (dati reali mancanti → MISSING_REAL_DATA, media mancanti → li carichi tu), audit SEO + fix SAFE (title/meta/OG/canonical/alt/keywords/robots/schema), indexability tecnica, sitemap, landing collegate/internal links, Search Console sync (se pubblicata) e opzionale ispezione Google. NON pubblica: usa models.publish quando pronta.",
+     ["models:update", "seo:safe_fix"], target="model", rollback=True,
+     conditional_scopes={"seo:update": (lambda p: p.get("sync_sitemap", True) is not False, "solo se sync_sitemap non è false (invio sitemap a Search Console)")},
+     params={"inspect": {"type": "boolean", "default": False, "description": "chiedi anche lo stato reale a Google (consuma 1 ispezione)"}, "sync_sitemap": {"type": "boolean", "default": True}},
+     examples=[{"action": "growth.prepare_model", "target": "Federica Chiatti", "parameters": {"inspect": False}}],
+     natural=["completa Federica Chiatti e preparala per Google", "prepara tutto per Google per Aurora Bianchini", "ho finito i media di Federica: fai tutto il resto"])
+async def _growth_prepare_model(ctx: Ctx):
+    from v1_seo import run_audit, apply_safe_fixes, internal_link_suggestions
+    from google_search.service import indexability, resolve_entity_url, sitemap_sync, inspect, configured
+    doc = ctx.target
+    label = doc.get("nome_artistico") or doc["slug"]
+    steps, warnings, next_steps, version_ids, changes = [], [], [], [], []
+    # 1. readiness -> what only the human can provide
+    v = validate_model(doc)
+    missing_real = sorted({REAL_DATA_CODES[e["code"]] for e in v["errors"] if e["code"] in REAL_DATA_CODES})
+    missing_media = [e["field"] for e in v["errors"] if e["code"] in MEDIA_CODES]
+    missing_text = [e["field"] for e in v["errors"] if e["code"] not in REAL_DATA_CODES and e["code"] not in MEDIA_CODES]
+    steps.append({"step": "readiness", "ready": v["ready"], "workflow_status": workflow_status(doc), "missing_real_data": missing_real, "missing_media": missing_media, "missing_text": missing_text})
+    if missing_real:
+        warnings.append(f"MISSING_REAL_DATA: {', '.join(missing_real)} — dati reali che devi fornire tu (non vengono mai inventati)")
+        next_steps.append(f"Fornisci: {', '.join(missing_real)} (models.update sui campi reali)")
+    if missing_media:
+        next_steps.append(f"Carica manualmente i media mancanti: {', '.join(missing_media)}")
+    if missing_text:
+        next_steps.append(f"Completa i testi: {', '.join(missing_text)} (models.update — testi coerenti con il profilo, mai dati personali inventati)")
+    # 2. SEO audit + SAFE fixes (real writes in the session; dry_run -> plan only)
+    audit = await run_audit(scope="models", entity_id=doc["id"])
+    fx = await apply_safe_fixes(scope="models", entity_id=doc["id"], actor=ctx.actor, request_id=request_id_of(ctx.request), source=ctx.source, dry_run=ctx.dry)
+    n_fix, vids, applied = _safe_fix_view(fx)
+    version_ids += vids
+    changes += [{"field": x.get("field") or x.get("code"), "before": x.get("before"), "after": x.get("after") or x.get("suggested_value")} for x in applied]
+    review_issues = [i for i in audit.get("issues", []) if i.get("severity") == "REVIEW_REQUIRED"]
+    steps.append({"step": "seo", "score_before": audit.get("health_score"), "counts": audit.get("counts"), "safe_fixes": n_fix, "safe_fixes_applied": not ctx.dry and n_fix > 0,
+                  "review_required": [{"code": i["code"], "field": i.get("field"), "message": i.get("message")} for i in review_issues][:10]})
+    if review_issues:
+        next_steps.append(f"{len(review_issues)} issue SEO REVIEW (es. {review_issues[0]['code']}): correggile con models.update/seo.fix_issue (approvazione)")
+    # 3. structure / internal links / landings (report only: no automatic landing creation — quality > quantity)
+    fresh = await models_col.find_one({"id": doc["id"]}, {"_id": 0}) or doc
+    linked_landings = [l["slug"] async for l in landings_col.find({"stato": "pubblicata", "is_deleted": {"$ne": True}, "model_slugs": doc["slug"]}, {"_id": 0, "slug": 1})]
+    cats = fresh.get("categorie") or []
+    related = await models_col.count_documents({"stato": "pubblicata", "is_deleted": {"$ne": True}, "id": {"$ne": doc["id"]}, "categorie": {"$in": cats}}) if cats else 0
+    try:
+        ils = await internal_link_suggestions(limit_per_model=4)
+        my_links = next((x for x in (ils.get("items") or ils.get("suggestions") or []) if isinstance(x, dict) and x.get("model") == doc["slug"]), None)
+    except Exception:
+        my_links = None
+    steps.append({"step": "links", "categories": cats, "related_models_same_category": related, "linked_landings": linked_landings, "internal_link_suggestions": my_links,
+                  "landing_note": "nessuna landing creata automaticamente: crea una landing solo se aggiunge contenuto originale e un intento di ricerca distinto (landing.create, REVIEW alla pubblicazione)"})
+    if not cats:
+        next_steps.append("Assegna almeno una categoria (models.categories.set) per link interni e pagina categoria")
+    # 4. technical indexability + sitemap
+    e = await resolve_entity_url("model", doc["slug"])
+    idx = await indexability(e, fetch=bool(e.get("published")))
+    steps.append({"step": "indexability", "technically_indexable": idx["technically_indexable"], "failing": idx["failing"], "in_sitemap": "IN_SITEMAP" not in idx["failing"], "url": e["url"]})
+    # 5. Search Console sync (only when public) + optional inspection
+    if e.get("published") and ctx.params.get("sync_sitemap", True) is not False:
+        sync = await sitemap_sync(force=False, dry_run=ctx.dry)
+        steps.append({"step": "search_console", "configured": configured(), "would_submit": sync.get("would_submit"), "submitted": sync.get("submitted"), "reason": sync.get("reason") or sync.get("skipped_reason")})
+        if not configured():
+            warnings.append("Search Console non configurata: sitemap pronta ma non inviata a Google")
+        if ctx.params.get("inspect") and not ctx.dry:
+            ins = await inspect(e["url"], entity=e, refresh=False)
+            steps.append({"step": "google_inspection", "state": ins["state"], "coverage_state": (ins.get("google") or {}).get("coverage_state"), "cached": ins.get("cached")})
+    else:
+        steps.append({"step": "search_console", "skipped": "modella non pubblicata: la sitemap la includerà automaticamente alla pubblicazione (models.publish) e il sync partirà da solo"})
+        if v["ready"] or (not missing_real and not missing_media and not missing_text):
+            next_steps.append("Pronta: pubblica con models.publish (validator + sitemap + Search Console automatici)")
+    fresh_v = validate_model(fresh)
+    status = "READY_TO_PUBLISH" if (fresh_v["ready"] and fresh.get("stato") != "pubblicata") else ("PUBLISHED" if fresh.get("stato") == "pubblicata" else "INCOMPLETE")
+    summary = (f"{'Anteprima: ' if ctx.dry else ''}{label}: {status} — SEO fix SAFE {n_fix}{' (anteprima)' if ctx.dry else ''}, "
+               f"{'indicizzabile' if idx['technically_indexable'] else 'non indicizzabile (' + ', '.join(idx['failing'][:3]) + ')'}"
+               + (f", dati reali mancanti: {', '.join(missing_real)}" if missing_real else "") + (f", media mancanti: {len(missing_media)}" if missing_media else ""))
+    return R(summary, {"dry_run": ctx.dry, "status": status, "steps": steps, "missing_real_data": missing_real, "missing_media": missing_media, "publishes": False, "public_url": e["url"]},
+             changes=changes, version_ids=version_ids, warnings=warnings, next_steps=next_steps, target=_tgt(doc))
+
+
 class ExecuteBody(BaseModel):
     """GPT-Action-tolerant request body. Canonical form: {action, target, parameters{...}, dry_run, reason, session_id}.
     Tolerated (deterministic, no policy bypass — everything still goes through the same validator/scopes):
@@ -2028,7 +2282,7 @@ TARGET_RESOLVERS = {
     "media": lambda ref: find_media(ref),
 }
 # capabilities whose target is optional (site-wide when omitted)
-OPTIONAL_TARGET = {"seo.audit", "seo.issues", "seo.internal_links", "models.undelete"}
+OPTIONAL_TARGET = {"seo.audit", "seo.issues", "seo.internal_links", "models.undelete", "google.url.inspect", "google.analytics.summary", "google.analytics.queries", "seo.indexability"}
 _PY_TYPES = {"string": (str,), "integer": (int,), "number": (int, float), "boolean": (bool,), "array": (list,), "object": (dict,)}
 
 
