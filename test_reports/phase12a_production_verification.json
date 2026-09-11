@@ -1,0 +1,453 @@
+{
+ "base_url": "https://secret-side.emergent.host",
+ "started_at": "2026-09-11T07:59:12Z",
+ "v2": [
+  {
+   "check": "getSystemStatus 200 + mode READ_ONLY",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "status: no double envelope, registry total 97",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "status: registry bound 97 / unbound 0",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "OpenAPI v2 public 200, 12 operations, server = production",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "OpenAPI v2 operationIds = 12 universal primitives",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "OpenAPI v2: single Bearer security scheme, no secrets",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "OpenAPI v1 (current GPT) untouched: 23 operations",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "no auth -> 401",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "wrong key -> 401",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "admin endpoint denied to API key (403)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "getCapabilities 200 compact (AI_OPERATOR sees a large allowlisted catalog)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "catalog (full): no CRITICAL, all BOUND, stable ids + versions",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "getCapability models.update BOUND with parameters_schema",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "getCapability unknown -> 404 UNKNOWN_CAPABILITY",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "admin registry (JWT): 97 total / 97 bound / 0 unbound / 0 CRITICAL exposed",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "findModel natural reference 'Vanessa' -> slug (or 409 AMBIGUOUS with candidates)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "findModel by slug -> exact",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "findModel unknown -> 404 NOT_FOUND",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "previewCapability 200 dry_run (no write, rollback not available)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "executeCapability mutation in READ_ONLY -> 403 READ_ONLY_MODE (blocked)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "executeCapability workflow (prepare_complete) in READ_ONLY -> 403 blocked",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "executeCapability upload in READ_ONLY -> 403 blocked (no fetch)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "executeCapability read (models.list) 200",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "executeCapability models.get full card",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "unknown capability -> 404 UNKNOWN_CAPABILITY",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "body validation -> 422 VALIDATION_FAILED envelope",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "preview with unknown media -> 404 NOT_FOUND (validation before any write)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "queryAnalytics real metric 200",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "queryAnalytics invalid metric -> 422",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "listApprovals 200 (list)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "jobs.list via execute (read)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "getJob (async AI jobs) unknown -> 404 NOT_FOUND envelope",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "getJob without auth -> 401",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "rollback preview (dry_run) 200, nothing to undo",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "rollback real in READ_ONLY -> blocked or no-op without writes",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "concurrency: stale expected_updated_at (root) -> 409 CONFLICT",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "concurrency: stale token inside parameters.changes -> 409 CONFLICT (hoisted)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "concurrency: current etag -> preview 200",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "idempotency (v1 middleware): replay returns Idempotent-Replayed + same request_id",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "idempotency (v2): blocked mutation is never cached/replayed as success (403 twice)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "PATCH key capability policy (JWT) 200",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "deny wins: models.publish -> 403 CAPABILITY_DENIED",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "allow restricts: seo.audit -> 403 CAPABILITY_NOT_ALLOWED",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "allowed capability still works (models.get 200)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "catalog filtered by policy (no denied / non-allowed ids)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "READ_ONLY-scoped key: read ok (models.list)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "READ_ONLY-scoped key: write capability -> 403 INSUFFICIENT_SCOPE (before READ_ONLY gate)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "allow-list cannot grant a capability the scopes don't cover (settings.update -> 403)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "READ_ONLY-scoped catalog: write capabilities at most preview_only (never full), settings.update absent",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "rate limit cluster-wide: 24 parallel -> some 429 with Retry-After, 200s <= limit",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "zero secret leak (raw keys, hashes, Mongo URL, JWT secret) in status/catalog/admin/keys/config/actions",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "mode still READ_ONLY at the end (no FULL, no mutation)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "temporary keys revoked (3/3)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "revoked key rejected (401)",
+   "result": "PASS",
+   "note": ""
+  }
+ ],
+ "regressions": [
+  {
+   "check": "v1 capabilities (API key)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "v1 status 200 READ_ONLY",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "v1 site-health 200, reconciled (current vs resolved_recent alerts)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "alert reconciliation: no stale onlyfans/seo_critical alert open while check ok",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "alert reconciliation: open alerts are current, resolved have resolved_at",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "v1 command mutation blocked READ_ONLY",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "v1 command dry_run allowed",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "v1 recommendations 200",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "v2 actions visible in v1 activity log (audit)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "v1 test-connection (JWT) 13/13 green",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "public /api/models 200 with published models",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "public model detail",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "public secret side endpoint",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "public categories",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "public settings",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "homepage HTML 200",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "model page HTML 200 (SPA route)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "media: published card/cover images reachable (200)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "admin auth/me (JWT) SUPER_ADMIN",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "admin dashboard v1 overview",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "admin models list",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "admin media list",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "admin keys list (hash never exposed)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "SEO issues (read) 200, 0 CRITICAL open",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "SEO sitemap status (read)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "health (read) 200, latest overall ok/warn (not fail)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "alerts list (read) 200",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "sitemap.xml 200, production URLs, includes model page",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "robots.txt 200 with production sitemap",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "RSS 200 (xml)",
+   "result": "PASS",
+   "note": ""
+  }
+ ],
+ "read_only": true,
+ "openapi_v2_url": "https://secret-side.emergent.host/api/v2/ai/openapi-chatgpt.json",
+ "openapi_v2_operations": 12,
+ "capabilities_total": 97,
+ "capabilities_bound": 97,
+ "capabilities_unbound": 0,
+ "getjob_note": "async AI jobs are created only by FULL batch operations: in production READ_ONLY only auth + 404 path is exercisable (200 path verified in preview coverage).",
+ "idempotency_note": "v2 per-capability replay (same key -> same result, different body -> 409 IDEMPOTENCY_CONFLICT) is only exercisable with real writes (FULL): verified in preview coverage, not in production READ_ONLY.",
+ "health_overall": "ok",
+ "open_alerts": 0,
+ "test_connection": "13/13 controlli superati",
+ "public_models": 10,
+ "seo_open": {
+  "SAFE_AUTO_FIX": 0,
+  "REVIEW_REQUIRED": 4,
+  "CRITICAL": 0
+ },
+ "health_latest": {
+  "overall": "ok",
+  "checked_at": "2026-09-11T07:51:59.151740+00:00"
+ },
+ "v2_pass": "54/54",
+ "regressions_pass": "30/30",
+ "problems": [],
+ "conclusion": "PRODUCTION V2 READY FOR GPT REIMPORT"
+}
