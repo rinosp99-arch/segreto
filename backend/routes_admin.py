@@ -14,7 +14,7 @@ from auth import (
 from schemas import ModelIn, CategoryIn, ArticleIn, SettingsIn, LoginIn
 from sanitize import sanitize_html, slugify
 from storage import put_object, APP_NAME
-from content_status import compute_content_status, full_status, compute_readiness
+from content_status import full_status, compute_readiness
 from v1_versioning import record_version
 
 

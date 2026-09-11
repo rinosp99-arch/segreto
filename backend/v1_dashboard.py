@@ -1,6 +1,6 @@
 """SUPER API v1 - ADMIN DASHBOARD aggregate (one call for the 'Motore API' page)."""
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Any
+from typing import Dict
 from fastapi import APIRouter, Depends
 
 from database import (
@@ -8,7 +8,7 @@ from database import (
 )
 from v1_security import require
 from v1_models import validate_model
-from v1_tracking import build_match, funnel_for, model_kpis, _ev_match
+from v1_tracking import build_match, funnel_for, model_kpis
 
 dashboard_router = APIRouter(prefix="/api/v1/dashboard", tags=["Dashboard"])
 

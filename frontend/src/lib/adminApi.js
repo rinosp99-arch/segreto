@@ -77,3 +77,8 @@ export const aiTestConnection = () => api.post('/v1/ai/test-connection').then((r
 export const v1KeyRotate = (id) => api.post(`/v1/auth/keys/${id}/rotate`).then((r) => r.data);
 export const v1KeyDisable = (id) => api.post(`/v1/auth/keys/${id}/disable`).then((r) => r.data);
 export const v1KeyEnable = (id) => api.post(`/v1/auth/keys/${id}/enable`).then((r) => r.data);
+
+// ---- Phase 12A: universal engine v2 (capability governance) ----
+export const aiCapabilitiesAdmin = () => api.get('/v2/ai/admin/capabilities').then((r) => r.data);
+export const aiCapabilityToggle = (capability_id, disabled) => api.post('/v2/ai/admin/capabilities/toggle', { capability_id, disabled }).then((r) => r.data);
+export const v1KeyCapabilities = (id, capability_allow, capability_deny) => api.patch(`/v1/auth/keys/${id}/capabilities`, { capability_allow, capability_deny }).then((r) => r.data);

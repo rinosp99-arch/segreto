@@ -5,18 +5,16 @@ tracking, analytics events, background jobs.
 Policy: SAFE -> auto-fix (versioned, rollback on regression). IMPORTANT -> alert + review.
 """
 import os
-import re
 import uuid
 import time
 import asyncio
 import logging
 from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, HTTPException, Depends, Request
-from pydantic import BaseModel
 import requests as _requests
 
 from database import (
-    db, models_col, events_col, files_col, health_col, alerts_col, jobs_col, seo_issues_col, config_col, now_iso, serialize_doc,
+    db, models_col, events_col, files_col, health_col, alerts_col, jobs_col, seo_issues_col, config_col, now_iso,
 )
 from v1_security import require, actor_of, request_id_of
 from v1_versioning import audit_log

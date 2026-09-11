@@ -14,7 +14,7 @@ from typing import Dict, Any, Callable, Awaitable, Optional
 from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 
-from database import jobs_col, job_runs_col, events_col, models_col, alerts_col, seo_issues_col, analytics_daily_col, config_col, now_iso, serialize_doc
+from database import jobs_col, job_runs_col, events_col, config_col, now_iso, serialize_doc
 from v1_security import require, actor_of, request_id_of
 from v1_versioning import audit_log
 

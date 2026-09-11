@@ -1,6 +1,6 @@
 import uuid
 import random
-from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 from typing import Optional
 
 from database import (

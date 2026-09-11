@@ -1,0 +1,1511 @@
+{
+ "run": "1a5912",
+ "base": "https://secret-side.preview.emergentagent.com",
+ "started_at": "2026-09-11T00:30:59",
+ "capabilities": {
+  "models.list": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "10 modelle (10 PUBLISHED)"
+   }
+  ],
+  "models.get": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "Scheda di Francesca Rossi (PUBLISHED)"
+   }
+  ],
+  "models.validate": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "Pronta alla pubblicazione (stato PUBLISHED)"
+   }
+  ],
+  "tags.list": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "24 tag in uso, 0 con varianti duplicate"
+   }
+  ],
+  "media.list": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "5 media"
+   }
+  ],
+  "media.find": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "Media trovato: 36ecaa10-f111-4921-bf40-0f70758a365b.jpeg"
+   }
+  ],
+  "media.inspect": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "image NonexNone"
+   }
+  ],
+  "media.broken": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "72 media verificati, 0 mancanti, 0 non verificabili da server"
+   }
+  ],
+  "filmstrip.get_config": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "FilmStrip: 10 video attivi"
+   }
+  ],
+  "settings.get": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "Impostazioni correnti"
+   }
+  ],
+  "config.get": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "Configurazione corrente (redatta)"
+   }
+  ],
+  "flags.list": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "17 flag (5 gestibili via AI)"
+   }
+  ],
+  "categories.list": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "7 categorie"
+   }
+  ],
+  "seo.issues": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "1 issue SEO aperte"
+   }
+  ],
+  "seo.audit": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "SEO Francesca Rossi: score 97 \u2014 {'SAFE_AUTO_FIX': 0, 'REVIEW_REQUIRED': 1, 'CRITICAL': 0}"
+   }
+  ],
+  "seo.redirect.list": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "0 redirect"
+   }
+  ],
+  "seo.sitemap_status": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "Sitemap: 21 URL (0 modelle noindex escluse)"
+   }
+  ],
+  "seo.internal_links": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "1 nodi del grafo link interni per Francesca Rossi"
+   }
+  ],
+  "seo.opportunities": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "0 opportunit\u00e0 SEO"
+   }
+  ],
+  "landing.list": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "0 landing"
+   }
+  ],
+  "alerts.list": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "0 alert correnti (0 critici), 10 risolti nelle ultime 24h"
+   }
+  ],
+  "jobs.list": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "9 job (0 in errore)"
+   }
+  ],
+  "jobs.runs": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "3 esecuzioni di health_check"
+   }
+  ],
+  "backup.list": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "6 backup, ultimo 2026-09-11T00:23"
+   }
+  ],
+  "admins.list": [
+   {
+    "mode": "read",
+    "result": "PASS",
+    "note": "2 amministratori"
+   }
+  ],
+  "models.update": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 2 campi cambierebbero su Francesca Rossi (SAFE)"
+   }
+  ],
+  "models.set_public_side": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 1 campi cambierebbero su Francesca Rossi (SAFE)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Cov Model 1a5912 aggiornata (cta_testo); stato DRAFT"
+   }
+  ],
+  "models.set_secret_side": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 1 campi cambierebbero su Francesca Rossi (SAFE)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Cov Model 1a5912 aggiornata (tema); stato DRAFT"
+   }
+  ],
+  "models.set_regia": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 1 campi cambierebbero su Francesca Rossi (SAFE)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Cov Model 1a5912 aggiornata (regia); stato DRAFT"
+   }
+  ],
+  "models.set_cta": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 1 campi cambierebbero su Francesca Rossi (SAFE)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Cov Model 1a5912 aggiornata (cta_temporizzata); stato DRAFT"
+   }
+  ],
+  "models.set_secret_message": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 0 campi cambierebbero su Francesca Rossi (SAFE)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Cov Model 1a5912 aggiornata (messaggio_35s); stato DRAFT"
+   }
+  ],
+  "models.set_social": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 1 campi cambierebbero su Francesca Rossi (SAFE)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Cov Model 1a5912 aggiornata (social); stato DRAFT"
+   }
+  ],
+  "models.set_seo": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 1 campi cambierebbero su Francesca Rossi (SAFE)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Cov Model 1a5912 aggiornata (seo); stato DRAFT"
+   }
+  ],
+  "models.feature": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 1 campi cambierebbero su Francesca Rossi (SAFE)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Cov Model 1a5912 aggiornata (badge); stato DRAFT"
+   }
+  ],
+  "models.unfeature": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 2 campi cambierebbero su Francesca Rossi (SAFE)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Cov Model 1a5912 aggiornata (badge, badge_tipo); stato DRAFT"
+   }
+  ],
+  "models.publish": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima publish: PUBLISHED \u2192 ?"
+   }
+  ],
+  "models.unpublish": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima unpublish: PUBLISHED \u2192 ?"
+   }
+  ],
+  "models.archive": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima archive: PUBLISHED \u2192 ?"
+   }
+  ],
+  "models.restore": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima restore: PUBLISHED \u2192 ?"
+   }
+  ],
+  "models.soft_delete": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: francesca-rossi verrebbe eliminata logicamente (recuperabile con models.undelete)"
+   }
+  ],
+  "models.clone": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: verrebbe creata la bozza 'Clone 1a5912' clonando francesca-rossi"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Clone creato: 'Cov Clone 1a5912' (slug cov-clone-1a5912, bozza)"
+   }
+  ],
+  "models.copy_config": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 3 campi cambierebbero su Francesca Rossi (SAFE)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Cov Model 1a5912 aggiornata (regia, tema); stato INCOMPLETE"
+   }
+  ],
+  "models.tags.add": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 1 campi cambierebbero su Francesca Rossi (SAFE)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Cov Model 1a5912 aggiornata (tag); stato DRAFT"
+   }
+  ],
+  "models.tags.remove": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 0 campi cambierebbero su Francesca Rossi (SAFE)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Cov Model 1a5912 aggiornata (tag); stato DRAFT"
+   }
+  ],
+  "tags.normalize": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: tag 'anteprima' \u2192 'preview' su 0 modelle"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "tag 'cov-1a5912' \u2192 'cov2-1a5912' su 1 modelle"
+   }
+  ],
+  "media.assign": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 1 campi cambierebbero su Francesca Rossi (SAFE)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Media assegnato a public_photo_1 di Cov Model 1a5912"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Media assegnato a secret_photo_1 di Cov Model 1a5912"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Media assegnato a card di Cov Model 1a5912"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Media assegnato a cover di Cov Model 1a5912"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Media assegnato a secret_hero di Cov Model 1a5912"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Media assegnato a public_photo_2 di Cov Model 1a5912"
+   }
+  ],
+  "media.replace_slot": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 1 campi cambierebbero su Francesca Rossi (SAFE)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Media assegnato a public_photo_1 di Cov Model 1a5912"
+   }
+  ],
+  "media.remove_from_slot": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 2 campi cambierebbero su Francesca Rossi (SAFE)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Cov Model 1a5912 aggiornata (media_pairs); stato INCOMPLETE"
+   }
+  ],
+  "media.reorder_pairs": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 0 campi cambierebbero su Francesca Rossi (SAFE)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Cov Model 1a5912 aggiornata (media_pairs); stato INCOMPLETE"
+   }
+  ],
+  "media.update": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima metadata media: alt"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Media aggiornato (alt)"
+   }
+  ],
+  "media.optimize": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: verrebbero rigenerate le varianti di d5f02f70-bb02-417e-87fc-5083ff539723"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Varianti rigenerate"
+   }
+  ],
+  "media.optimize_all": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 2/2 media ottimizzati"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "2/2 media ottimizzati"
+   }
+  ],
+  "media.soft_delete": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: d5f02f70-bb02-417e-87fc-5083ff539723 verrebbe eliminato logicamente"
+   }
+  ],
+  "homepage.reorder_models": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima ordine Home: ['francesca-rossi', 'vanessa-neri', 'federica-sole', 'giulia-bianchi', 'martina-conte', 'sofia-marino', 'chiara-greco', 'alice-ferrari', 'elena-costa', 'aurora-villa']"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Ordine Home aggiornato (9 modelle spostate)"
+   }
+  ],
+  "filmstrip.set_config": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima impostazioni: 1 campi"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Impostazioni aggiornate (home_pellicola)"
+   }
+  ],
+  "filmstrip.set_model": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 1 campi cambierebbero su Francesca Rossi (SAFE)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Cov Model 1a5912 aggiornata (pellicola_home); stato DRAFT"
+   }
+  ],
+  "settings.update": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima impostazioni: 1 campi"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Impostazioni aggiornate (site_description)"
+   }
+  ],
+  "config.update": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima config: ['ai.policy.max_batch']"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Configurazione aggiornata (ai.policy.max_batch)"
+   }
+  ],
+  "flags.set": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima flag seo_autopilot: True \u2192 True"
+   }
+  ],
+  "categories.create": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: categoria 'Cat 1a5912' (cat-1a5912)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Categoria 'Cov Cat 1a5912' creata (cov-cat-1a5912)"
+   }
+  ],
+  "categories.update": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima categoria eleganti: ['descrizione']"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Categoria cov-cat-1a5912 aggiornata (descrizione, seo_title)"
+   }
+  ],
+  "categories.archive": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima categoria eleganti: ['stato']"
+   }
+  ],
+  "categories.restore": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima categoria eleganti: []"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Categoria cov-cat-1a5912 aggiornata (stato)"
+   }
+  ],
+  "categories.reorder": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima ordine categorie: ['eleganti', 'more']"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "ordine categorie: ['cov-cat-1a5912', 'eleganti']"
+   }
+  ],
+  "categories.assign_models": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: categoria eleganti assegnata a 0 modelle"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "categoria cov-cat-1a5912 assegnata a 1 modelle"
+   }
+  ],
+  "models.categories.set": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 1 campi cambierebbero su Francesca Rossi (SAFE)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Cov Model 1a5912 aggiornata (categorie); stato DRAFT"
+   }
+  ],
+  "seo.safe_fix": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 0 fix SAFE su Francesca Rossi"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "5 fix SAFE su Cov Model 1a5912 (0 saltati)"
+   }
+  ],
+  "seo.safe_fix_all": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 0 fix SAFE su 10 modelle (0 errori)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "0 fix SAFE su 10 modelle (0 errori)"
+   }
+  ],
+  "seo.redirect.create": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima redirect /vecchia \u2192 /modelle/francesca-rossi"
+   }
+  ],
+  "landing.create": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima landing 'Landing 1a5912' (bozza, 1 modelle)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Landing 'Landing cov 1a5912' creata in bozza (landing-cov-1a5912)"
+   }
+  ],
+  "alerts.resolve": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "'alerts.resolve' richiede un target (alert)"
+   }
+  ],
+  "jobs.run": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: verrebbe eseguito il job health_check"
+   }
+  ],
+  "jobs.pause": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: job seo_scan verrebbe messo in pausa"
+   }
+  ],
+  "jobs.resume": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: job seo_scan verrebbe riattivato"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Job seo_scan riattivato"
+   }
+  ],
+  "backup.create": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: verrebbe creato un backup completo"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Backup creato (f8160d9e-d5e6-484b-bfc8-a7f9d0347e38)"
+   }
+  ],
+  "system.health_run": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: verrebbe eseguito l'health check"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Health ok: 0 check non ok, alert risolti []"
+   }
+  ],
+  "rollback.window": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima: 3 modifiche su francesca-rossi verrebbero annullate"
+   }
+  ],
+  "models.prepare_complete": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "Anteprima workflow 'Anteprima 1a5912': bozza + 1 campi SAFE + 1 campi REVIEW (approvazione) + 1 media + SEO safe + validate (nessuna pubblicazione)"
+   }
+  ],
+  "media.upload_url": [
+   {
+    "mode": "preview",
+    "result": "PASS",
+    "note": "nessuna anteprima sicura -> 422 (regola Phase 10)"
+   },
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Media caricato:  (image); assegnato a public_photo_3 di Cov Model 1a5912"
+   }
+  ],
+  "READ_ONLY enforcement": [
+   {
+    "mode": "execute",
+    "result": "PASS",
+    "note": "READ_ONLY_MODE"
+   }
+  ],
+  "models.create": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Bozza 'Cov Model 1a5912' creata (slug cov-model-1a5912); stato DRAFT"
+   }
+  ],
+  "models.update (REVIEW\u2192approval)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Modifica di frase, onlyfans_url richiede approvazione"
+   }
+  ],
+  "approveApproval (models.update)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Cov Model 1a5912 aggiornata (frase, onlyfans_url); stato DRAFT"
+   }
+  ],
+  "media.assign (video\u2192filmstrip pair)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Media assegnato a public_video_1 di Cov Model 1a5912"
+   }
+  ],
+  "media.assign (filmstrip_public)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Media assegnato a filmstrip_public di Cov Model 1a5912"
+   }
+  ],
+  "seo.audit (test model)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "SEO Cov Model 1a5912: score 95 \u2014 {'SAFE_AUTO_FIX': 5, 'REVIEW_REQUIRED': 0, 'CRITICAL': 0}"
+   }
+  ],
+  "seo.fix_issue": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "nessuna issue aperta non-critical sulla modella di test: verificata solo l'anteprima"
+   }
+  ],
+  "landing.get": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Landing landing-cov-1a5912 (bozza), validazione 79"
+   }
+  ],
+  "landing.validate": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Pubblicabile (score 79)"
+   }
+  ],
+  "landing.update": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Landing landing-cov-1a5912 aggiornata (subtitle)"
+   }
+  ],
+  "landing.unpublish": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Landing landing-cov-1a5912 in bozza"
+   }
+  ],
+  "landing.publish (validator/approval)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Landing landing-cov-1a5912 pubblicata"
+   }
+  ],
+  "models.publish (dry, test model)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Non pubblicabile: Creator maggiorenne confermata, 3 foto Lato Pubblico, 3 foto Lato Segreto, Video segreto 1, Descrizione pubblica, Descrizione Lato Segreto, Video Pellicola segreto"
+   }
+  ],
+  "models.soft_delete (approve)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "cov-model-1a5912 eliminata logicamente (recuperabile)"
+   }
+  ],
+  "models.undelete": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "cov-model-1a5912 recuperata (bozza)"
+   }
+  ],
+  "rollback.version": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Rollback eseguito su model d4f4e8d8-cff0-4433-b8da-2f2ef93630a5 (nuova versione None)"
+   }
+  ],
+  "rollback.window (dry)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Anteprima: 36 modifiche su cov-model-1a5912 verrebbero annullate"
+   }
+  ],
+  "rollback.session (gruppo A)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Sessione ses_covA_1a5912: 44 modifiche annullate, 17 effetti secondari ripristinati, 0 errori (storia e audit conservati)"
+   }
+  ],
+  "flags.set (REVIEW\u2192approve)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Flag ab_testing = False"
+   }
+  ],
+  "flags.set (kill-switch flag blocked)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "CRITICAL_ACTION_BLOCKED"
+   }
+  ],
+  "config.update (non-manageable key blocked)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "CRITICAL_ACTION_BLOCKED"
+   }
+  ],
+  "categories.archive (REVIEW\u2192approve)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Categoria cov-cat-1a5912 aggiornata (stato)"
+   }
+  ],
+  "seo.redirect.create (REVIEW\u2192approve)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Redirect /vecchia-1a5912 \u2192 /modelle/francesca-rossi creato"
+   }
+  ],
+  "seo.redirect.delete (REVIEW\u2192approve)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Redirect /vecchia-1a5912 disattivato"
+   }
+  ],
+  "rollback.session (gruppo B)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Sessione ses_covB_1a5912: 21 modifiche annullate, 0 effetti secondari ripristinati, 0 errori (storia e audit conservati)"
+   }
+  ],
+  "jobs.run (health_check)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Job health_check: ok in 1445 ms"
+   }
+  ],
+  "jobs.run (media_check)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Job media_check: ok in 3644 ms"
+   }
+  ],
+  "jobs.pause (REVIEW\u2192approve)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Job seo_scan in pausa"
+   }
+  ],
+  "alerts.ack / alerts.inspect / alerts.resolve": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "nessun alert aperto in preview (health ok): verificate solo anteprime/letture"
+   }
+  ],
+  "backup.verify": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Backup f8160d9e-d5e6-484b-bfc8-a7f9d0347e38 del 2026-09-11T00:32: 13 collection, integrit\u00e0 OK"
+   }
+  ],
+  "backup.restore_plan": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Piano di ripristino (nessuna modifica). Esecuzione reale: CRITICAL, solo amministratore umano dal pannello."
+   }
+  ],
+  "backup cleanup": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "record backup di test rimosso"
+   }
+  ]
+ },
+ "e2e": {
+  "prepare_complete": {
+   "status": 200,
+   "ok": true,
+   "summary": "'TEST GIULIA' preparata (slug test-giulia, stato INCOMPLETE, NON pubblicata): 12 passi ok, 9 versioni, 6 campi REVIEW in attesa di approvazione. Mancano: 3 foto Lato Pubblico, 3 foto Lato Segreto, Video segreto 1, Claim, Descrizione pubblica, Descrizione Lato Segreto, Link OnlyFans, Video Pellicola segreto",
+   "steps": [
+    {
+     "step": "models.create",
+     "ok": true,
+     "slug": "test-giulia",
+     "version_id": "60d46703-726c-4fb5-8331-07ba11ef6a9e"
+    },
+    {
+     "step": "models.update",
+     "ok": true,
+     "fields": [
+      "badge",
+      "badge_tipo",
+      "categorie",
+      "conferma_maggiorenne",
+      "cta_temporizzata",
+      "cta_testo",
+      "messaggio_35s",
+      "regia",
+      "social",
+      "tag",
+      "teaser_copy",
+      "tema"
+     ],
+     "version_id": "a897745d-9a6e-4c51-a654-3449174249a9"
+    },
+    {
+     "step": "models.update (REVIEW)",
+     "ok": true,
+     "pending_approval": true,
+     "fields": [
+      "bio",
+      "bio_segreta",
+      "frase",
+      "nome_artistico",
+      "onlyfans_url",
+      "seo"
+     ],
+     "approval_id": "c5a513c8-51ae-4bc1-902a-fa85e0eef514"
+    },
+    {
+     "step": "media.assign",
+     "ok": true,
+     "slot": "card",
+     "version_id": "76c8dee2-83b5-47b7-bc10-f366c967504f"
+    },
+    {
+     "step": "media.assign",
+     "ok": true,
+     "slot": "cover",
+     "version_id": "bed6f93d-273a-4229-9beb-8aaf463aee9f"
+    },
+    {
+     "step": "media.assign",
+     "ok": true,
+     "slot": "public_photo_1",
+     "version_id": "36fc35ba-eb89-408d-8172-f2e9dc151c11"
+    },
+    {
+     "step": "media.assign",
+     "ok": true,
+     "slot": "secret_photo_1",
+     "version_id": "2171d356-e41f-4d9c-a53d-c9359295bf45"
+    },
+    {
+     "step": "media.assign",
+     "ok": true,
+     "slot": "secret_hero",
+     "version_id": "d26aa0bb-925b-440d-98e7-d1d6fb599615"
+    },
+    {
+     "step": "media.assign",
+     "ok": true,
+     "slot": "public_video_1",
+     "version_id": "4b275900-c6cc-44af-8fdc-1a0678972240"
+    },
+    {
+     "step": "media.assign",
+     "ok": true,
+     "slot": "filmstrip_public",
+     "version_id": "49026d9e-5b2d-4f6b-90a5-48d4d097b456"
+    },
+    {
+     "step": "seo.safe_fix",
+     "ok": true,
+     "fixes": 0,
+     "skipped": 0
+    },
+    {
+     "step": "models.validate",
+     "ok": true,
+     "ready": false,
+     "missing": [
+      "3 foto Lato Pubblico",
+      "3 foto Lato Segreto",
+      "Video segreto 1",
+      "Claim",
+      "Descrizione pubblica",
+      "Descrizione Lato Segreto",
+      "Link OnlyFans",
+      "Video Pellicola segreto"
+     ]
+    }
+   ],
+   "approval_required": true
+  },
+  "model": {
+   "id": "07924079-402c-474b-a296-cbfd911b8738",
+   "slug": "test-giulia",
+   "workflow_status": "INCOMPLETE",
+   "published": false,
+   "pending_review_fields": [
+    "bio",
+    "bio_segreta",
+    "frase",
+    "nome_artistico",
+    "onlyfans_url",
+    "seo"
+   ]
+  },
+  "review_approval": {
+   "status": 200,
+   "summary": "Test Giulia aggiornata (bio, bio_segreta, frase, nome_artistico, onlyfans_url, seo); stato INCOMPLETE"
+  },
+  "readiness": {
+   "ready": false,
+   "workflow_status": "INCOMPLETE",
+   "errors": [
+    {
+     "code": "PUBLIC_PHOTOS_LT_3",
+     "field": "3 foto Lato Pubblico",
+     "message": "Manca: 3 foto Lato Pubblico"
+    },
+    {
+     "code": "SECRET_PHOTOS_LT_3",
+     "field": "3 foto Lato Segreto",
+     "message": "Manca: 3 foto Lato Segreto"
+    },
+    {
+     "code": "SECRET_VIDEO_MISSING",
+     "field": "Video segreto 1",
+     "message": "Manca: Video segreto 1"
+    },
+    {
+     "code": "PELLICOLA_SECRET_VIDEO_MISSING",
+     "field": "Video Pellicola segreto",
+     "message": "Manca: Video Pellicola segreto"
+    }
+   ],
+   "warnings": [
+    {
+     "code": "SEO_OG_IMAGE_MISSING",
+     "field": "seo.og_image",
+     "message": "Immagine OpenGraph mancante"
+    },
+    {
+     "code": "ALT_MISSING",
+     "field": "media_pairs[1].pubblico.alt",
+     "message": "ALT mancante su media 2 (pubblico)"
+    }
+   ],
+   "missing": [
+    "3 foto Lato Pubblico",
+    "3 foto Lato Segreto",
+    "Video segreto 1",
+    "Video Pellicola segreto"
+   ],
+   "capability": "models.validate",
+   "capability_version": "1.0",
+   "risk": "SAFE",
+   "dry_run": false,
+   "session_id": "ses_22fd07b28295",
+   "mode": "FULL",
+   "rollback": {
+    "available": false,
+    "version_ids": [],
+    "undo": null
+   },
+   "target": {
+    "type": "model",
+    "id": "07924079-402c-474b-a296-cbfd911b8738",
+    "slug": "test-giulia",
+    "nome": "Test Giulia",
+    "etag": "2026-09-11T00:32:12.411405+00:00"
+   }
+  },
+  "state_after_prepare": {
+   "stato": "bozza",
+   "frase_applied": true,
+   "onlyfans": "https://onlyfans.com/testgiulia12a",
+   "preset": "bordeaux",
+   "regia_audio": {
+    "traccia": "velluto-nero",
+    "volume": 0.25,
+    "attiva": true
+   },
+   "cta": {
+    "attiva": true,
+    "ritardo_secondi": 20,
+    "testo": "Continua con me"
+   },
+   "social": {
+    "instagram": "https://instagram.com/testgiulia",
+    "tiktok": "https://tiktok.com/@testgiulia"
+   },
+   "seo_title": "Test Giulia | LATO SEGRETO",
+   "categorie": [
+    "eleganti",
+    "more"
+   ],
+   "tag": [
+    "milano",
+    "test",
+    "test-giulia"
+   ],
+   "foto_card": true,
+   "foto_copertina": true,
+   "foto_segreta_hero": true,
+   "pairs": [
+    [
+     "image",
+     true,
+     true
+    ],
+    [
+     "video",
+     true,
+     false
+    ]
+   ],
+   "pellicola_video_pub": true
+  },
+  "audit": {
+   "actions": [
+    "models.prepare_complete",
+    "models.update",
+    "media.update",
+    "models.categories.set",
+    "models.tags.add"
+   ],
+   "all_ok": true,
+   "with_version_ids": 5,
+   "secondary_links": 7
+  },
+  "not_public": true,
+  "rollback_plan": {
+   "versions": 12,
+   "secondary": 7
+  },
+  "rollback": {
+   "status": 200,
+   "summary": "Sessione ses_giulia_1a5912: 12 modifiche annullate, 8 effetti secondari ripristinati, 0 errori (storia e audit conservati)",
+   "done": 12,
+   "side_effects": [
+    {
+     "kind": "file_links_cleared",
+     "model_id": "07924079-402c-474b-a296-cbfd911b8738",
+     "count": 3
+    },
+    {
+     "kind": "file_link_restored",
+     "file_id": "ccae8058-187a-4fac-8a00-b49440a2d0fe",
+     "to": {
+      "model_id": "07924079-402c-474b-a296-cbfd911b8738",
+      "slot": "public_video_1"
+     }
+    },
+    {
+     "kind": "file_link_restored",
+     "file_id": "ccae8058-187a-4fac-8a00-b49440a2d0fe",
+     "to": {
+      "model_id": null,
+      "slot": null
+     }
+    },
+    {
+     "kind": "file_link_restored",
+     "file_id": "1e08a563-5f1d-4723-ae56-f52000b56628",
+     "to": {
+      "model_id": "07924079-402c-474b-a296-cbfd911b8738",
+      "slot": "secret_photo_1"
+     }
+    },
+    {
+     "kind": "file_link_restored",
+     "file_id": "1e08a563-5f1d-4723-ae56-f52000b56628",
+     "to": {
+      "model_id": "07924079-402c-474b-a296-cbfd911b8738",
+      "slot": "cover"
+     }
+    },
+    {
+     "kind": "file_link_restored",
+     "file_id": "d5f02f70-bb02-417e-87fc-5083ff539723",
+     "to": {
+      "model_id": "07924079-402c-474b-a296-cbfd911b8738",
+      "slot": "card"
+     }
+    },
+    {
+     "kind": "file_link_restored",
+     "file_id": "1e08a563-5f1d-4723-ae56-f52000b56628",
+     "to": {
+      "model_id": null,
+      "slot": null
+     }
+    },
+    {
+     "kind": "file_link_restored",
+     "file_id": "d5f02f70-bb02-417e-87fc-5083ff539723",
+     "to": {
+      "model_id": null,
+      "slot": null
+     }
+    }
+   ],
+   "errors": []
+  },
+  "hash_identical": true,
+  "hashes": {
+   "before": {
+    "models": "3ca734904040926e",
+    "files": "4906afbc4e0659d3",
+    "slot_links": "f138d57c27f4002d",
+    "seo_issues": "a077356082e23a18",
+    "redirects": "44136fa355b3678a",
+    "landings": "44136fa355b3678a",
+    "categories": "08bfb6f2b4d348fe",
+    "settings": "4b855c4586a12dd7",
+    "config": "db032b5d87f65a79",
+    "jobs": "57b4105f6b39587a"
+   },
+   "after": {
+    "models": "3ca734904040926e",
+    "files": "4906afbc4e0659d3",
+    "slot_links": "f138d57c27f4002d",
+    "seo_issues": "a077356082e23a18",
+    "redirects": "44136fa355b3678a",
+    "landings": "44136fa355b3678a",
+    "categories": "08bfb6f2b4d348fe",
+    "settings": "4b855c4586a12dd7",
+    "config": "db032b5d87f65a79",
+    "jobs": "57b4105f6b39587a"
+   }
+  },
+  "model_soft_deleted": true,
+  "history_preserved": {
+   "versions_total_grew": true,
+   "model_versions": 24,
+   "rolled_back_flags": 12,
+   "ai_actions_session": 5,
+   "actions_total_grew": true
+  },
+  "result": "PASS"
+ },
+ "hash_checks": [
+  {
+   "name": "gruppo A (modella test, media, SEO, landing, clone)",
+   "identical": true,
+   "before": {
+    "models": "3ca734904040926e",
+    "files": "4906afbc4e0659d3",
+    "slot_links": "f138d57c27f4002d",
+    "seo_issues": "a077356082e23a18",
+    "redirects": "44136fa355b3678a",
+    "landings": "44136fa355b3678a",
+    "categories": "08bfb6f2b4d348fe",
+    "settings": "4b855c4586a12dd7",
+    "config": "db032b5d87f65a79",
+    "jobs": "57b4105f6b39587a"
+   },
+   "after": {
+    "models": "3ca734904040926e",
+    "files": "4906afbc4e0659d3",
+    "slot_links": "f138d57c27f4002d",
+    "seo_issues": "a077356082e23a18",
+    "redirects": "44136fa355b3678a",
+    "landings": "44136fa355b3678a",
+    "categories": "08bfb6f2b4d348fe",
+    "settings": "4b855c4586a12dd7",
+    "config": "db032b5d87f65a79",
+    "jobs": "57b4105f6b39587a"
+   },
+   "diff": {}
+  },
+  {
+   "name": "gruppo B (home, filmstrip, settings, config, flag, categorie, redirect)",
+   "identical": true,
+   "before": {
+    "models": "3ca734904040926e",
+    "files": "4906afbc4e0659d3",
+    "slot_links": "f138d57c27f4002d",
+    "seo_issues": "a077356082e23a18",
+    "redirects": "44136fa355b3678a",
+    "landings": "44136fa355b3678a",
+    "categories": "08bfb6f2b4d348fe",
+    "settings": "4b855c4586a12dd7",
+    "config": "db032b5d87f65a79",
+    "jobs": "57b4105f6b39587a"
+   },
+   "after": {
+    "models": "3ca734904040926e",
+    "files": "4906afbc4e0659d3",
+    "slot_links": "f138d57c27f4002d",
+    "seo_issues": "a077356082e23a18",
+    "redirects": "44136fa355b3678a",
+    "landings": "44136fa355b3678a",
+    "categories": "08bfb6f2b4d348fe",
+    "settings": "4b855c4586a12dd7",
+    "config": "db032b5d87f65a79",
+    "jobs": "57b4105f6b39587a"
+   },
+   "diff": {}
+  },
+  {
+   "name": "gruppo C (jobs, health, backup)",
+   "identical": true,
+   "before": {
+    "models": "3ca734904040926e",
+    "files": "4906afbc4e0659d3",
+    "slot_links": "f138d57c27f4002d",
+    "seo_issues": "a077356082e23a18",
+    "redirects": "44136fa355b3678a",
+    "landings": "44136fa355b3678a",
+    "categories": "08bfb6f2b4d348fe",
+    "settings": "4b855c4586a12dd7",
+    "config": "db032b5d87f65a79",
+    "jobs": "57b4105f6b39587a"
+   },
+   "after": {
+    "models": "3ca734904040926e",
+    "files": "4906afbc4e0659d3",
+    "slot_links": "f138d57c27f4002d",
+    "seo_issues": "a077356082e23a18",
+    "redirects": "44136fa355b3678a",
+    "landings": "44136fa355b3678a",
+    "categories": "08bfb6f2b4d348fe",
+    "settings": "4b855c4586a12dd7",
+    "config": "db032b5d87f65a79",
+    "jobs": "57b4105f6b39587a"
+   },
+   "diff": {}
+  },
+  {
+   "name": "E2E TEST GIULIA (before vs after rollback.session)",
+   "identical": true,
+   "before": {
+    "models": "3ca734904040926e",
+    "files": "4906afbc4e0659d3",
+    "slot_links": "f138d57c27f4002d",
+    "seo_issues": "a077356082e23a18",
+    "redirects": "44136fa355b3678a",
+    "landings": "44136fa355b3678a",
+    "categories": "08bfb6f2b4d348fe",
+    "settings": "4b855c4586a12dd7",
+    "config": "db032b5d87f65a79",
+    "jobs": "57b4105f6b39587a"
+   },
+   "after": {
+    "models": "3ca734904040926e",
+    "files": "4906afbc4e0659d3",
+    "slot_links": "f138d57c27f4002d",
+    "seo_issues": "a077356082e23a18",
+    "redirects": "44136fa355b3678a",
+    "landings": "44136fa355b3678a",
+    "categories": "08bfb6f2b4d348fe",
+    "settings": "4b855c4586a12dd7",
+    "config": "db032b5d87f65a79",
+    "jobs": "57b4105f6b39587a"
+   },
+   "diff": {}
+  }
+ ],
+ "notes": [
+  "RATE_LIMITED on landing.unpublish: waited 43s"
+ ],
+ "final_mode_read_only": true,
+ "temp_key_revoked": true,
+ "seed_purge": {
+  "models": 3,
+  "files": 1,
+  "seo_issues": 5,
+  "landings": 1,
+  "categories": 1,
+  "redirects": 1,
+  "versions": 114,
+  "api_key": 1
+ },
+ "totals": {
+  "checks": 156,
+  "pass": 156,
+  "fail": 0,
+  "capabilities_touched": 112,
+  "hash_checks_identical": true
+ }
+}

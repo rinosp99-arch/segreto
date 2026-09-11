@@ -11,14 +11,13 @@ import uuid
 import json
 import hashlib
 import secrets
-import statistics
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from fastapi import Depends, Request, HTTPException
 
 from database import db, config_col, now_iso
-from v1_security import rate_limit_shared, resolve_principal, has_scope, err, READ_SCOPES, CRITICAL_SCOPES, DEFAULT_LIMIT_AI, MIN_AI_LIMIT, rate_limit, bucket_usage
+from v1_security import rate_limit_shared, resolve_principal, has_scope, err, CRITICAL_SCOPES, DEFAULT_LIMIT_AI, MIN_AI_LIMIT
 
 approvals_col = db["ai_approvals"]
 ai_metrics_col = db["ai_metrics"]

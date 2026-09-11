@@ -38,6 +38,14 @@ Catalogo completo: `GET /api/v1/ai/capabilities`. Risposta sempre `{ ok, action,
 - Log richieste `ai_requests` (tutte le chiamate con API key, letture incluse) visibile nel pannello; `principal_type` = machine|user.
 - Server lasciato in **READ_ONLY** (`ai_write_enabled=false`). Test: `python tests/phase11_gpt_simulation.py` (42/42).
 
+## Phase 12A — Total Site Control API v2 (vedi `CHATGPT_API.md` → TOTAL SITE CONTROL API v2)
+- Nuovo namespace `/api/v2/ai/*` (`backend/v1_capabilities.py`): **12 primitive universali** (`getCapabilities`, `getCapability`, `previewCapability`, `executeCapability`, `listApprovals`, `approveApproval`, `rejectApproval`, `getJob`, `queryAnalytics`, `getSystemStatus`, `rollback`, `findModel`) + schema GPT separato `GET /api/v2/ai/openapi-chatgpt.json`. Il v1 (23 operazioni) resta intatto e collegato al GPT reale.
+- **Capability Registry allowlisted**: 97 capability / 14 categorie (86 SAFE, 11 REVIEW, 0 CRITICAL esposte), id+versione stabili, binding verificato allo startup (non valido → `UNBOUND` → 503 `CAPABILITY_UNBOUND`, mai fatale, mai eseguibile). Nessun LLM interno, nessuna reflection.
+- Dispatcher unico preview/execute (stesso service + validator), enforcement: registry → kill switch → scopes → `capability_deny` > `capability_allow` (solo restrittivo) → READ_ONLY/FULL → CRITICAL mai via API → rate limit condiviso → target → parametri → `expected_updated_at` (409, anche se inviato in `parameters`) → `Idempotency-Key` → handler → approvazione REVIEW (ri-verificata al confirm) → audit `ai_actions` con `session_id` → rollback metadata → envelope standard.
+- `models.prepare_complete`: workflow orchestrato (create → campi → media/slot → SEO safe-fix → validate), mai publish, campi REVIEW soggetti ad approvazione. `rollback.session`: inverso cronologico con effetti secondari (link media→slot, varianti file, issue SEO, redirect da cambio slug), storia/audit conservati.
+- Endpoint admin (JWT): `GET /api/v2/ai/admin/capabilities`, `POST /api/v2/ai/admin/capabilities/{id}/toggle`, policy per chiave `capability_allow`/`capability_deny`. Pannello `/admin/motore → Capacità ChatGPT`.
+- Test preview (agent-tested): pytest 66/66, smoke v2 35/35, binding 30/30, copertura reale 156/156 + 22/22 (**97/97 capability con payload validi**), **E2E TEST GIULIA PASS** (hash business identico dopo `rollback.session`), testing agent 47 test / 0 bug critici. **Nessun deploy; produzione READ_ONLY.**
+
 ## Aree
 - Modelle: `/models` (GET/POST/PATCH/DELETE soft), `/validate`, `/publish`, `/unpublish`, `/archive`, `/restore`, `/duplicate`, `/feature`, `/versions`. Stati: DRAFT → INCOMPLETE → READY → PUBLISHED → ARCHIVED (+ERROR).
 - Media: `/media/upload` (multipart), `/media/from-url`, `PATCH/DELETE /media/{id}`, `/replace`, `/optimize`, `POST /models/{id}/media`. Varianti web/mobile/thumb (WebP), poster + mobile per video (ffmpeg), ALT, SEO filename, controllo magic-bytes.

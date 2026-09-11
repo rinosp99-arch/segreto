@@ -13,20 +13,20 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, HTTPException, Depends, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 import requests as _requests
 
 from database import (
     ai_actions_col, models_col, alerts_col, jobs_col, seo_issues_col, versions_col, events_col, health_col, config_col, backups_col,
     landings_col, files_col, webhook_deliveries_col, redirects_col, now_iso, serialize_doc,
 )
-from v1_security import require, actor_of, request_id_of, has_scope, ALL_SCOPES, AI_OPERATOR_SCOPES, AI_READ_ONLY_SCOPES, ROLE_OPTIONAL_SCOPES, generate_api_key, hash_key
+from v1_security import require, actor_of, request_id_of, has_scope, AI_OPERATOR_SCOPES, AI_READ_ONLY_SCOPES, ROLE_OPTIONAL_SCOPES, generate_api_key, hash_key
 from v1_ai_policy import (
-    ai_guard, ai_config, classify_model_changes, create_approval, consume_approval, list_pending_approvals, metrics_snapshot, metrics_snapshot_shared, bump,
-    SAFE, REVIEW, CRITICAL, ERROR_CODES, redact,
+    ai_guard, ai_config, classify_model_changes, create_approval, consume_approval, list_pending_approvals, metrics_snapshot_shared, bump,
+    REVIEW, ERROR_CODES, redact,
 )
-from v1_models import resolve_model, create_model, patch_model, transition, validate_model, summary as model_summary, ALLOWED_FIELDS, workflow_status, check_precondition
-from v1_tracking import build_match, funnel_for, model_kpis, counts_by, _ev_match, CANONICAL_TO_LEGACY
+from v1_models import resolve_model, create_model, patch_model, transition, validate_model, summary as model_summary, ALLOWED_FIELDS, check_precondition
+from v1_tracking import build_match, funnel_for, model_kpis, _ev_match
 
 ai_router = APIRouter(prefix="/api/v1/ai", tags=["AI / ChatGPT"])
 
@@ -79,7 +79,7 @@ def _steps_for(v: dict, model: dict) -> List[str]:
     if {"CLAIM_MISSING", "PUBLIC_BIO_MISSING", "SECRET_BIO_MISSING"} & codes:
         steps.append(f"Completa i testi: POST /api/v1/ai/models/update {{model:'{ref}', changes:{{frase, bio, bio_segreta}}}} (richiede approvazione)")
     if "ONLYFANS_URL_MISSING" in codes or "ONLYFANS_URL_INVALID" in codes:
-        steps.append(f"Imposta il link: changes:{{onlyfans_url:'https://onlyfans.com/...'}} (richiede approvazione)")
+        steps.append("Imposta il link: changes:{onlyfans_url:'https://onlyfans.com/...'} (richiede approvazione)")
     if "AGE_CONFIRMATION_MISSING" in codes:
         steps.append("Conferma maggiore età: changes:{conferma_maggiorenne:true}")
     if v.get("ready") and model.get("stato") != "pubblicata":
@@ -831,7 +831,7 @@ async def ai_landing_create(body: AILanding, request: Request, principal=Depends
 @ai_router.post("/landing/update", operation_id="updateLanding", summary="Aggiorna landing (deep-merge, dry_run)")
 async def ai_landing_update(body: AILanding, request: Request, principal=Depends(ai_guard("landing:update", write=True))):
     t0 = time.time()
-    from v1_landings import resolve_landing, patch_landing, _enrich
+    from v1_landings import resolve_landing, patch_landing
     if not body.landing:
         raise HTTPException(status_code=400, detail={"code": "VALIDATION_FAILED", "message": "'landing' (id|slug|titolo) obbligatorio"})
     doc = await resolve_landing(body.landing)
@@ -1504,7 +1504,6 @@ async def ai_openapi(request: Request):
     full = app.openapi()
     paths = {p: v for p, v in full.get("paths", {}).items() if p.startswith("/api/v1/ai/") and p != "/api/v1/ai/openapi.json" and p != "/api/v1/ai/test-connection"}
     # collect referenced schemas
-    import json as _json
     used = set()
     def walk(o):
         if isinstance(o, dict):

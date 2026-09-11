@@ -47,6 +47,14 @@ try:
     # preview (dry) allowed in READ_ONLY, nothing written
     r = s.post(f"{BASE}/api/v2/ai/preview", json={"action": "models.update", "target": slug, "parameters": {"changes": {"badge": "smoke"}}}, headers=K, timeout=30)
     ok("v2 previewCapability 200 dry_run", r.status_code == 200 and r.json()["data"]["dry_run"] is True and r.json()["data"]["rollback"]["available"] is False, r.text[:200])
+    # optimistic concurrency: stale token -> 409 at root level AND when (wrongly) sent inside parameters / parameters.changes
+    stale = "2000-01-01T00:00:00+00:00"
+    r = s.post(f"{BASE}/api/v2/ai/preview", json={"action": "models.update", "target": slug, "parameters": {"changes": {"badge": "smoke"}}, "expected_updated_at": stale}, headers=K, timeout=30)
+    ok("v2 concurrency 409 CONFLICT (root expected_updated_at)", r.status_code == 409 and r.json().get("code") == "CONFLICT", r.text[:200])
+    r = s.post(f"{BASE}/api/v2/ai/preview", json={"action": "models.update", "target": slug, "parameters": {"changes": {"badge": "smoke", "expected_updated_at": stale}}}, headers=K, timeout=30)
+    ok("v2 concurrency 409 CONFLICT (hoisted from parameters.changes)", r.status_code == 409 and r.json().get("code") == "CONFLICT", r.text[:200])
+    r = s.post(f"{BASE}/api/v2/ai/preview", json={"action": "models.update", "target": slug, "parameters": {"changes": {"badge": "smoke"}, "expected_updated_at": stale}}, headers=K, timeout=30)
+    ok("v2 concurrency 409 CONFLICT (hoisted from parameters)", r.status_code == 409 and r.json().get("code") == "CONFLICT", r.text[:200])
     # execute mutation -> blocked (AI error envelope from server handler)
     r = s.post(f"{BASE}/api/v2/ai/execute", json={"action": "models.update", "target": slug, "parameters": {"changes": {"badge": "smoke"}}}, headers=K, timeout=30)
     ok("v2 executeCapability blocked READ_ONLY_MODE (403, envelope)", r.status_code == 403 and r.json().get("code") == "READ_ONLY_MODE" and r.json().get("ok") is False, r.text[:200])
@@ -94,6 +102,15 @@ finally:
     r = s.delete(f"{BASE}/api/v1/auth/keys/{key_id}", headers=H, timeout=20)
     ok("temp key revoked", r.status_code in (200, 204), r.status_code)
     ok("revoked key rejected", s.get(f"{BASE}/api/v2/ai/capabilities", headers=K, timeout=30).status_code == 401)
+    try:   # remove the revoked test key record too (no residue in the preview DB)
+        sys.path.insert(0, "/app/backend")
+        import asyncio
+        from dotenv import load_dotenv
+        load_dotenv("/app/backend/.env")
+        from database import api_keys_col
+        asyncio.new_event_loop().run_until_complete(api_keys_col.delete_many({"id": key_id}))
+    except Exception as e:
+        print("note: key record cleanup skipped:", str(e)[:80])
 
 n = sum(1 for _, p in res if p)
 print(f"\nSMOKE: {n}/{len(res)} -> {'PASS' if n == len(res) else 'FAIL'}")

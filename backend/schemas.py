@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict, EmailStr
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Any, Dict
 
 

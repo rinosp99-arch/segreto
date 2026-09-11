@@ -7,7 +7,7 @@ public site and the existing admin keep working untouched.
 import re
 import uuid
 import copy
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict
 from fastapi import APIRouter, HTTPException, Depends, Request, Query
 from pydantic import BaseModel, ConfigDict
 

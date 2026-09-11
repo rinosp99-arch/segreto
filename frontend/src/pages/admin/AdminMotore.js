@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Activity, ShieldCheck, Globe2, MousePointerClick, TrendingUp, AlertTriangle, Wrench, Bot, Cog, KeyRound,
-  Play, RotateCcw, Check, Loader2, RefreshCw, ExternalLink, Database, Copy,
+  Play, RotateCcw, Check, Loader2, RefreshCw, ExternalLink, Database, Copy, Cpu,
 } from 'lucide-react';
 import {
   v1Dashboard, v1HealthRun, v1SeoAudit, v1SeoFixAll, v1SeoIssues, v1SeoFix, v1SeoIgnore, v1Rollback, v1JobRun, v1AlertAck, v1AlertResolve,
@@ -10,6 +10,7 @@ import {
 } from '@/lib/adminApi';
 import { SectionCard, Btn, TextInput, SelectInput, Field } from '@/pages/admin/ui';
 import { ChatGptPanel } from '@/pages/admin/ChatGptPanel';
+import { CapabilitiesPanel } from '@/pages/admin/CapabilitiesPanel';
 
 const RANGES = [{ k: 'oggi', l: 'Oggi' }, { k: '7g', l: '7 giorni' }, { k: '30g', l: '30 giorni' }];
 const STATUS_COLOR = { ok: 'hsl(150 45% 58%)', warn: 'hsl(38 75% 60%)', fail: 'hsl(0 60% 58%)', unknown: 'hsl(var(--muted-foreground))', critical: 'hsl(0 60% 58%)', warning: 'hsl(38 75% 60%)', info: 'hsl(200 50% 60%)' };
@@ -113,6 +114,12 @@ export default function AdminMotore() {
       <div className="mb-5" data-testid="chatgpt-section">
         <div className="flex items-center gap-2 mb-3"><Bot className="h-5 w-5 text-muted-foreground" /><h2 className="font-serif text-2xl">ChatGPT Control Layer</h2></div>
         <ChatGptPanel />
+      </div>
+
+      {/* Phase 12A - universal engine v2: capability governance */}
+      <div className="mb-5" data-testid="capabilities-section">
+        <div className="flex items-center gap-2 mb-3"><Cpu className="h-5 w-5 text-muted-foreground" /><h2 className="font-serif text-2xl">Capacità ChatGPT</h2></div>
+        <CapabilitiesPanel />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5">

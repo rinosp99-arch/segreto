@@ -23,6 +23,8 @@ Copilota operativo per analizzare e gestire la piattaforma LATO SEGRETO tramite 
 - Authentication: **API Key** · Auth Type: **Bearer** · incolla la chiave creata in `/admin/motore → ChatGPT Control Layer → Crea chiave ChatGPT` (preset "Scopes READ_ONLY")
 - Privacy policy URL (richiesta solo per GPT pubblici): `https://<DOMINIO>/privacy`
 
+> **Phase 12A (v2, non ancora in produzione):** dopo il deploy deciso dall'utente, il GPT dovrà re-importare lo schema compatto `https://<DOMINIO>/api/v2/ai/openapi-chatgpt.json` (12 operazioni universali: catalogo capability, preview, execute, approvazioni, job, analytics, status, rollback, findModel). Stessa chiave, stessa autenticazione Bearer. Finché non viene re-importato, il GPT continua a usare il v1 (23 operazioni) senza interruzioni. Con lo schema v2 il GPT lavora così: `getCapabilities` → `previewCapability` (sempre prima di una modifica) → `executeCapability` → se `approval_required`, chiedere conferma esplicita all'utente e poi `approveApproval` con il token → in caso di errore o richiesta di annullamento, `rollback` con il `session_id`.
+
 ---
 
 ## Instructions (copiare integralmente nel campo "Instructions")

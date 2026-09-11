@@ -29,7 +29,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, ConfigDict
 
 from database import (models_col, files_col, categories_col, settings_col, config_col, alerts_col, jobs_col, job_runs_col,
-                      backups_col, versions_col, ai_actions_col, admins_col, landings_col, seo_issues_col, redirects_col, idempotency_col, db as _db, now_iso)
+                      backups_col, versions_col, ai_actions_col, admins_col, landings_col, seo_issues_col, redirects_col, idempotency_col, api_keys_col, db as _db, now_iso)
 from v1_security import resolve_principal, has_scope, actor_of, request_id_of, rate_limit_shared, err
 from v1_ai_policy import (redact, ai_config, classify_model_changes, create_approval, list_pending_approvals, approvals_col,
                           missing_scopes_for, bump, ERROR_CODES)
@@ -199,28 +199,36 @@ def media_summary(f: dict) -> dict:
 
 
 # Semantic slots -> technical (slot, side, tipo, index)
-SEMANTIC_SLOT_RX = re.compile(r"^(public|secret)_(photo|video)_(\d)$")
+SEMANTIC_SLOT_RX = re.compile(r"^(public|secret|pubblic[ao]|segret[ao])_(photo|foto|video)_(\d)$|^(foto|video)_(pubblic[ao]|segret[ao])_(\d)$")
 SIMPLE_SLOTS = {"card": ("foto_card", "pubblico", "image"), "cover": ("foto_copertina", "pubblico", "image"), "teaser": ("foto_card_teaser", "pubblico", "image"),
                 "secret_hero": ("foto_segreta_hero", "segreto", "image"), "og_image": ("og_image", "pubblico", "image"),
                 "filmstrip_public": ("pellicola", "pubblico", "video"), "filmstrip_secret": ("pellicola", "segreto", "video"),
+                "filmstrip_poster_public": ("pellicola", "pubblico", "image"), "filmstrip_poster_secret": ("pellicola", "segreto", "image"),
                 "message_photo": ("messaggio_foto", "segreto", "image"), "message_video": ("messaggio_video", "segreto", "video"),
-                "gallery_public": ("galleria_pubblica", "pubblico", "image"), "gallery_secret": ("galleria_segreta", "segreto", "image")}
+                "gallery_public": ("galleria_pubblica", "pubblico", "image"), "gallery_secret": ("galleria_segreta", "segreto", "image"),
+                # Italian aliases
+                "foto_card": ("foto_card", "pubblico", "image"), "copertina": ("foto_copertina", "pubblico", "image"), "hero_segreta": ("foto_segreta_hero", "segreto", "image"),
+                "pellicola_pubblica": ("pellicola", "pubblico", "video"), "pellicola_segreta": ("pellicola", "segreto", "video")}
 
 
 def parse_slot(slot: str):
-    """Return (technical_slot, side, tipo, pair_index|None). Semantic: public_photo_2, secret_video_1 ... Technical slots accepted too."""
+    """Return (technical_slot, side, tipo, pair_index|None). Semantic: public_photo_2, secret_video_1, foto_segreta_1 ... Technical slots accepted too."""
     s = (slot or "").strip().lower()
     m = SEMANTIC_SLOT_RX.match(s)
     if m:
-        side = "pubblico" if m.group(1) == "public" else "segreto"
-        tipo = "image" if m.group(2) == "photo" else "video"
-        return "pair", side, tipo, int(m.group(3))
+        side_tok = m.group(1) or m.group(5)
+        tipo_tok = m.group(2) or m.group(4)
+        n = int(m.group(3) or m.group(6))
+        side = "pubblico" if side_tok.startswith("pub") else "segreto"
+        tipo = "video" if tipo_tok == "video" else "image"
+        return "pair", side, tipo, n
     if s in SIMPLE_SLOTS:
-        return SIMPLE_SLOTS[s]
+        tech, side, tipo = SIMPLE_SLOTS[s]
+        return tech, side, tipo, None
     from v1_media import SLOTS
-    if s in SLOTS:
+    if s in SLOTS and s != "pair":
         return s, "pubblico", "image", None
-    raise err(400, "VALIDATION_FAILED", "Slot non valido", slots=sorted(list(SIMPLE_SLOTS) + ["public_photo_1..3", "public_video_1..2", "secret_photo_1..3", "secret_video_1..2"]))
+    raise err(400, "VALIDATION_FAILED", "Slot non valido", slots=sorted(list(SIMPLE_SLOTS) + ["public_photo_1..3", "public_video_1..3", "secret_photo_1..3", "secret_video_1..3"]))
 
 
 def pair_index_for(doc: dict, tipo: str, n: int) -> Optional[int]:
@@ -417,7 +425,7 @@ async def _models_copy_config(ctx: Ctx):
     fields = [f for f in (ctx.params.get("fields") or COPY_CONFIG_FIELDS) if f in COPY_CONFIG_FIELDS]
     changes = {f: src.get(f) for f in fields if src.get(f) is not None}
     if "messaggio_35s" in changes:  # timing/flags only, not the secret media/text of the source
-        changes["messaggio_35s"] = {k: v for k, v in (src.get("messaggio_35s") or {}).items() if k in ("attivo", "ritardo_secondi", "timer")}
+        changes["messaggio_35s"] = {k: v for k, v in (src.get("messaggio_35s") or {}).items() if k in ("attivo", "timer")}   # real schema Messaggio35s: attivo, timer (no secret text/media)
     if "pellicola_home" in changes:
         changes["pellicola_home"] = {k: v for k, v in (src.get("pellicola_home") or {}).items() if k in ("attiva", "priorita")}
     return await model_change(ctx, ctx.target, changes, ctx.reason or f"Configurazione copiata da {src['slug']}")
@@ -886,7 +894,7 @@ async def _config_update(ctx: Ctx):
         return R("site.base_url richiede approvazione", {}, changes=ch, needs_approval={"before": {c["field"]: c["before"] for c in ch}, "after": changes, "fields": list(changes)})
     new["updated_at"] = now_iso()
     await config_col.replace_one({"id": "global"}, new, upsert=True)
-    ver = await record_version("config", "global", redact(cur), redact(new), ctx.actor, source=ctx.source, reason=ctx.reason or "Config via ChatGPT", request_id=request_id_of(ctx.request), meta={"session_id": ctx.session_id})
+    ver = await record_version("config", "global", cur, new, ctx.actor, source=ctx.source, reason=ctx.reason or "Config via ChatGPT", request_id=request_id_of(ctx.request), meta={"session_id": ctx.session_id})
     await audit_log(ctx.actor, "config.update", "config", "global", {"keys": list(changes)}, request_id_of(ctx.request), ctx.source)
     return R(f"Configurazione aggiornata ({', '.join(changes)})", {"version_id": ver["id"]}, changes=ch, version_ids=[ver["id"]], rollback_ref=ver["id"])
 
@@ -913,7 +921,7 @@ async def _flags_set(ctx: Ctx):
         return R(f"Flag {name} richiede approvazione", {}, changes=ch, needs_approval={"before": {name: before}, "after": {name: value}, "fields": [name]})
     new = {**c, "flags": {**(c.get("flags") or {}), name: value}, "updated_at": now_iso()}
     await config_col.replace_one({"id": "global"}, new, upsert=True)
-    ver = await record_version("config", "global", redact(c), redact(new), ctx.actor, source=ctx.source, reason=f"Flag {name}", request_id=request_id_of(ctx.request), meta={"session_id": ctx.session_id})
+    ver = await record_version("config", "global", c, new, ctx.actor, source=ctx.source, reason=f"Flag {name}", request_id=request_id_of(ctx.request), meta={"session_id": ctx.session_id})
     return R(f"Flag {name} = {value}", {"version_id": ver["id"]}, changes=ch, version_ids=[ver["id"]], rollback_ref=ver["id"])
 
 
@@ -948,7 +956,8 @@ async def category_change(ctx: Ctx, doc: dict, changes: dict, reason: str) -> di
     new = deep_merge(doc, changes)
     fields = diff_fields(doc, new)
     ch = _changes_from(doc, new, fields)
-    review = any(f in ("slug", "nome") for f in fields)
+    # hiding a published category (stato pubblicata -> bozza) changes the public site like slug/nome do -> REVIEW
+    review = any(f in ("slug", "nome") for f in fields) or (doc.get("stato") == "pubblicata" and new.get("stato") != "pubblicata")
     if ctx.dry:
         return R(f"Anteprima categoria {doc['slug']}: {fields}", {"dry_run": True, "approval_required": review}, changes=ch, target=_tgt(doc, "category"))
     if not fields:
@@ -1167,7 +1176,8 @@ async def _redir_create(ctx: Ctx):
     if not ctx.approved:
         return R("Redirect richiede approvazione", {}, needs_approval={"before": {fp: None}, "after": {fp: tp}, "fields": ["redirect"]})
     r = await ensure_redirect(fp, tp, ctx.actor, ctx.reason or "ChatGPT", int(ctx.params.get("status_code") or 301))
-    return R(f"Redirect {fp} → {tp} creato", r or {}, changes=[{"field": "redirect", "before": None, "after": f"{fp} -> {tp}"}])
+    ver = await versions_col.find_one({"entity": "redirect", "entity_id": (r or {}).get("id")}, {"_id": 0, "id": 1}, sort=[("timestamp", -1)]) if r else None
+    return R(f"Redirect {fp} → {tp} creato", r or {}, changes=[{"field": "redirect", "before": None, "after": f"{fp} -> {tp}"}], version_ids=[ver["id"]] if ver else [], rollback_ref=ver["id"] if ver else None)
 
 
 @cap("seo.redirect.delete", "seo", "Disattiva un redirect (richiede approvazione).", ["seo:update"], risk=REVIEW, params={"from_path": {"type": "string", "required": True}})
@@ -1180,8 +1190,10 @@ async def _redir_delete(ctx: Ctx):
         return R(f"Anteprima: redirect {fp} verrebbe disattivato", {"dry_run": True, "redirect": r})
     if not ctx.approved:
         return R("Disattivare un redirect richiede approvazione", {"redirect": r}, needs_approval={"before": {"active": True}, "after": {"active": False}, "fields": ["active"]})
-    await redirects_col.update_one({"id": r["id"]}, {"$set": {"active": False, "deactivated_at": now_iso(), "deactivated_by": ctx.actor}})
-    return R(f"Redirect {fp} disattivato", {"id": r["id"]}, changes=[{"field": "active", "before": True, "after": False}])
+    new = {**r, "active": False, "deactivated_at": now_iso(), "deactivated_by": ctx.actor}
+    await redirects_col.replace_one({"id": r["id"]}, new)
+    ver = await record_version("redirect", r["id"], r, new, ctx.actor, source=ctx.source, reason=ctx.reason or "Redirect disattivato via ChatGPT", request_id=request_id_of(ctx.request), meta={"session_id": ctx.session_id})
+    return R(f"Redirect {fp} disattivato", {"id": r["id"]}, changes=[{"field": "active", "before": True, "after": False}], version_ids=[ver["id"]], rollback_ref=ver["id"])
 
 
 @cap("seo.sitemap_status", "seo", "Stato sitemap: URL inclusi per tipo, modelle escluse (noindex), URL XML.", ["seo:read"], read_only=True, natural=["com'è la sitemap"])
@@ -1271,15 +1283,15 @@ async def _landing_update(ctx: Ctx):
 async def _landing_validate(ctx: Ctx):
     from v1_landings import validate_landing_full
     v = await validate_landing_full(ctx.target)
-    return R(("Pubblicabile" if v.get("ok") else f"Non pubblicabile: {len(v.get('errors', []))} errori") + f" (score {v.get('score')})", v, target=_tgt(ctx.target, "landing"))
+    return R(("Pubblicabile" if v.get("publishable", v.get("ready")) else f"Non pubblicabile: {len(v.get('errors', []))} errori") + f" (score {v.get('score')})", v, target=_tgt(ctx.target, "landing"))
 
 
 @cap("landing.publish", "landing", "Pubblica una landing (validator + scope landing:publish, altrimenti approvazione). Le rotte pubbliche restano OFF finché il flag non è attivo.", ["landing:update"], target="landing", risk=REVIEW)
 async def _landing_publish(ctx: Ctx):
     from v1_landings import validate_landing_full, set_landing_state
-    v = await validate_landing_full(ctx.target)
-    if not v.get("ok"):
-        return R("Landing non pubblicabile", {"validation": v}, warnings=[e if isinstance(e, str) else e.get("message", "") for e in v.get("errors", [])], target=_tgt(ctx.target, "landing"))
+    v = await validate_landing_full(ctx.target)   # real contract: {ready, publishable, score, errors, warnings, checks}
+    if not v.get("publishable", v.get("ready")):
+        return R(f"Landing non pubblicabile: {len(v.get('errors', []))} errori del validator", {"validation": v}, warnings=[e if isinstance(e, str) else (e.get("message") or e.get("code") or str(e)) for e in v.get("errors", [])], target=_tgt(ctx.target, "landing"))
     if ctx.dry:
         return R("Anteprima: la landing passerebbe a pubblicata", {"dry_run": True, "validation": v}, target=_tgt(ctx.target, "landing"))
     if not has_scope(ctx.principal, "landing:publish") and not ctx.approved:
@@ -1351,7 +1363,7 @@ async def _alerts_resolve(ctx: Ctx):
     return R(f"Alert {key} risolto manualmente (approvato)", {"id": a["id"]}, changes=[{"field": "stato", "before": a["stato"], "after": "resolved"}])
 
 
-SAFE_JOBS = {"health_check", "seo_scan", "broken_link_scan", "media_verify", "sitemap_verify", "analytics_sync", "anomaly_detection", "backup", "daily_digest"}
+SAFE_JOBS = {"health_check", "seo_scan", "broken_link_scan", "media_check", "sitemap_verify", "analytics_sync", "anomaly_detection", "backup", "alerts_digest"}   # real names from v1_jobs.JOBS
 
 
 @cap("jobs.list", "jobs", "Job schedulati con stato, ultima esecuzione, prossimo run.", ["jobs:read"], read_only=True, natural=["stato dei job"])
@@ -1484,9 +1496,11 @@ async def _session_actions(session_id: str) -> List[dict]:
     return await ai_actions_col.find({"session_id": session_id, "ok": True}, {"_id": 0, "id": 1, "action": 1, "version_ids": 1, "timestamp": 1, "request_id": 1, "secondary": 1}).sort("timestamp", -1).to_list(500)
 
 
-async def _versions_for_session(session_id: str, acts: Optional[List[dict]] = None) -> List[dict]:
-    """All versions produced by a session: (a) those the capabilities reported in ai_actions.version_ids, (b) those the underlying
-    services tagged with meta.session_id, (c) those written by the same request_ids (e.g. `file` versions from store_media)."""
+async def _versions_for_session(session_id: str, acts: Optional[List[dict]] = None) -> tuple:
+    """Returns (versions_newest_first, reported_ids). `reported_ids` = version ids a capability EXPLICITLY returned
+    (genuine create/update/delete). Versions swept only by request_id (e.g. optimize re-registering a file) are included
+    for restore purposes but are NOT genuine creations: rollback must never soft-delete a `before=None` version that is
+    not in reported_ids (that would delete a pre-existing asset a side effect merely re-touched)."""
     acts = acts if acts is not None else await _session_actions(session_id)
     ids, rids = [], []
     for a in acts:
@@ -1503,7 +1517,7 @@ async def _versions_for_session(session_id: str, acts: Optional[List[dict]] = No
         seen.add(v["id"])
         out.append(v)
     out.sort(key=lambda x: x.get("timestamp", ""), reverse=True)   # newest first -> undo in reverse order
-    return out
+    return out, set(ids)
 
 
 def _slug_paths(entity: str, slug: str) -> List[str]:
@@ -1516,8 +1530,8 @@ def _slug_paths(entity: str, slug: str) -> List[str]:
 async def _rb_session(ctx: Ctx):
     sid = ctx.params.get("session_id") or ctx.session_id
     acts = await _session_actions(sid)
-    vers = await _versions_for_session(sid, acts)
-    secondary = [s for a in acts for s in (a.get("secondary") or [])]
+    vers, reported_ids = await _versions_for_session(sid, acts)
+    secondary = [s for a in reversed(acts) for s in (a.get("secondary") or [])]   # chronological (acts are newest-first)
     if not vers and not secondary:
         return R(f"Nessuna modifica trovata per la sessione {sid}", {"session_id": sid, "versions": 0})
     plan = [{"version_id": v["id"], "entity": v["entity"], "entity_id": v["entity_id"], "changed_fields": v.get("changed_fields"), "operation": v.get("operation"),
@@ -1533,11 +1547,21 @@ async def _rb_session(ctx: Ctx):
             if v.get("rolled_back"):
                 done.append({"version_id": v["id"], "action": "already_rolled_back"})
                 continue
+            # A `before=None` version is a genuine CREATION to undo (soft delete) ONLY if a capability explicitly reported it.
+            # Side effects that merely re-register an existing asset (e.g. optimize_media -> store_media) also write a
+            # `before=None` version but are NOT in reported_ids: undoing them must never delete the pre-existing asset.
+            is_creation = v.get("before") is None
+            if is_creation and v["id"] not in reported_ids:
+                await versions_col.update_one({"id": v["id"]}, {"$set": {"rolled_back": True, "rollback_note": "effetto collaterale (ri-registrazione), non una creazione: nessuna eliminazione"}})
+                done.append({"version_id": v["id"], "entity": v["entity"], "action": "skipped_side_effect"})
+                continue
             r = await rollback_version(v["id"], ctx.actor, rid, f"Rollback sessione {sid}")   # creation -> soft delete, update -> restore `before`; never destructive
             new_vids.append(r.get("new_version_id") or r.get("version_id"))
-            done.append({"version_id": v["id"], "entity": v["entity"], "action": "soft_deleted" if v.get("before") is None else "restored"})
-            if v.get("before") is None:
+            done.append({"version_id": v["id"], "entity": v["entity"], "action": "soft_deleted" if is_creation else "restored"})
+            if is_creation:
                 created_entities.append((v["entity"], v["entity_id"]))
+                if v["entity"] == "redirect":   # soft-deleted redirect must not keep firing (lookups filter on `active`)
+                    await redirects_col.update_one({"id": v["entity_id"]}, {"$set": {"active": False, "deactivated_by": "rollback", "updated_at": now_iso()}})
                 if v["entity"] == "file":   # derived variants share the parent's lifecycle
                     n = (await files_col.update_many({"parent_id": v["entity_id"], "is_deleted": {"$ne": True}}, {"$set": {"is_deleted": True, "deleted_at": now_iso(), "updated_at": now_iso()}})).modified_count
                     if n:
@@ -1565,12 +1589,13 @@ async def _rb_session(ctx: Ctx):
             n = (await files_col.update_many({"model_id": eid, "is_deleted": {"$ne": True}}, {"$set": {"model_id": None, "slot": None, "updated_at": now_iso()}})).modified_count
             if n:
                 side_effects.append({"kind": "file_links_cleared", "model_id": eid, "count": n})
-    # non-versioned side effects recorded by the capabilities (newest first) -> restore the `before` state
-    for s in secondary:
+    # non-versioned side effects recorded by capabilities: apply in REVERSE (a file can be linked several times in one
+    # session; `secondary` is appended oldest->newest, so reversing makes the ORIGINAL `before` the last state applied).
+    for s in reversed(secondary):
         try:
             if s.get("kind") == "file_link" and s.get("file_id"):
                 await files_col.update_one({"id": s["file_id"]}, {"$set": {**(s.get("before") or {"model_id": None, "slot": None}), "updated_at": now_iso()}})
-                side_effects.append({"kind": "file_link_restored", "file_id": s["file_id"]})
+                side_effects.append({"kind": "file_link_restored", "file_id": s["file_id"], "to": s.get("before")})
         except Exception as e:
             errors.append({"secondary": s.get("kind"), "error": str(e)[:160]})
     await audit_log(ctx.actor, "rollback.session", "session", sid, {"versions": len(done), "side_effects": len(side_effects), "errors": len(errors)}, rid, "rollback")
@@ -1615,16 +1640,23 @@ async def _prepare_complete(ctx: Ctx):
     if not nome:
         raise err(422, "VALIDATION_FAILED", "nome obbligatorio")
     fields = {k: v for k, v in (ctx.params.get("fields") or {}).items() if k in ALLOWED_FIELDS}
+    fields.pop("stato", None)   # the workflow never publishes
     media = ctx.params.get("media") or []
+    cfg = await ai_config()
+    cls = classify_model_changes(fields, cfg["policy"]) if fields else {"level": SAFE, "review_fields": []}
+    review_roots = {f.split(".")[0] for f in cls.get("review_fields") or []}
+    safe_fields = {k: v for k, v in fields.items() if k not in review_roots}
+    review_fields = {k: v for k, v in fields.items() if k in review_roots}
     if ctx.dry:
-        return R(f"Anteprima workflow '{nome}': bozza + {len(fields)} campi + {len(media)} media + SEO safe + validate (nessuna pubblicazione)",
-                 {"dry_run": True, "plan": ["models.create", f"models.update ({len(fields)} campi)"] + [f"media.assign {m.get('slot')}" for m in media] + ["seo.safe_fix", "models.validate"]})
+        return R(f"Anteprima workflow '{nome}': bozza + {len(safe_fields)} campi SAFE + {len(review_fields)} campi REVIEW (approvazione) + {len(media)} media + SEO safe + validate (nessuna pubblicazione)",
+                 {"dry_run": True, "plan": ["models.create", f"models.update SAFE ({sorted(safe_fields)})"] + ([f"models.update REVIEW → approvazione ({sorted(review_fields)})"] if review_fields else [])
+                  + [f"media.assign {m.get('slot')}" for m in media] + ["seo.safe_fix", "models.validate"]})
     vids: List[str] = []
-    existing = None
-    try:
-        existing = await resolve_model(nome)
-    except HTTPException:
-        existing = None
+    secondary: List[dict] = []
+    # reuse ONLY an exact match (id / slug / exact name): never a fuzzy hit on a real model
+    from sanitize import slugify
+    existing = await models_col.find_one({"is_deleted": {"$ne": True}, "$or": [{"id": nome}, {"slug": slugify(nome)},
+                                                                             {"nome": {"$regex": f"^{re.escape(nome)}$", "$options": "i"}}, {"nome_artistico": {"$regex": f"^{re.escape(nome)}$", "$options": "i"}}]}, {"_id": 0})
     if existing:
         doc = existing
         steps.append({"step": "models.create", "skipped": True, "reason": f"esiste già ({doc['slug']})"})
@@ -1635,25 +1667,43 @@ async def _prepare_complete(ctx: Ctx):
         if ver:
             vids.append(ver["id"])
         steps.append({"step": "models.create", "ok": True, "slug": doc["slug"], "version_id": ver["id"] if ver else None})
-    if fields:
-        sub = Ctx(ctx.principal, ctx.request, {}, dry=False, reason="Workflow: campi", session_id=ctx.session_id, approved=True)
-        r = await model_change(sub, doc, fields, "Workflow prepare_complete: campi")
+    if safe_fields:
+        sub = Ctx(ctx.principal, ctx.request, {}, dry=False, reason="Workflow: campi", session_id=ctx.session_id, approved=False)   # SAFE only: no approval bypass
+        r = await model_change(sub, doc, safe_fields, "Workflow prepare_complete: campi")
         vids += r["version_ids"]
-        steps.append({"step": "models.update", "ok": True, "fields": list(fields), "version_id": r.get("rollback_ref")})
+        steps.append({"step": "models.update", "ok": True, "fields": sorted(safe_fields), "version_id": r.get("rollback_ref")})
         doc = await models_col.find_one({"id": doc["id"]}, {"_id": 0})
+    approval = None
+    if review_fields:
+        # REVIEW fields are NOT applied: a real approval proposal (models.update) is created, exactly like a direct models.update would do
+        preview = await patch_model(doc, review_fields, ctx.principal, ctx.request, "Workflow prepare_complete: campi REVIEW", source=ctx.source, dry_run=True)
+        payload = {"action": "models.update", "target": doc["id"], "parameters": {"changes": review_fields}, "reason": "Workflow prepare_complete: campi REVIEW", "session_id": ctx.session_id, "expected_updated_at": None}   # workflow keeps editing the model: don't pin concurrency
+        approval = await create_approval("CAPABILITY", ctx.actor, _tgt(doc), payload, preview["before"], preview["proposed_after"], f"models.update ({', '.join(sorted(review_fields))})", request_id_of(ctx.request))
+        approval["id"] = approval.get("approval_id")
+        approval["capability"] = "models.update"
+        approval["confirm_with"] = f"POST /api/v2/ai/approvals/{approval['id']}/approve {{token}}"
+        steps.append({"step": "models.update (REVIEW)", "ok": True, "pending_approval": True, "fields": sorted(review_fields), "approval_id": approval["id"]})
     for m in media:
         try:
-            sub = Ctx(ctx.principal, ctx.request, {}, dry=False, reason="Workflow: media", session_id=ctx.session_id, approved=True)
+            sub = Ctx(ctx.principal, ctx.request, {}, dry=False, reason="Workflow: media", session_id=ctx.session_id, approved=False)
+            f = None
             if m.get("url") and not m.get("media"):
                 from v1_media import fetch_url_bytes, store_media
                 data, mime = await asyncio.get_event_loop().run_in_executor(None, fetch_url_bytes, m["url"])   # sync, 1 arg
                 rec = await store_media(data, mime, original_filename=m.get("filename") or "", alt=m.get("alt") or "", seo_name=m.get("seo_name") or "", model_id=doc["id"], slot=m.get("slot"), actor=ctx.actor, request_id=request_id_of(ctx.request))
+                fver = await versions_col.find_one({"entity": "file", "entity_id": rec["id"]}, {"_id": 0, "id": 1}, sort=[("timestamp", -1)])
+                if fver:
+                    vids.append(fver["id"])   # the upload itself is undone (soft) by rollback.session
                 url, poster = media_urls(rec)
             else:
                 f = await find_media(m.get("media") or "")
                 url, poster = media_urls(f)
             r = await apply_media_to_slot(sub, doc, url, m.get("slot") or "public_photo_1", alt=m.get("alt") or "", poster=poster, reason="Workflow: media")
             vids += r["version_ids"]
+            if f is not None and (f.get("model_id") != doc["id"] or f.get("slot") != m.get("slot")):
+                before, after = {"model_id": f.get("model_id"), "slot": f.get("slot")}, {"model_id": doc["id"], "slot": m.get("slot")}
+                await files_col.update_one({"id": f["id"]}, {"$set": {**after, "updated_at": now_iso()}})
+                secondary.append({"kind": "file_link", "file_id": f["id"], "before": before, "after": after})
             steps.append({"step": "media.assign", "ok": True, "slot": m.get("slot"), "version_id": r.get("rollback_ref")})
             doc = await models_col.find_one({"id": doc["id"]}, {"_id": 0})
         except Exception as e:
@@ -1667,9 +1717,14 @@ async def _prepare_complete(ctx: Ctx):
         doc = await models_col.find_one({"id": doc["id"]}, {"_id": 0})
     v = validate_model(doc)
     steps.append({"step": "models.validate", "ok": True, "ready": v["ready"], "missing": [e["field"] for e in v["errors"]]})
-    return R(f"'{doc.get('nome_artistico') or nome}' preparata (slug {doc['slug']}, stato {workflow_status(doc)}, NON pubblicata): {len([s for s in steps if s.get('ok')])} passi ok, {len(vids)} versioni. " + ("Pronta alla pubblicazione." if v["ready"] else f"Mancano: {', '.join(e['field'] for e in v['errors'])}"),
-             {"id": doc["id"], "slug": doc["slug"], "workflow_status": workflow_status(doc), "steps": steps, "readiness": v, "session_id": ctx.session_id, "published": False},
-             version_ids=[x for x in vids if x], target=_tgt(doc), next_steps=["models.publish (separato, dopo la tua approvazione)", f"rollback.session {{session_id:'{ctx.session_id}'}} per annullare tutto"])
+    res = R(f"'{doc.get('nome_artistico') or nome}' preparata (slug {doc['slug']}, stato {workflow_status(doc)}, NON pubblicata): {len([s for s in steps if s.get('ok')])} passi ok, {len(vids)} versioni"
+            + (f", {len(review_fields)} campi REVIEW in attesa di approvazione" if review_fields else "") + ". " + ("Pronta alla pubblicazione." if v["ready"] else f"Mancano: {', '.join(e['field'] for e in v['errors'])}"),
+            {"id": doc["id"], "slug": doc["slug"], "workflow_status": workflow_status(doc), "steps": steps, "readiness": v, "session_id": ctx.session_id, "published": False, "pending_review_fields": sorted(review_fields)},
+            version_ids=[x for x in vids if x], target=_tgt(doc), secondary=secondary,
+            next_steps=(["Conferma i campi REVIEW: approveApproval {token}"] if approval else []) + ["models.publish (separato, dopo la tua approvazione)", f"rollback.session {{session_id:'{ctx.session_id}'}} per annullare tutto"])
+    if approval:
+        res["approval"] = approval   # pre-built proposal (models.update on the REVIEW subset), surfaced by the dispatcher as approval_required
+    return res
 
 
 
@@ -1942,7 +1997,14 @@ async def run_capability(principal: dict, request: Request, body: ExecuteBody, *
     request.state.ai_write = write and not dry
     request.state.ai_dry_run = dry
     # 8. target
-    params = body.parameters or {}
+    params = dict(body.parameters or {})
+    # tolerate `expected_updated_at` sent inside parameters (or parameters.changes): hoist it to the
+    # root-level concurrency token so it is never treated as a business field and always enforced
+    for holder in (params, params.get("changes") if isinstance(params.get("changes"), dict) else None):
+        if holder is not None and "expected_updated_at" in holder:
+            hoisted = holder.pop("expected_updated_at")
+            if hoisted and not body.expected_updated_at:
+                body.expected_updated_at = str(hoisted)
     target_doc = await _resolve_target(capability.target, body.target, params)
     if capability.target != "none" and target_doc is None and capability.id not in OPTIONAL_TARGET:
         raise err(422, "VALIDATION_FAILED", f"'{body.action}' richiede un target ({capability.target})")
@@ -1975,7 +2037,7 @@ async def run_capability(principal: dict, request: Request, body: ExecuteBody, *
                          target={"ref": body.target}, started=t0, reason=body.reason or "", session_id=session_id)
         raise
     # 13. approval (REVIEW): proposal only, nothing written; confirm re-enters run_capability with approved=True
-    approval = None
+    approval = result.get("approval") if not dry else None   # workflow may pre-build a proposal for its REVIEW subset
     if result.get("needs_approval") and not dry:
         na = result["needs_approval"]
         payload = {"action": body.action, "target": body.target, "parameters": params, "reason": body.reason, "session_id": session_id, "expected_updated_at": na.get("expected_updated_at")}
@@ -2295,7 +2357,7 @@ def build_openapi_v2(base_url: str, mode: str) -> dict:
         "servers": [{"url": base_url, "description": "LATO SEGRETO API"}] if base_url else [],
         "paths": paths,
         "components": {
-            "securitySchemes": {"ApiKeyBearer": {"type": "http", "scheme": "bearer", "description": "API Key (ls_...) as Bearer token. Create it in /admin/motore → ChatGPT Control Layer."}},
+            "securitySchemes": {"ApiKeyBearer": {"type": "http", "scheme": "bearer", "description": "Dedicated AI API Key as Bearer token. Create it in /admin/motore → ChatGPT Control Layer."}},
             "schemas": {
                 "AIResponse": {"type": "object", "properties": {"ok": {"type": "boolean"}, "action": {"type": "string"}, "summary": {"type": "string"}, "data": {"type": "object", "additionalProperties": True},
                                                                "warnings": {"type": "array", "items": {"type": "string"}}, "next_steps": {"type": "array", "items": {"type": "string"}}, "request_id": {"type": "string"},
@@ -2340,9 +2402,15 @@ async def v2_admin_capabilities(request: Request, principal: dict = Depends(reso
     for i in items:
         i["usage"] = use.get(i["id"], {"count": 0, "errors": 0})
     st = registry_status()
+    recent = await ai_actions_col.find({"action": {"$in": list(REGISTRY.keys())}}, {"_id": 0, "id": 1, "action": 1, "ok": 1, "summary": 1, "actor": 1, "timestamp": 1, "duration_ms": 1, "session_id": 1, "target": 1, "input": 1, "rollback_ref": 1, "risk": 1}).sort("timestamp", -1).to_list(25)
+    recent_errors = await ai_actions_col.find({"action": {"$in": list(REGISTRY.keys())}, "ok": False}, {"_id": 0, "id": 1, "action": 1, "summary": 1, "actor": 1, "timestamp": 1, "target": 1}).sort("timestamp", -1).to_list(15)
+    for r in recent:   # dry-run flag from redacted input, never the raw payload
+        r["dry_run"] = bool((r.pop("input", None) or {}).get("dry_run"))
+    keys = await api_keys_col.find({"revoked_at": None}, {"_id": 0, "id": 1, "name": 1, "role": 1, "prefix": 1, "active": 1, "capability_allow": 1, "capability_deny": 1, "source": 1}).sort("created_at", -1).to_list(50)
     return {"items": items, "total": len(items), "disabled": len(disabled), "enabled": len([i for i in items if not i["disabled"] and i["status"] == BOUND]),
             "bound": st["bound"], "unbound": st["unbound"], "critical_blocked": st["critical_blocked"], "by_risk": st["by_risk"],
-            "by_category": {c: len([i for i in items if i["category"] == c]) for c in sorted({i["category"] for i in items})}, "mode": (await ai_config())["mode"]}
+            "by_category": {c: len([i for i in items if i["category"] == c]) for c in sorted({i["category"] for i in items})}, "mode": (await ai_config())["mode"],
+            "recent": recent, "recent_errors": recent_errors, "keys": keys}
 
 
 @caps_router.post("/admin/capabilities/toggle", operation_id="adminToggleCapability", include_in_schema=False)

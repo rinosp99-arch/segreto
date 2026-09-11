@@ -9,12 +9,12 @@ import re
 import uuid
 import copy
 from typing import Optional, Dict, Any, List
-from fastapi import APIRouter, HTTPException, Depends, Request, Query
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, ConfigDict
 
 from database import (
     models_col, categories_col, articles_col, landings_col, seo_issues_col, redirects_col, config_col,
-    now_iso, serialize_doc,
+    now_iso,
 )
 from sanitize import slugify
 from v1_security import require, actor_of, request_id_of

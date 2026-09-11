@@ -151,7 +151,7 @@ def build_chatgpt_openapi(base_url: str, error_codes: List[str], mode: str) -> d
         "servers": [{"url": base_url, "description": "LATO SEGRETO API"}] if base_url else [],
         "paths": paths,
         "components": {
-            "securitySchemes": {"ApiKeyBearer": {"type": "http", "scheme": "bearer", "description": "API Key (ls_...) sent as Bearer token. Create/rotate it in /admin/motore → ChatGPT Control Layer."}},
+            "securitySchemes": {"ApiKeyBearer": {"type": "http", "scheme": "bearer", "description": "Dedicated AI API Key sent as Bearer token. Create/rotate it in /admin/motore → ChatGPT Control Layer."}},
             "schemas": {
                 "AIResponse": {"type": "object", "properties": {
                     "ok": {"type": "boolean"}, "action": {"type": "string"}, "summary": {"type": "string", "description": "Italian human-readable summary"},

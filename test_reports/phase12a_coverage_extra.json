@@ -1,0 +1,118 @@
+{
+ "run": "6b086c",
+ "checks": 22,
+ "pass": 22,
+ "fail": 0,
+ "results": [
+  {
+   "capability": "media.upload_url (base64 seed)",
+   "result": "PASS",
+   "note": "Media caricato: extra-6b086c.png (image)"
+  },
+  {
+   "capability": "media.soft_delete (REVIEW\u2192approve)",
+   "result": "PASS",
+   "note": "Media eliminato logicamente"
+  },
+  {
+   "capability": "media.restore (preview)",
+   "result": "PASS",
+   "note": "Anteprima: media verrebbe recuperato"
+  },
+  {
+   "capability": "media.restore",
+   "result": "PASS",
+   "note": "Media recuperato"
+  },
+  {
+   "capability": "rollback.session (media: upload undone)",
+   "result": "PASS",
+   "note": "Sessione ses_extra_media_6b086c: 3 modifiche annullate, 1 effetti secondari ripristinati, 0 errori (storia e audit conservati)"
+  },
+  {
+   "capability": "filmstrip.reorder (preview)",
+   "result": "PASS",
+   "note": "Anteprima ordine FilmStrip: ['federica-sole', 'vanessa-neri', 'francesca-rossi']"
+  },
+  {
+   "capability": "filmstrip.reorder",
+   "result": "PASS",
+   "note": "ordine FilmStrip: ['federica-sole', 'vanessa-neri', 'francesca-rossi'] -> ordine {'federica-sole': 0, 'francesca-rossi': 2, 'vanessa-neri': 1}"
+  },
+  {
+   "capability": "rollback.session (filmstrip)",
+   "result": "PASS",
+   "note": "Sessione ses_extra_fs_6b086c: 3 modifiche annullate, 0 effetti secondari ripristinati, 0 errori (storia e audit conservati)"
+  },
+  {
+   "capability": "alerts.inspect",
+   "result": "PASS",
+   "note": "Alert test:extra:6b086c: open (warning)"
+  },
+  {
+   "capability": "alerts.ack (preview)",
+   "result": "PASS",
+   "note": "Anteprima: alert test:extra:6b086c verrebbe preso in carico"
+  },
+  {
+   "capability": "alerts.ack",
+   "result": "PASS",
+   "note": "Alert test:extra:6b086c preso in carico"
+  },
+  {
+   "capability": "alerts.resolve (preview)",
+   "result": "PASS",
+   "note": "Anteprima: risoluzione manuale richiede approvazione"
+  },
+  {
+   "capability": "alerts.resolve (REVIEW\u2192approve)",
+   "result": "PASS",
+   "note": "Alert test:extra:6b086c risolto manualmente (approvato)"
+  },
+  {
+   "capability": "alerts history kept",
+   "result": "PASS",
+   "note": "alert risolto ma non cancellato"
+  },
+  {
+   "capability": "seo.ignore_issue (preview)",
+   "result": "PASS",
+   "note": "Anteprima: issue META_DESCRIPTION_MISSING verrebbe ignorata"
+  },
+  {
+   "capability": "seo.ignore_issue requires approval",
+   "result": "PASS",
+   "note": "Ignorare una issue richiede approvazione"
+  },
+  {
+   "capability": "seo.ignore_issue (REVIEW\u2192approve)",
+   "result": "PASS",
+   "note": "Issue META_DESCRIPTION_MISSING ignorata"
+  },
+  {
+   "capability": "seo.ignore_issue unknown -> 404",
+   "result": "PASS",
+   "note": "{\"ok\": false, \"summary\": \"Issue non trovata\", \"code\": \"NOT_FOUND\", \"data\": {}, \"warnings\": [], \"next_steps\": [], \"reques"
+  },
+  {
+   "capability": "temp key revoked",
+   "result": "PASS",
+   "note": "200"
+  },
+  {
+   "capability": "final mode READ_ONLY",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "capability": "HASH business state identical",
+   "result": "PASS",
+   "note": "{'models': True, 'files': True, 'settings': True, 'alerts_open': True, 'seo_open': True}"
+  },
+  {
+   "capability": "audit/history grew (kept)",
+   "result": "PASS",
+   "note": ""
+  }
+ ]
+}

@@ -7,22 +7,23 @@ Root causes covered:
 
 Run: cd /app && python -m pytest tests/test_health_reconciliation.py -q
 """
-import os, sys, uuid, asyncio, requests
+import os, sys, uuid, requests, pytest
 
 sys.path.insert(0, "/app/backend")
 from dotenv import load_dotenv
 load_dotenv("/app/backend/.env")
 
 B = os.environ.get("TEST_BACKEND", "http://localhost:8001")
-ADMIN = {"email": "admin@latosegreto.it", "password": "LatoSegreto2025!"}
+ADMIN = {}
+for _line in open("/app/memory/test_credentials.md"):          # never hard-code credentials in tests
+    if "email" in _line.lower() and "@" in _line and "email" not in ADMIN:
+        ADMIN["email"] = _line.split(":")[-1].strip().strip("`* ")
+    if "password" in _line.lower() and "password" not in ADMIN and ":" in _line:
+        ADMIN["password"] = _line.split(":", 1)[-1].strip().strip("`* ")
 
-
-_LOOP = asyncio.new_event_loop()
-asyncio.set_event_loop(_LOOP)   # motor binds to the first loop it touches: reuse ONE loop for every scenario
-
-
-def run(coro):
-    return _LOOP.run_until_complete(coro)
+# motor binds its pool to the loop that first touches it: every async test in the repo runs on the ONE
+# session-scoped anyio loop (tests/conftest.py) so this module can be combined with the Phase 12 suite.
+pytestmark = pytest.mark.anyio
 
 
 def H():
@@ -46,7 +47,7 @@ def test_canonical_rule_single_source():
     assert st("") == "missing" and st(None) == "missing"
 
 
-def test_global_check_uses_canonical_rule_A_B_C_D():
+async def test_global_check_uses_canonical_rule_A_B_C_D():
     from database import models_col
     from v1_health import check_onlyfans_links
     slugs = []
@@ -72,9 +73,9 @@ def test_global_check_uses_canonical_rule_A_B_C_D():
         item = next(i for i in r["items"] if i["slug"] == "of-test-bad")
         assert item["code"] == "URL_STRUCTURE_INVALID"
     try:
-        run(scenario())
+        await scenario()
     finally:
-        run(models_col.delete_many({"slug": {"$in": slugs}}))
+        await models_col.delete_many({"slug": {"$in": slugs}})
 
 
 # ---------------------------------------------------------------- reachability != validity (E, F)
@@ -89,8 +90,8 @@ def test_reachability_is_not_url_validity_E_F():
 
 
 # ---------------------------------------------------------------- alert reconciliation (G, H, I, J)
-def test_stale_alerts_resolved_and_history_kept_G_H_I_J():
-    from database import alerts_col, health_col, seo_issues_col
+async def test_stale_alerts_resolved_and_history_kept_G_H_I_J():
+    from database import alerts_col, seo_issues_col
     from v1_health import run_health_checks, raise_alert
     ids = []
 
@@ -127,7 +128,7 @@ def test_stale_alerts_resolved_and_history_kept_G_H_I_J():
         assert rec["overall"] == expected
         return rec
     try:
-        rec = run(scenario())
+        rec = await scenario()
         h = H()
         # site-health (AI layer) must agree with the reconciled record and expose current vs historical alerts
         sh = requests.get(f"{B}/api/v1/ai/site-health", headers=h, timeout=60).json()
@@ -145,10 +146,10 @@ def test_stale_alerts_resolved_and_history_kept_G_H_I_J():
         if of_ok:
             assert not [r for r in recs if "onlyfans_links" in r["problem"]], [r["problem"] for r in recs]
     finally:
-        run(alerts_col.delete_many({"id": {"$in": ids}}))   # remove only the alerts seeded by this test
+        await alerts_col.delete_many({"id": {"$in": ids}})   # remove only the alerts seeded by this test
 
 
-def test_alert_documents_expose_timestamps():
+async def test_alert_documents_expose_timestamps():
     from database import alerts_col
     from v1_health import raise_alert, resolve_alerts
     key = f"test:ts:{uuid.uuid4().hex[:6]}"
@@ -164,4 +165,4 @@ def test_alert_documents_expose_timestamps():
         a = await alerts_col.find_one({"dedupe_key": key}, {"_id": 0})
         assert a["stato"] == "resolved" and a["resolved_at"] and a["current"] is False
         await alerts_col.delete_many({"dedupe_key": key})
-    run(scenario())
+    await scenario()

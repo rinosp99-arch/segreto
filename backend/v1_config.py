@@ -1,7 +1,5 @@
 """SUPER API v1 - CONFIGURATION CENTER, FEATURE FLAGS, WEBHOOKS, BACKUP/RESTORE, API KEYS, USERS.
 """
-import os
-import io
 import json
 import gzip
 import uuid
@@ -15,7 +13,7 @@ import requests as _requests
 from database import (
     config_col, webhooks_col, webhook_deliveries_col, backups_col, api_keys_col, admins_col,
     models_col, categories_col, articles_col, settings_col, landings_col, experiments_col, redirects_col, files_col,
-    seo_issues_col, versions_col, events_col, now_iso, serialize_doc,
+    seo_issues_col, events_col, now_iso, serialize_doc,
 )
 from auth import hash_password
 from storage import put_object, get_object, APP_NAME

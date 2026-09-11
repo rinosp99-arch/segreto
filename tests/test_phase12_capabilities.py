@@ -69,11 +69,6 @@ def _code(r):
     return d.get("code") if isinstance(d, dict) else None
 
 
-@pytest.fixture(scope="session")
-def anyio_backend():
-    return "asyncio"
-
-
 @pytest.fixture(scope="session", autouse=True)
 async def _guard_read_only():
     """Whatever happens, preview ends the session in READ_ONLY exactly like production."""

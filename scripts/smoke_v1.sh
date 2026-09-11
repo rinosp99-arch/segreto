@@ -1,7 +1,11 @@
 #!/bin/bash
-# Smoke test SUPER API v1 (local)
+# LEGACY Phase 9 smoke test SUPER API v1 (local). It performs REAL writes through an AI key, so it only makes sense
+# with ai_write_enabled=true (FULL). In READ_ONLY it would fail half-way and leave test residue (keys, copies,
+# experiments): refuse to run. Preferred suites: tests/phase12/smoke_v2_wiring.py, tests/test_*.py.
 B=localhost:8001
-TOKEN=$(curl -s -X POST $B/api/admin/login -H 'Content-Type: application/json' -d '{"email":"admin@latosegreto.it","password":"LatoSegreto2025!"}' | python -c "import sys,json; print(json.load(sys.stdin)['token'])")
+MODE=$(curl -s $B/api/v1/config 2>/dev/null | python -c "import sys,json; d=json.load(sys.stdin); print((d.get('data',d).get('flags') or {}).get('ai_write_enabled'))" 2>/dev/null)
+if [ "$MODE" != "True" ]; then echo "ai_write_enabled is not true (READ_ONLY): legacy FULL-mode smoke skipped. Use tests/phase12/smoke_v2_wiring.py"; exit 0; fi
+TOKEN=$(curl -s -X POST $B/api/admin/login -H 'Content-Type: application/json' -d "$(python -c "import sys; sys.path.insert(0,'/app/tests'); import json; from _creds import admin_credentials; print(json.dumps(admin_credentials()))")" | python -c "import sys,json; print(json.load(sys.stdin)['token'])")
 H="Authorization: Bearer $TOKEN"
 J="Content-Type: application/json"
 step() { echo; echo "=== $1"; }

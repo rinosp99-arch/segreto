@@ -165,3 +165,80 @@ Il catalogo di produzione è diverso dal preview: 10 modelle reali (VANESSA BELL
 
 ## Verifiche automatiche Phase 11
 `python tests/phase11_gpt_simulation.py` → simula le chiamate del GPT Action (Bearer) con una chiave READ_ONLY temporanea: 42/42 PASS (kill switch, READ_ONLY, dry-run, test A–I, ambiguo/inesistente, idempotenza, scope/auth negativi, rate limit, hash DB business before/after identico, metriche, attività, leak scan). Report: `/app/test_reports/phase11_simulation.json`.
+
+---
+
+# TOTAL SITE CONTROL API v2 (Phase 12A) — motore universale a capability
+
+> Stato: **implementato e testato in PREVIEW** (agent-tested). **Non deployato in produzione.** Produzione: `ai_api_enabled=true`, `ai_write_enabled=false` (READ_ONLY), schema GPT **v1 (23 operazioni) invariato e ancora quello collegato al GPT reale**.
+> Lo schema v2 è **separato**: quando l'utente deciderà il deploy, il GPT dovrà **re-importare** `GET /api/v2/ai/openapi-chatgpt.json` (12 operazioni). Nessun LLM interno: il backend resta deterministico.
+
+## A. Perché v2
+Al posto di un'operazione GPT per ogni funzione admin (centinaia), il GPT usa **12 primitive universali** e un **Capability Registry** allowlisted (`backend/v1_capabilities.py`) con **97 capability** in 14 categorie. Ogni capability è legata a un service esistente (nessuna logica duplicata) e dichiara: `id` e `capability_version` stabili (indipendenti dal nome della funzione Python), scope richiesti, rischio `SAFE | REVIEW_REQUIRED | CRITICAL`, `supports_dry_run`, `supports_rollback`, `supports_batch`, target (`model | media | alert | job | landing | category | none`), schema parametri, esempi, frasi naturali.
+
+## B. Le 12 primitive (`/api/v2/ai`, Bearer = API key dedicata)
+| operationId | Metodo/Path | Uso |
+|---|---|---|
+| `getCapabilities` | `GET /capabilities` | catalogo delle capability eseguibili dalla chiave (CRITICAL/UNBOUND/disabilitate/negate escluse) |
+| `getCapability` | `GET /capabilities/{capability_id}` | contratto completo di una capability (parametri, esempi, rischio, stato binding) |
+| `previewCapability` | `POST /preview` | **dry-run forzato**: stesso handler/validatore dell'esecuzione, nessuna scrittura |
+| `executeCapability` | `POST /execute` | esecuzione (`dry_run` opzionale nel body); REVIEW → `approval_required` + token |
+| `listApprovals` | `GET /approvals` | approvazioni pendenti (target/payload/time-bound) |
+| `approveApproval` | `POST /approvals/{id}/approve` | conferma con token: **ri-verifica** READ_ONLY/scopes/deny prima di consumare il token |
+| `rejectApproval` | `POST /approvals/{id}/reject` | rifiuto |
+| `getJob` | `GET /jobs/{job_id}` | stato job/esecuzioni |
+| `queryAnalytics` | `POST /analytics/query` | metriche reali (`model_views`, funnel, OnlyFans click…), mai valori inventati |
+| `getSystemStatus` | `GET /status` | modalità, health riconciliato, registry (97 bound), alert correnti vs storici |
+| `rollback` | `POST /rollback` | `rollback.session` / `rollback.version` / `rollback.window` (dry_run supportato) |
+| `findModel` | `POST /models/find` | risoluzione riferimento naturale → modella (409 AMBIGUOUS_REFERENCE, 404 NOT_FOUND) |
+
+Body di `preview`/`execute`:
+```json
+{"action": "models.update", "target": "Francesca", "parameters": {"changes": {"badge": "Nuova"}},
+ "reason": "…", "session_id": "ses_…", "expected_updated_at": "<updated_at visto>", "dry_run": false}
+```
+`expected_updated_at` è accettato anche se il client lo mette dentro `parameters` o `parameters.changes` (viene estratto e applicato: 409 `CONFLICT` se il target è cambiato). Header opzionali: `Idempotency-Key` (replay identico → stessa risposta con `idempotent_replayed`, body diverso → 409 `IDEMPOTENCY_CONFLICT`), `X-Session-ID`.
+
+## C. Ordine di enforcement del dispatcher (identico per preview ed execute)
+1. registry → `UNKNOWN_CAPABILITY` 404 / `CAPABILITY_UNBOUND` 503 (binding non valido a startup: mai eseguibile) / capability disabilitata dal pannello
+2. kill switch `ai_api_enabled`
+3. scopes della chiave (le fine-grained; `capability_allow` **restringe soltanto**, mai amplia)
+4. `capability_deny` **prevale sempre** su allow → 403 `CAPABILITY_DENIED`
+5. READ_ONLY/FULL (`ai_write_enabled`): in READ_ONLY solo letture e `dry_run`; approvazione non aggira READ_ONLY
+6. CRITICAL: **mai** eseguibile via API (anche in FULL, anche con JWT) — solo pannello admin umano
+7. rate limit condiviso (Mongo, cluster-wide) con `Retry-After`
+8. risoluzione target (naturale) → 9. validazione parametri → 10. concorrenza ottimistica (409) → 11. idempotenza
+12. **unico handler** per dry-run ed esecuzione (stesso service: `patch_model(dry_run)`, `slot_changes`, `transition(dry_run)`, planner settings/config/categorie)
+13. REVIEW → approval token (target+payload+TTL) → 14. audit `ai_actions` con `session_id` + versioni before/after → 15. metadati rollback → 16. envelope standard `{ok, summary, data, changes, warnings, next_steps, rollback, request_id}`
+
+## D. Registry (97 capability, 86 SAFE · 11 REVIEW · 0 CRITICAL esposte; 30 sola lettura, 66 con dry-run, 58 con rollback, 8 batch)
+`*` = REVIEW_REQUIRED (anteprima + approvazione)
+- **models (27)**: list, get, create, update, set_public_side, set_secret_side, set_regia, set_cta, set_secret_message, set_social, set_seo, validate, publish (sempre via validator), unpublish*, archive*, restore, clone, copy_config, feature, unfeature, soft_delete*, undelete, tags.add, tags.remove, tags.list, tags.normalize, categories.set
+- **workflow (1)**: `models.prepare_complete` (create → campi → media/slot → SEO safe-fix → validate; **mai publish**; i campi REVIEW restano soggetti ad approvazione)
+- **media (14)**: list, find, inspect, upload_url (URL/base64: anti-SSRF, magic bytes, MIME, limiti, varianti), assign (slot semantici), replace_slot, remove_from_slot, reorder_pairs, update (ALT/SEO name), optimize, optimize_all, soft_delete*, restore, broken
+- **homepage (5)**: homepage.reorder_models, filmstrip.get_config, filmstrip.set_config, filmstrip.set_model, filmstrip.reorder
+- **settings (6)**: settings.get/update, config.get/update (senza segreti; flag `ai_*`, `public_landing_routes`, dominio/SSR/GSC/GA4/Telegram **non** modificabili), flags.list, flags.set*
+- **categories (7)**: list, create, update, archive*, restore, reorder, assign_models
+- **seo (12)**: audit, issues, safe_fix, safe_fix_all, fix_issue, ignore_issue*, internal_links, opportunities, sitemap_status, redirect.list, redirect.create*, redirect.delete*
+- **landing (7)**: list, get, create, update, validate, publish*, unpublish (motore landing avanzato/A-B → Phase 12B)
+- **alerts (4)**: list, inspect, ack, resolve (health:* si chiude solo se il check corrente conferma; manuale → approvazione)
+- **jobs (5)**: list, runs, run (solo job SAFE), pause*, resume
+- **backup (4)**: list, create, verify, restore_plan (piano read-only: il restore reale è CRITICAL, solo pannello)
+- **system (2)**: health_run, admins.list (solo elenco redatto)
+- **rollback (3)**: session (inverso cronologico, inclusi effetti secondari: link media→slot, varianti file, issue SEO, redirect da cambio slug), version, window
+
+Mai esposto via API: shell, filesystem, codice, Mongo raw, segreti, gestione chiavi/utenti, restore backup reale, hard delete, flag di sicurezza `ai_*`.
+
+## E. Pannello `/admin/motore` → "Capacità ChatGPT"
+KPI (totale, bound/unbound, attive/disattivate, SAFE/REVIEW/CRITICAL, modalità), ricerca e filtri, **disattiva/riattiva** capability (una capability disattivata non è eseguibile nemmeno in anteprima), ultime esecuzioni ed errori, policy per chiave (`capability_allow` / `capability_deny`).
+
+## F. Test (preview, agent-tested — non ancora confermati dall'utente)
+- `tests/test_phase12_capabilities.py` 19/19 · `tests/test_ai_control.py` 42/42 · `tests/test_health_reconciliation.py` 5/5 (66/66 in un'unica sessione pytest, `tests/conftest.py`)
+- `tests/phase11_gpt_simulation.py` 42/42 (v1 intatto) · `tests/phase12/smoke_v2_wiring.py` 35/35 · `tests/phase12/verify_bindings_12a.py` 30/30
+- **Copertura operativa reale** `tests/phase12/coverage_12a.py` **156/156** (93 capability con payload validi: letture in READ_ONLY, mutazioni in FULL-preview per sessione, `rollback.session`, hash dello stato business identico per i gruppi A/B/C) + `tests/phase12/coverage_12a_extra.py` **22/22** (media.restore, filmstrip.reorder, alerts.inspect/ack/resolve, seo.ignore_issue) → **97/97 capability esercitate realmente**
+- **E2E TEST GIULIA: PASS** — `models.prepare_complete` ("Prepara TEST GIULIA completamente ma non pubblicarla") → bozza INCOMPLETE non pubblica, campi form (frase, bio, tema, regia+audio, CTA, social, SEO, categorie, tag), 7 slot media (card, cover, public_photo_1, secret_photo_1, secret_hero, public_video_1, filmstrip_public), campi REVIEW → approvazione → `rollback.session` (12 versioni + 7 link media ripristinati, 0 errori) → **hash business before/after identico**, modella soft-deleted, 24 versioni/12 flag rolled_back e 5 azioni di sessione conservate.
+- Testing agent (`test_reports/iteration_phase12a.json`, `tests/backend_test_phase12a.py` 47 test/68 asserzioni): nessun bug critico; 2 minori risolti (concorrenza `expected_updated_at` in `parameters`, filtro categoria del pannello).
+- Report: `test_reports/phase12a_coverage.json`, `test_reports/phase12a_coverage_extra.json`.
+
+## G. Attivazione (decisione utente, non automatica)
+1. Deploy della build 12A in produzione (utente) → 2. verificare `GET /api/v2/ai/status` READ_ONLY e 97 bound → 3. re-import dello schema v2 nel GPT (`/api/v2/ai/openapi-chatgpt.json`) con la stessa API key → 4. test in READ_ONLY → 5. solo dopo, eventuale FULL controllato dal pannello (kill switch sempre disponibile).

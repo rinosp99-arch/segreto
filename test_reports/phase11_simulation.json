@@ -2,7 +2,7 @@
  "backend": "http://localhost:8001",
  "public_host": "secret-side.preview.emergentagent.com",
  "mode_left": "READ_ONLY",
- "key_prefix_masked": "ls_wWrRniR…******",
+ "key_prefix_masked": "ls_eBRVJBB…******",
  "results": [
   {
    "test": "READ_ONLY forzato server-side",
@@ -12,12 +12,12 @@
   {
    "test": "Chiave READ_ONLY creata (mostrata una volta)",
    "result": "PASS",
-   "detail": "prefix ls_wWrRniR…****** scopes=23"
+   "detail": "prefix ls_eBRVJBB…****** scopes=23"
   },
   {
    "test": "Kill switch OFF -> 503 AI_API_DISABLED",
    "result": "PASS",
-   "detail": "status=503 code=AI_API_DISABLED request_id=5e197fc7"
+   "detail": "status=503 code=AI_API_DISABLED request_id=7dc20768"
   },
   {
    "test": "Kill switch: API legacy JWT continuano",
@@ -38,12 +38,12 @@
    "test": "STEP19 site-health (Controlla lo stato)",
    "result": "PASS",
    "detail": "Sito: 10 modelle (10 online, 0 in lavorazione, 0 in errore); SEO 1 issue (0 critiche); hea",
-   "request_id": "gpt-sim-cbf461a6"
+   "request_id": "gpt-sim-72b50d6b"
   },
   {
    "test": "X-Request-ID coerente response/header",
    "result": "PASS",
-   "detail": "header=gpt-sim-cbf461a6 body=gpt-sim-cbf461a6"
+   "detail": "header=gpt-sim-72b50d6b body=gpt-sim-72b50d6b"
   },
   {
    "test": "capabilities per la chiave",
@@ -53,19 +53,19 @@
   {
    "test": "TEST A resolve 'Francesca' + model health",
    "result": "PASS",
-   "detail": "Francesca Rossi: PUBLISHED, SEO score 94, 1 issue SEO, media 6+6 (ALT 100%), link OnlyFans ok, 19 vi",
-   "request_id": "gpt-A-b68ed3"
+   "detail": "Francesca Rossi: PUBLISHED, SEO score 94, 1 issue SEO, media 6+6 (ALT 100%), link OnlyFans ok, 22 vi",
+   "request_id": "gpt-A-e8d135"
   },
   {
    "test": "TEST A richiesta nel log (actor/key/request_id/status/durata)",
    "result": "PASS",
-   "detail": "{'actor': 'ChatGPT Production READ_ONLY (simulazione)', 'status': 200, 'duration_ms': 10, 'kind': 'read', 'path': '/api/v1/ai/models/francesca-rossi/health'}"
+   "detail": "{'actor': 'ChatGPT Production READ_ONLY (simulazione)', 'status': 200, 'duration_ms': 15, 'kind': 'read', 'path': '/api/v1/ai/models/francesca-rossi/health'}"
   },
   {
    "test": "TEST B SEO audit (score, SAFE/REVIEW/CRITICAL)",
    "result": "PASS",
    "detail": "score=94 counts={'SAFE_AUTO_FIX': 0, 'REVIEW_REQUIRED': 1, 'CRITICAL': 0}",
-   "request_id": "gpt-B-5adb6b"
+   "request_id": "gpt-B-6aba8e"
   },
   {
    "test": "TEST B audit action con stesso request_id",
@@ -85,12 +85,12 @@
   {
    "test": "TEST D analytics strutturata IT 7d",
    "result": "PASS",
-   "detail": "sample_size=2 data_available=True rows=1 limitations=['Campione totale 2 < 20: percentuali non affidabili', 'Alcune righe hanno campione ridotto (reliable=false)', '352 eventi senza geolocalizzazione (header geo assenti)']"
+   "detail": "sample_size=5 data_available=True rows=1 limitations=['Campione totale 5 < 20: percentuali non affidabili', 'Alcune righe hanno campione ridotto (reliable=false)', '352 eventi senza geolocalizzazione (header geo assenti)']"
   },
   {
    "test": "TEST E daily summary",
    "result": "PASS",
-   "detail": "Oggi: 16 sessioni, 5 profili visti (confronto con ieri non significativo), 1 click OnlyFans (CTR OF 20.0%), It"
+   "detail": "Oggi: 1 sessioni, 3 profili visti (confronto con ieri non significativo), 3 click OnlyFans (CTR OF 100.0%), It"
   },
   {
    "test": "TEST F recommendations deterministiche",
@@ -115,12 +115,12 @@
   {
    "test": "TEST I approval preview (token, before/after, TTL)",
    "result": "PASS",
-   "detail": "type=SEO_REVIEW expires=2026-09-10T23:52 field=bio"
+   "detail": "type=SEO_REVIEW expires=2026-09-11T01:08 field=bio"
   },
   {
    "test": "TEST I approvazione pending senza token esposto",
    "result": "PASS",
-   "detail": "1 pending"
+   "detail": "4 pending"
   },
   {
    "test": "TEST I confirm bloccato in READ_ONLY",
@@ -165,7 +165,7 @@
   {
    "test": "Rate limit 429 + Retry-After (chiave temp 12/min)",
    "result": "PASS",
-   "detail": "429=3/15 retry_after=53"
+   "detail": "429=3/15 retry_after=13"
   },
   {
    "test": "ZERO MUTATION collezioni business (hash before/after)",
@@ -175,7 +175,7 @@
   {
    "test": "Metriche AI incrementate",
    "result": "PASS",
-   "detail": "requests +41 errors +13 429 +3 mutations +0 p50=5.1 p95=11.8"
+   "detail": "requests +41 errors +13 429 +3 mutations +0 p50=5.3 p95=16.3"
   },
   {
    "test": "Attività pannello: richieste della chiave visibili",
@@ -221,21 +221,21 @@
  "passed": 42,
  "total": 42,
  "db_hash_before": {
-  "models": "5845800cffbc94a8",
-  "files": "73852e316511c7b0",
-  "landings": "9eac781b6d12d2fa",
-  "categories": "cb0c015415b2de31",
+  "models": "42802f60f794833d",
+  "files": "be459afac925d539",
+  "landings": "4f53cda18c2baa0c",
+  "categories": "a2e4256243b1ea04",
   "articles": "0013879e6b2c116b",
-  "settings": "8b7fa910cd2115ee",
+  "settings": "61e5aacabf769841",
   "redirects": "4f53cda18c2baa0c"
  },
  "db_hash_after": {
-  "models": "5845800cffbc94a8",
-  "files": "73852e316511c7b0",
-  "landings": "9eac781b6d12d2fa",
-  "categories": "cb0c015415b2de31",
+  "models": "42802f60f794833d",
+  "files": "be459afac925d539",
+  "landings": "4f53cda18c2baa0c",
+  "categories": "a2e4256243b1ea04",
   "articles": "0013879e6b2c116b",
-  "settings": "8b7fa910cd2115ee",
+  "settings": "61e5aacabf769841",
   "redirects": "4f53cda18c2baa0c"
  }
 }

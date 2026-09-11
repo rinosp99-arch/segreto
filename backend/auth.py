@@ -3,7 +3,7 @@ import time
 import jwt
 import bcrypt
 from datetime import datetime, timezone, timedelta
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 JWT_SECRET = os.environ.get('JWT_SECRET', 'dev-secret-change')

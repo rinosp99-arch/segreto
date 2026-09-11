@@ -145,7 +145,6 @@ def build_activation():
     noise=np.random.randn(n)
     # rising lowpass by mixing progressively brighter one-pole passes
     lp1=onepole_lp(noise,500); lp2=onepole_lp(noise,2500)
-    sweep=(1-t/dur)[:,]  # 0..1
     air=lp1*(1-t/dur)+lp2*(t/dur)
     e_air=np.clip(t/0.25,0,1)*np.exp(-np.clip(t-0.35,0,None)*3.5)
     air=air*e_air*0.10

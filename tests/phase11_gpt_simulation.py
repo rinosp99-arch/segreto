@@ -9,13 +9,15 @@ Usage:  python tests/phase11_gpt_simulation.py            (TEST_BACKEND / TEST_P
 Leaves the server in READ_ONLY mode (as required for the first real connection). Creates and revokes its own keys.
 Never prints a full API key.
 """
-import os, sys, json, uuid, time, hashlib, asyncio, requests
+import os, sys, json, uuid, hashlib, asyncio, requests
 
 B = os.environ.get("TEST_BACKEND", "http://localhost:8001")
 HOST = os.environ.get("TEST_PUBLIC_HOST", "secret-side.preview.emergentagent.com")
 REMOTE = os.environ.get("TEST_REMOTE", "0") == "1" or B.startswith("https://")   # production: no direct Mongo access -> API-based checks
 ADMIN_TOKEN = None
-ADMIN = {"email": "admin@latosegreto.it", "password": "LatoSegreto2025!"}
+import sys as _sys; _sys.path.insert(0, "/app/tests")
+from _creds import admin_credentials as _ac
+ADMIN = _ac()
 BUSINESS = ["models", "files", "landings", "categories", "articles", "settings", "redirects"]
 OUT = "/app/test_reports/phase11_simulation.json"
 R = []  # matrix rows
@@ -307,5 +309,17 @@ def main():
     return 0 if passed == len(R) else 1
 
 
+def _purge_residue():
+    """preview hygiene: remove this harness' revoked keys / soft-deleted test entities (never business data)"""
+    try:
+        import sys as _s2; _s2.path.insert(0, "/app/tests")
+        from _cleanup import purge_test_residue as _purge
+        print("residue purge:", _purge())
+    except Exception as _e:
+        print("residue purge skipped:", str(_e)[:100])
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    _rc = main()
+    _purge_residue()
+    sys.exit(_rc)

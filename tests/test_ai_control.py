@@ -6,12 +6,13 @@ Targets the local backend (http://localhost:8001). Creates and cleans its own fi
 import os
 import sys
 import uuid
-import time
 import json
 import requests
 
 B = os.environ.get("TEST_BACKEND", "http://localhost:8001")
-ADMIN = {"email": "admin@latosegreto.it", "password": "LatoSegreto2025!"}
+import sys as _sys; _sys.path.insert(0, "/app/tests")
+from _creds import admin_credentials as _ac
+ADMIN = _ac()
 J = {"Content-Type": "application/json"}
 STATE = {}
 

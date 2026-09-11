@@ -3,14 +3,15 @@ Tests the REAL chain: request -> auth -> scope -> target resolution -> validatio
 """
 import requests
 import json
-import time
 import sys
 
 # Use public endpoint
 import os
 BASE_URL = os.environ.get("TEST_BACKEND", "http://localhost:8001")
 FRONT_URL = os.environ.get("TEST_FRONTEND", "http://localhost:3000")
-ADMIN_CREDS = {"email": "admin@latosegreto.it", "password": "LatoSegreto2025!"}
+import sys as _sys; _sys.path.insert(0, "/app/tests")
+from _creds import admin_credentials as _ac
+ADMIN_CREDS = _ac()
 
 class TestRunner:
     def __init__(self):
@@ -427,7 +428,7 @@ class TestRunner:
                          timeout=20)
         
         if r.status_code != 200 or r.json()["data"]["slug"] != model1["slug"]:
-            self.log("Reference Resolver - By ID", False, f"Find by ID failed")
+            self.log("Reference Resolver - By ID", False, "Find by ID failed")
             return
         
         # Find by slug
@@ -437,7 +438,7 @@ class TestRunner:
                          timeout=20)
         
         if r.status_code != 200 or r.json()["data"]["slug"] != model1["slug"]:
-            self.log("Reference Resolver - By Slug", False, f"Find by slug failed")
+            self.log("Reference Resolver - By Slug", False, "Find by slug failed")
             return
         
         # Find by exact name
@@ -447,7 +448,7 @@ class TestRunner:
                          timeout=20)
         
         if r.status_code != 200 or r.json()["data"]["slug"] != model1["slug"]:
-            self.log("Reference Resolver - By Name", False, f"Find by name failed")
+            self.log("Reference Resolver - By Name", False, "Find by name failed")
             return
         
         # Find by partial (unambiguous)
@@ -457,7 +458,7 @@ class TestRunner:
                          timeout=20)
         
         if r.status_code != 200 or r.json()["data"]["slug"] != model2["slug"]:
-            self.log("Reference Resolver - By Partial", False, f"Find by partial failed")
+            self.log("Reference Resolver - By Partial", False, "Find by partial failed")
             return
         
         # Ambiguous reference -> 409 with matches
@@ -550,7 +551,7 @@ class TestRunner:
             self.log("Update - No Approval", False, "SAFE update should not require approval")
             return
         
-        new_etag = r.json()["data"]["etag"]
+        assert r.json()["data"]["etag"], "etag must be returned after a real update"
         
         self.log("Update - Real Update", True, "SAFE update applied without approval")
         
@@ -895,7 +896,7 @@ class TestRunner:
                          headers={"X-API-Key": api_key, "Content-Type": "application/json"},
                          timeout=20)
         
-        version1 = r.json()["data"]["version_id"]
+        assert r.json()["data"]["version_id"], "version_id must be returned after a real update"
         
         # Make another change
         r = requests.post(f"{BASE_URL}/api/v1/ai/models/update",
