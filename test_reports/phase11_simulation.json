@@ -2,7 +2,7 @@
  "backend": "http://localhost:8001",
  "public_host": "secret-side.preview.emergentagent.com",
  "mode_left": "READ_ONLY",
- "key_prefix_masked": "ls_v1_BOpL…******",
+ "key_prefix_masked": "ls_sCnwxwg…******",
  "results": [
   {
    "test": "READ_ONLY forzato server-side",
@@ -12,12 +12,12 @@
   {
    "test": "Chiave READ_ONLY creata (mostrata una volta)",
    "result": "PASS",
-   "detail": "prefix ls_v1_BOpL…****** scopes=23"
+   "detail": "prefix ls_sCnwxwg…****** scopes=23"
   },
   {
    "test": "Kill switch OFF -> 503 AI_API_DISABLED",
    "result": "PASS",
-   "detail": "status=503 code=AI_API_DISABLED request_id=0d325951"
+   "detail": "status=503 code=AI_API_DISABLED request_id=12cc3daa"
   },
   {
    "test": "Kill switch: API legacy JWT continuano",
@@ -38,12 +38,12 @@
    "test": "STEP19 site-health (Controlla lo stato)",
    "result": "PASS",
    "detail": "Sito: 10 modelle (10 online, 0 in lavorazione, 0 in errore); SEO 1 issue (0 critiche); hea",
-   "request_id": "gpt-sim-3c9bde1f"
+   "request_id": "gpt-sim-60086b67"
   },
   {
    "test": "X-Request-ID coerente response/header",
    "result": "PASS",
-   "detail": "header=gpt-sim-3c9bde1f body=gpt-sim-3c9bde1f"
+   "detail": "header=gpt-sim-60086b67 body=gpt-sim-60086b67"
   },
   {
    "test": "capabilities per la chiave",
@@ -54,18 +54,18 @@
    "test": "TEST A resolve 'Francesca' + model health",
    "result": "PASS",
    "detail": "Francesca Rossi: PUBLISHED, SEO score 94, 1 issue SEO, media 6+6 (ALT 100%), link OnlyFans ok, 22 vi",
-   "request_id": "gpt-A-e31b5b"
+   "request_id": "gpt-A-bb4dce"
   },
   {
    "test": "TEST A richiesta nel log (actor/key/request_id/status/durata)",
    "result": "PASS",
-   "detail": "{'actor': 'ChatGPT Production READ_ONLY (simulazione)', 'status': 200, 'duration_ms': 14, 'kind': 'read', 'path': '/api/v1/ai/models/francesca-rossi/health'}"
+   "detail": "{'actor': 'ChatGPT Production READ_ONLY (simulazione)', 'status': 200, 'duration_ms': 16, 'kind': 'read', 'path': '/api/v1/ai/models/francesca-rossi/health'}"
   },
   {
    "test": "TEST B SEO audit (score, SAFE/REVIEW/CRITICAL)",
    "result": "PASS",
    "detail": "score=94 counts={'SAFE_AUTO_FIX': 0, 'REVIEW_REQUIRED': 1, 'CRITICAL': 0}",
-   "request_id": "gpt-B-5b8853"
+   "request_id": "gpt-B-b25c25"
   },
   {
    "test": "TEST B audit action con stesso request_id",
@@ -85,12 +85,12 @@
   {
    "test": "TEST D analytics strutturata IT 7d",
    "result": "PASS",
-   "detail": "sample_size=5 data_available=True rows=1 limitations=['Campione totale 5 < 20: percentuali non affidabili', 'Alcune righe hanno campione ridotto (reliable=false)', '366 eventi senza geolocalizzazione (header geo assenti)']"
+   "detail": "sample_size=5 data_available=True rows=1 limitations=['Campione totale 5 < 20: percentuali non affidabili', 'Alcune righe hanno campione ridotto (reliable=false)', '373 eventi senza geolocalizzazione (header geo assenti)']"
   },
   {
    "test": "TEST E daily summary",
    "result": "PASS",
-   "detail": "Oggi: 3 sessioni, 3 profili visti (confronto con ieri non significativo), 3 click OnlyFans (CTR OF 100.0%), It"
+   "detail": "Oggi: 4 sessioni, 3 profili visti (confronto con ieri non significativo), 3 click OnlyFans (CTR OF 100.0%), It"
   },
   {
    "test": "TEST F recommendations deterministiche",
@@ -115,7 +115,7 @@
   {
    "test": "TEST I approval preview (token, before/after, TTL)",
    "result": "PASS",
-   "detail": "type=SEO_REVIEW expires=2026-09-11T08:52 field=bio"
+   "detail": "type=SEO_REVIEW expires=2026-09-11T09:23 field=bio"
   },
   {
    "test": "TEST I approvazione pending senza token esposto",
@@ -165,7 +165,7 @@
   {
    "test": "Rate limit 429 + Retry-After (chiave temp 12/min)",
    "result": "PASS",
-   "detail": "429=3/15 retry_after=27"
+   "detail": "429=3/15 retry_after=10"
   },
   {
    "test": "ZERO MUTATION collezioni business (hash before/after)",
@@ -175,7 +175,7 @@
   {
    "test": "Metriche AI incrementate",
    "result": "PASS",
-   "detail": "requests +41 errors +13 429 +3 mutations +0 p50=4.7 p95=11.4"
+   "detail": "requests +41 errors +13 429 +3 mutations +0 p50=5.8 p95=13.4"
   },
   {
    "test": "Attività pannello: richieste della chiave visibili",
@@ -221,21 +221,21 @@
  "passed": 42,
  "total": 42,
  "db_hash_before": {
-  "models": "6ff80375c3a10fb4",
-  "files": "0a80782503223225",
+  "models": "39b96169d7d08e93",
+  "files": "98ea0d91f2e8f1d6",
   "landings": "4f53cda18c2baa0c",
-  "categories": "a2e4256243b1ea04",
+  "categories": "729f26d4bbca2a45",
   "articles": "0013879e6b2c116b",
-  "settings": "61e5aacabf769841",
+  "settings": "e5b47a83c9cc1c17",
   "redirects": "4f53cda18c2baa0c"
  },
  "db_hash_after": {
-  "models": "6ff80375c3a10fb4",
-  "files": "0a80782503223225",
+  "models": "39b96169d7d08e93",
+  "files": "98ea0d91f2e8f1d6",
   "landings": "4f53cda18c2baa0c",
-  "categories": "a2e4256243b1ea04",
+  "categories": "729f26d4bbca2a45",
   "articles": "0013879e6b2c116b",
-  "settings": "61e5aacabf769841",
+  "settings": "e5b47a83c9cc1c17",
   "redirects": "4f53cda18c2baa0c"
  }
 }

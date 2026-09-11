@@ -1,6 +1,6 @@
 {
- "base_url": "https://secret-side.emergent.host",
- "started_at": "2026-09-11T08:38:11Z",
+ "base_url": "https://secret-side.preview.emergentagent.com",
+ "started_at": "2026-09-11T08:57:59Z",
  "v2": [
   {
    "check": "getSystemStatus 200 + mode READ_ONLY",
@@ -78,7 +78,7 @@
    "note": ""
   },
   {
-   "check": "findModel natural reference 'Vanessa' -> slug (or 409 AMBIGUOUS with candidates)",
+   "check": "findModel natural reference 'Francesca' -> slug (or 409 AMBIGUOUS with candidates)",
    "result": "PASS",
    "note": ""
   },
@@ -436,13 +436,13 @@
   },
   {
    "check": "sitemap.xml 200, production URLs, includes model page",
-   "result": "PASS",
-   "note": ""
+   "result": "FAIL",
+   "note": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n<url><loc>https://se"
   },
   {
    "check": "robots.txt 200 with production sitemap",
-   "result": "PASS",
-   "note": ""
+   "result": "FAIL",
+   "note": "# As a condition of accessing this website, you agree to abide by the following\n# content signals:\n\n# (a)  If a Content-Signal = yes, you may collect content fo"
   },
   {
    "check": "RSS 200 (xml)",
@@ -451,7 +451,7 @@
   }
  ],
  "read_only": true,
- "openapi_v2_url": "https://secret-side.emergent.host/api/v2/ai/openapi-chatgpt.json",
+ "openapi_v2_url": "https://secret-side.preview.emergentagent.com/api/v2/ai/openapi-chatgpt.json",
  "openapi_v2_operations": 12,
  "capabilities_total": 97,
  "capabilities_bound": 97,
@@ -488,7 +488,7 @@
    "capability": "models.prepare_complete",
    "capability_version": "1.0",
    "risk": "SAFE",
-   "session_id": "ses_6856dbb9b167",
+   "session_id": "ses_850c12178524",
    "mode": "READ_ONLY",
    "rollback": {
     "available": false,
@@ -500,7 +500,7 @@
   "next_steps": [
    "Esegui senza dry_run (modalit\u00e0 FULL) per creare la bozza; i campi REVIEW richiederanno approvazione; annullabile con rollback.session"
   ],
-  "request_id": "6639d830-1a15-4c6c-a614-a727b275e108",
+  "request_id": "98b626bb-a272-4c4b-9e0b-3cff413444d3",
   "changes": [],
   "approval_required": false
  },
@@ -510,15 +510,18 @@
  "public_models": 10,
  "seo_open": {
   "SAFE_AUTO_FIX": 0,
-  "REVIEW_REQUIRED": 4,
+  "REVIEW_REQUIRED": 1,
   "CRITICAL": 0
  },
  "health_latest": {
   "overall": "ok",
-  "checked_at": "2026-09-11T08:32:09.611188+00:00"
+  "checked_at": "2026-09-11T08:55:09.598891+00:00"
  },
  "v2_pass": "59/59",
- "regressions_pass": "30/30",
- "problems": [],
- "conclusion": "PRODUCTION V2 READY FOR GPT REIMPORT"
+ "regressions_pass": "28/30",
+ "problems": [
+  "sitemap.xml 200, production URLs, includes model page: <?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n<url><loc>https://se",
+  "robots.txt 200 with production sitemap: # As a condition of accessing this website, you agree to abide by the following\n# content signals:\n\n# (a)  If a Content-Signal = yes, you may collect content fo"
+ ],
+ "conclusion": "PRODUCTION V2 NOT READY"
 }

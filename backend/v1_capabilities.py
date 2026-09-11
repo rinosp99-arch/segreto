@@ -95,8 +95,43 @@ class Capability:
         Read-only capabilities preview with their own scopes."""
         return preview_scopes(self.required_scopes(params))
 
+    def required_parameters(self) -> List[str]:
+        return [k for k, spec in (self.params or {}).items() if isinstance(spec, dict) and spec.get("required")]
+
+    def example_parameters(self) -> dict:
+        """Ready-to-copy parameters object: first registered example, otherwise a placeholder built from parameters_schema.
+        Always contains every required parameter."""
+        ex = {}
+        for e in self.examples or []:
+            if isinstance(e, dict) and isinstance(e.get("parameters"), dict):
+                ex = dict(e["parameters"])
+                break
+        placeholders = {"string": "<string>", "integer": 1, "number": 1.0, "boolean": True, "array": [], "object": {}}
+        for k in self.required_parameters():
+            if k not in ex:
+                spec = self.params.get(k) or {}
+                ex[k] = spec.get("example", spec.get("default", placeholders.get(spec.get("type"), "<value>")))
+        return ex
+
+    def request_example(self, target: Optional[str] = None) -> dict:
+        """The exact previewCapability body to send for this capability (GPT copies it and fills the values)."""
+        ex_target = target
+        if ex_target is None and self.target != "none":
+            for e in self.examples or []:
+                if isinstance(e, dict) and e.get("target"):
+                    ex_target = e["target"]
+                    break
+            ex_target = ex_target or f"<{self.target} id/slug/name>"
+        body = {"action": self.id, "parameters": self.example_parameters(), "dry_run": True, "reason": "<why>"}
+        if ex_target is not None:
+            body["target"] = ex_target
+        return body
+
     def public(self) -> dict:
-        return {"id": self.id, "category": self.category, "description": self.description, "required_scopes": self.scopes,
+        return {"id": self.id, "capability": self.id, "category": self.category, "description": self.description, "required_scopes": self.scopes,
+                "required_parameters": self.required_parameters(), "example_parameters": self.example_parameters(), "request_example": self.request_example(),
+                "how_to_call": "POST /api/v2/ai/preview (or /execute) with body {action: id, target?, parameters: {<exactly the property names of parameters_schema>}, dry_run, reason}. "
+                               "Required parameters MUST be inside `parameters` (fallback: `parameters_json` = same object as a JSON string).",
                 "required_scopes_execute": self.required_scopes(), "required_scopes_preview": self.required_preview_scopes() if not self.read_only else list(self.scopes),
                 "conditional_scopes": {sc: desc for sc, (_p, desc) in self.conditional_scopes.items()}, "risk": self.risk,
                 "supports_dry_run": self.dry_run and not self.read_only, "supports_rollback": self.rollback and not self.read_only, "supports_batch": self.batch,
@@ -1676,7 +1711,8 @@ async def _rb_window(ctx: Ctx):
      conditional_scopes={"media:upload": (lambda p: bool(p.get("media")), "solo se il parametro opzionale `media` è presente"),
                          "seo:safe_fix": (lambda p: p.get("seo_safe_fix", True) is not False, "solo se seo_safe_fix non è false (default true)")},
      params={"nome": {"type": "string", "required": True}, "fields": {"type": "object"}, "media": {"type": "array", "items": {"type": "object"}, "description": "[{media|url, slot, alt}]"}, "seo_safe_fix": {"type": "boolean", "default": True}},
-     examples=[{"action": "models.prepare_complete", "parameters": {"nome": "Giulia Rossi", "fields": {"frase": "Il lato che non mostro a tutti.", "categorie": ["more"], "onlyfans_url": "https://onlyfans.com/giulia_rossi"}, "media": [{"media": "giulia-1.jpg", "slot": "public_photo_1"}]}}],
+     examples=[{"action": "models.prepare_complete", "parameters": {"nome": "TEST V2 GIULIA"}, "dry_run": True},
+               {"action": "models.prepare_complete", "parameters": {"nome": "Giulia Rossi", "fields": {"frase": "Il lato che non mostro a tutti.", "categorie": ["more"], "onlyfans_url": "https://onlyfans.com/giulia_rossi"}, "media": [{"media": "giulia-1.jpg", "slot": "public_photo_1"}]}}],
      natural=["prepara Giulia completamente ma non pubblicarla", "crea una nuova modella con queste foto e preparala tutta"])
 async def _prepare_complete(ctx: Ctx):
     steps = []
@@ -1924,15 +1960,65 @@ def registry_status() -> dict:
 # DISPATCHER
 # =====================================================================================================================
 class ExecuteBody(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    action: str
+    """GPT-Action-tolerant request body. Canonical form: {action, target, parameters{...}, dry_run, reason, session_id}.
+    Tolerated (deterministic, no policy bypass — everything still goes through the same validator/scopes):
+      - `capability` as an alias of `action` (getCapability returns the id as `id`/`capability`);
+      - `parameters_json`: the parameters object serialized as a JSON string (GPT Actions serialize free-form nested
+        objects unreliably). Must decode to a JSON object; `parameters` wins on conflicting keys;
+      - capability parameters leaked at the top level of the body (e.g. {"action": "...", "nome": "..."}): keys that are
+        declared in the capability's parameters_schema are hoisted into `parameters` (never unknown keys)."""
+    model_config = ConfigDict(extra="allow")
+    action: Optional[str] = None
+    capability: Optional[str] = None
     target: Optional[str] = None
-    parameters: Dict[str, Any] = {}
+    parameters: Optional[Dict[str, Any]] = None
+    parameters_json: Optional[str] = None
     dry_run: bool = False
     reason: Optional[str] = ""
     session_id: Optional[str] = None
     expected_updated_at: Optional[str] = None
     run_async: bool = False
+
+    def action_id(self) -> str:
+        a = (self.action or self.capability or "").strip()
+        if not a:
+            raise err(422, "VALIDATION_FAILED", "Campo 'action' obbligatorio (id della capability, es. models.prepare_complete)", missing=["action"],
+                      hint="POST {action: <capability id>, parameters: {...}} — see getCapability(...).request_example")
+        return a
+
+
+RESERVED_BODY_KEYS = {"action", "capability", "target", "parameters", "parameters_json", "dry_run", "reason", "session_id", "expected_updated_at", "run_async"}
+
+
+def normalize_parameters(body: ExecuteBody, capability: "Capability") -> tuple:
+    """Deterministic normalization of the received body into ONE parameters dict (+ notes for the response/audit).
+    Precedence: parameters > parameters_json > top-level leaked keys declared in parameters_schema. No code, no eval:
+    `parameters_json` is decoded with json.loads and accepted only if it is a JSON object."""
+    notes: List[str] = []
+    received = {"parameters": body.parameters if isinstance(body.parameters, dict) else None,
+                "parameters_json_present": bool(body.parameters_json),
+                "top_level_keys": sorted(k for k in (body.model_extra or {}).keys() if k not in RESERVED_BODY_KEYS)}
+    params: Dict[str, Any] = dict(body.parameters) if isinstance(body.parameters, dict) else {}
+    if body.parameters is not None and not isinstance(body.parameters, dict):
+        raise err(422, "VALIDATION_FAILED", "'parameters' deve essere un oggetto JSON", received=received)
+    if body.parameters_json:
+        try:
+            decoded = json.loads(body.parameters_json)
+        except Exception as e:
+            raise err(422, "VALIDATION_FAILED", "'parameters_json' non è JSON valido", parameters_json_error=str(e)[:120], received=received)
+        if not isinstance(decoded, dict):
+            raise err(422, "VALIDATION_FAILED", "'parameters_json' deve decodificare in un oggetto JSON", received=received)
+        added = [k for k in decoded if k not in params]
+        for k in added:
+            params[k] = decoded[k]
+        if added:
+            notes.append(f"parameters_json: usati {sorted(added)}")
+    declared = set((capability.params or {}).keys())
+    leaked = {k: v for k, v in (body.model_extra or {}).items() if k in declared and k not in params}
+    if leaked:
+        params.update(leaked)
+        notes.append(f"parametri ricevuti al top-level e spostati in 'parameters': {sorted(leaked)} — inviarli dentro 'parameters'")
+    return params, notes, received
 
 
 TARGET_RESOLVERS = {
@@ -2036,6 +2122,8 @@ async def run_capability(principal: dict, request: Request, body: ExecuteBody, *
     -> rate limit -> target resolve -> params validation -> concurrency -> idempotency -> preview/approval -> service -> audit -> rollback metadata -> response."""
     from v1_ai import envelope, log_action
     t0 = time.time()
+    # 0. body normalization (action alias, parameters / parameters_json / leaked top-level keys -> ONE parameters dict)
+    body.action = body.action_id()
     # 1. registry
     capability = REGISTRY.get(body.action)
     if not capability:
@@ -2043,6 +2131,9 @@ async def run_capability(principal: dict, request: Request, body: ExecuteBody, *
         raise HTTPException(status_code=404, detail={"code": "UNKNOWN_CAPABILITY", "message": f"Capability '{body.action}' inesistente", "suggestions": sugg, "hint": "GET /api/v2/ai/capabilities"})
     if capability.status == UNBOUND:
         raise err(503, "CAPABILITY_UNBOUND", f"Capability '{body.action}' non eseguibile: binding non valido", reason=capability.unbound_reason)
+    norm_params, norm_notes, received = normalize_parameters(body, capability)
+    body.parameters = norm_params
+    request.state.received_body = received
     is_machine = principal.get("type") == "api_key"
     cfg = await ai_config()
     # 2. key status
@@ -2093,8 +2184,17 @@ async def run_capability(principal: dict, request: Request, body: ExecuteBody, *
     target_doc = await _resolve_target(capability.target, body.target, params)
     if capability.target != "none" and target_doc is None and capability.id not in OPTIONAL_TARGET:
         raise err(422, "VALIDATION_FAILED", f"'{body.action}' richiede un target ({capability.target})")
-    # 9. params validation
-    _validate_params(capability, params)
+    # 9. params validation (a failure here is audited WITH the received body, redacted, so real GPT requests can be inspected)
+    try:
+        _validate_params(capability, params)
+    except HTTPException as e:
+        det = e.detail if isinstance(e.detail, dict) else {"message": str(e.detail)}
+        det["received"] = {**received, "parameters_normalized": redact(params) if isinstance(params, dict) else params}
+        det["request_example"] = capability.request_example(body.target)
+        det["hint"] = "Put every required capability parameter inside `parameters` (or `parameters_json`) exactly as named in parameters_schema"
+        await log_action(principal, request, body.action, {"target": body.target, "parameters": redact(params), "dry_run": dry, "received": det["received"]},
+                         f"Errore: {det.get('code', 'VALIDATION_FAILED')} — {det.get('message', '')}", ok=False, target={"ref": body.target}, started=t0, reason=body.reason or "", session_id=session_id)
+        raise HTTPException(status_code=e.status_code, detail=det)
     # 10. concurrency (optimistic): the caller states the version it looked at
     if body.expected_updated_at and target_doc and target_doc.get("updated_at") and target_doc["updated_at"] != body.expected_updated_at:
         raise err(409, "CONFLICT", "Il target è cambiato rispetto alla versione indicata (expected_updated_at)", current_updated_at=target_doc["updated_at"], expected_updated_at=body.expected_updated_at)
@@ -2149,7 +2249,7 @@ async def run_capability(principal: dict, request: Request, body: ExecuteBody, *
         data["after"] = result["after"]
     if result.get("target"):
         data["target"] = result["target"]
-    out = envelope(body.action, request, result["summary"], data, result.get("warnings"), result.get("next_steps"), ok=True, changes=result.get("changes"), approval=approval)
+    out = envelope(body.action, request, result["summary"], data, list(result.get("warnings") or []) + list(norm_notes), result.get("next_steps"), ok=True, changes=result.get("changes"), approval=approval)
     if idem_doc_key:
         try:
             await idempotency_col.insert_one({**idem_doc_key, "body_hash": _body_hash(body), "status": 200, "body": json.dumps(redact(out), default=str), "request_id": request_id_of(request),
@@ -2401,21 +2501,39 @@ async def v2_find_model(body: FindBody, request: Request, principal: dict = Depe
 # ---------------- OpenAPI v2 (compact GPT Action schema, public document, separate from v1) ----------------
 def build_openapi_v2(base_url: str, mode: str) -> dict:
     from v1_ai_openapi import _op, _p
-    EXEC = {"type": "object", "required": ["action"], "properties": {
-        "action": {"type": "string", "description": "Capability id from getCapabilities (e.g. models.update, media.assign, seo.safe_fix, models.prepare_complete)"},
-        "target": {"type": "string", "description": "Target reference (model id/slug/name, landing slug, category, alert id, job name). Ambiguous -> 409 AMBIGUOUS_REFERENCE with data.matches"},
-        "parameters": {"type": "object", "additionalProperties": True, "description": "Capability parameters (see parameters_schema in getCapability)"},
-        "dry_run": {"type": "boolean", "default": False, "description": "true = preview only, nothing written (the only mode accepted in READ_ONLY)"},
+    PARAMS_DESC = ("Parameters for the selected capability. After calling getCapability, copy ALL required and requested capability parameters into this "
+                   "object using EXACTLY the property names returned by parameters_schema (see also example_parameters / request_example). "
+                   "Example for models.prepare_complete: {\"nome\": \"TEST V2 GIULIA\"}. Example for models.update: {\"changes\": {\"badge\": \"Nuova\"}}. "
+                   "Never send capability parameters at the top level of the body and never omit a required parameter.")
+    EXEC = {"type": "object", "required": ["action", "parameters"], "properties": {
+        "action": {"type": "string", "description": "Capability id exactly as returned by getCapabilities/getCapability (e.g. models.update, media.assign, seo.safe_fix, models.prepare_complete)",
+                   "example": "models.prepare_complete"},
+        "target": {"type": ["string", "null"], "description": "Target reference when the capability has a target (model id/slug/name, landing slug, category, alert id, job name); omit/null for capabilities without target (e.g. models.prepare_complete, models.create). Ambiguous -> 409 AMBIGUOUS_REFERENCE with data.matches"},
+        "parameters": {"type": "object", "additionalProperties": True, "description": PARAMS_DESC,
+                       "properties": {"nome": {"type": "string", "description": "e.g. models.prepare_complete / models.create: name of the model to create"},
+                                      "changes": {"type": "object", "additionalProperties": True, "description": "e.g. models.update / settings.update: fields to change"},
+                                      "fields": {"type": "object", "additionalProperties": True, "description": "e.g. models.prepare_complete: form fields to set on the draft"},
+                                      "media": {"description": "e.g. media.assign: media reference (string) / models.prepare_complete: array of {media|url, slot, alt}"},
+                                      "slot": {"type": "string", "description": "e.g. media.assign: card, cover, public_photo_1, secret_photo_1, filmstrip_public..."}},
+                       "example": {"nome": "TEST V2 GIULIA"}},
+        "parameters_json": {"type": "string", "description": "FALLBACK ONLY if you cannot send `parameters` as a nested object: the same parameters object serialized as a JSON string, e.g. \"{\\\"nome\\\": \\\"TEST V2 GIULIA\\\"}\". Must be a JSON object. If both are present, `parameters` wins."},
+        "dry_run": {"type": "boolean", "default": False, "description": "true = preview only, nothing written (the only mode accepted in READ_ONLY). previewCapability forces it."},
         "reason": {"type": "string", "description": "Why (stored in audit/version history)"},
         "session_id": {"type": "string", "description": "Group related changes so they can be undone together with rollback {session_id}"},
-        "expected_updated_at": {"type": "string", "description": "Optimistic concurrency: updated_at you last saw (409 CONFLICT if changed)"}}}
+        "expected_updated_at": {"type": "string", "description": "Optimistic concurrency: updated_at you last saw (409 CONFLICT if changed)"}},
+        "example": {"action": "models.prepare_complete", "target": None, "parameters": {"nome": "TEST V2 GIULIA"}, "dry_run": True, "reason": "prepare the draft without publishing", "session_id": None}}
     paths: Dict[str, Any] = {
         "/api/v2/ai/capabilities": {"get": _op("getCapabilities", "List capabilities this key can run", "Compact catalog: id, category, description, risk, target, parameters, access. Filter with category/q. Call first.",
                                               [_p("category", "query", "models|media|homepage|categories|seo|landing|alerts|jobs|backup|system|rollback|workflow"), _p("q", "query", "Free text filter"), _p("compact", "query", "true (default) = short form", typ="boolean", default=True)], tag="Capabilities")},
-        "/api/v2/ai/capabilities/{capability_id}": {"get": _op("getCapability", "Capability detail", "Full parameters_schema, required scopes, risk, dry-run/rollback support, examples and your access level.",
+        "/api/v2/ai/capabilities/{capability_id}": {"get": _op("getCapability", "Capability detail",
+                                                               "parameters_schema, required_parameters, example_parameters and request_example (the exact previewCapability body to send), scopes, risk, execute_access/preview_access. Call it before preview/execute when the parameters are not already known.",
                                                                [_p("capability_id", "path", "Capability id", True)], tag="Capabilities")},
-        "/api/v2/ai/preview": {"post": _op("previewCapability", "Preview a capability (no write)", "Same service and validation as execute, dry_run forced: before/after/changes/warnings. Always preview before executing.", body=EXEC, tag="Execute")},
-        "/api/v2/ai/execute": {"post": _op("executeCapability", "Execute a capability", "Deterministic: scopes, key policy, READ_ONLY, risk. REVIEW_REQUIRED returns approval_required with a token: show before/after and ask the user.", body=EXEC, tag="Execute")},
+        "/api/v2/ai/preview": {"post": _op("previewCapability", "Preview one registered capability (no write)",
+                                           "Preview one registered capability: same validation as execute, dry_run forced, nothing written. Put capability-specific inputs INSIDE `parameters` with the exact names of parameters_schema; if getCapability says a field is required it MUST be inside `parameters`. Always preview before executing.",
+                                           body=EXEC, tag="Execute")},
+        "/api/v2/ai/execute": {"post": _op("executeCapability", "Execute one registered capability",
+                                           "Execute one registered capability. Same body as previewCapability: inputs INSIDE `parameters` with the exact names of parameters_schema, required fields never omitted. REVIEW_REQUIRED -> approval_required + token: show before/after, ask the user. READ_ONLY accepts only dry_run=true.",
+                                           body=EXEC, tag="Execute")},
         "/api/v2/ai/approvals": {"get": _op("listApprovals", "Pending approvals", "Your pending proposals (before/after, expiry).", tag="Approvals")},
         "/api/v2/ai/approvals/{approval_id}/approve": {"post": _op("approveApproval", "Approve and apply a proposal", "Requires the token returned with approval_required. Blocked in READ_ONLY. Only after explicit user confirmation.",
                                                                    [_p("approval_id", "path", "Approval id", True)], {"type": "object", "required": ["token"], "properties": {"token": {"type": "string"}, "reason": {"type": "string"}}}, tag="Approvals")},

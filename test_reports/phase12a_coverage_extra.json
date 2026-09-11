@@ -1,5 +1,5 @@
 {
- "run": "6b086c",
+ "run": "e88c40",
  "checks": 22,
  "pass": 22,
  "fail": 0,
@@ -7,7 +7,7 @@
   {
    "capability": "media.upload_url (base64 seed)",
    "result": "PASS",
-   "note": "Media caricato: extra-6b086c.png (image)"
+   "note": "Media caricato: extra-e88c40.png (image)"
   },
   {
    "capability": "media.soft_delete (REVIEW\u2192approve)",
@@ -27,7 +27,7 @@
   {
    "capability": "rollback.session (media: upload undone)",
    "result": "PASS",
-   "note": "Sessione ses_extra_media_6b086c: 3 modifiche annullate, 1 effetti secondari ripristinati, 0 errori (storia e audit conservati)"
+   "note": "Sessione ses_extra_media_e88c40: 3 modifiche annullate, 1 effetti secondari ripristinati, 0 errori (storia e audit conservati)"
   },
   {
    "capability": "filmstrip.reorder (preview)",
@@ -42,22 +42,22 @@
   {
    "capability": "rollback.session (filmstrip)",
    "result": "PASS",
-   "note": "Sessione ses_extra_fs_6b086c: 3 modifiche annullate, 0 effetti secondari ripristinati, 0 errori (storia e audit conservati)"
+   "note": "Sessione ses_extra_fs_e88c40: 3 modifiche annullate, 0 effetti secondari ripristinati, 0 errori (storia e audit conservati)"
   },
   {
    "capability": "alerts.inspect",
    "result": "PASS",
-   "note": "Alert test:extra:6b086c: open (warning)"
+   "note": "Alert test:extra:e88c40: open (warning)"
   },
   {
    "capability": "alerts.ack (preview)",
    "result": "PASS",
-   "note": "Anteprima: alert test:extra:6b086c verrebbe preso in carico"
+   "note": "Anteprima: alert test:extra:e88c40 verrebbe preso in carico"
   },
   {
    "capability": "alerts.ack",
    "result": "PASS",
-   "note": "Alert test:extra:6b086c preso in carico"
+   "note": "Alert test:extra:e88c40 preso in carico"
   },
   {
    "capability": "alerts.resolve (preview)",
@@ -67,7 +67,7 @@
   {
    "capability": "alerts.resolve (REVIEW\u2192approve)",
    "result": "PASS",
-   "note": "Alert test:extra:6b086c risolto manualmente (approvato)"
+   "note": "Alert test:extra:e88c40 risolto manualmente (approvato)"
   },
   {
    "capability": "alerts history kept",

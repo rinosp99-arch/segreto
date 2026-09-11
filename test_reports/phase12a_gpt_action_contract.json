@@ -1,0 +1,143 @@
+{
+ "base": "http://localhost:8001",
+ "pass": 34,
+ "total": 34,
+ "results": [
+  {
+   "check": "OpenAPI: previewCapability body requires action + parameters, parameters described with explicit example",
+   "result": "PASS"
+  },
+  {
+   "check": "OpenAPI: parameters_json fallback declared as string",
+   "result": "PASS"
+  },
+  {
+   "check": "OpenAPI: executeCapability uses the same body schema",
+   "result": "PASS"
+  },
+  {
+   "check": "OpenAPI: operation descriptions <= 300 chars (GPT Actions limit), 12 operations",
+   "result": "PASS"
+  },
+  {
+   "check": "OpenAPI: preview/execute descriptions tell to put required fields INSIDE parameters",
+   "result": "PASS"
+  },
+  {
+   "check": "getCapability: required_parameters=['nome'], example_parameters={'nome': 'TEST V2 GIULIA'}, request_example present",
+   "result": "PASS"
+  },
+  {
+   "check": "getCapability: how_to_call + execute_access none / preview_access preview_only for READ_ONLY key",
+   "result": "PASS"
+  },
+  {
+   "check": "A. previewCapability with request_example (parameters.nome) -> 200, plan for TEST V2 GIULIA, publishes=false",
+   "result": "PASS"
+  },
+  {
+   "check": "A2. user body form {capability, target:null, parameters:{nome}, dry_run, reason, session_id:null} -> 200",
+   "result": "PASS"
+  },
+  {
+   "check": "B. missing nome -> 422 VALIDATION_FAILED missing=['nome'] + received body echoed + request_example",
+   "result": "PASS"
+  },
+  {
+   "check": "B2. parameters absent entirely -> 422 missing=['nome'] (received.parameters=null)",
+   "result": "PASS"
+  },
+  {
+   "check": "B3. validation failure audited with received body (ai_actions)",
+   "result": "PASS"
+  },
+  {
+   "check": "C. fields nested object arrives intact (SAFE/REVIEW split over all keys)",
+   "result": "PASS"
+  },
+  {
+   "check": "D. media array arrives intact in preview (2 items, slots parsed, url syntax-only, unknown media flagged), nothing fetched",
+   "result": "PASS"
+  },
+  {
+   "check": "E. boolean false honoured (seo_safe_fix=false -> no seo.safe_fix step, seo:safe_fix not required)",
+   "result": "PASS"
+  },
+  {
+   "check": "E2. integer/string parameters honoured on a read capability (models.list limit=3)",
+   "result": "PASS"
+  },
+  {
+   "check": "E3. wrong type -> 422 VALIDATION_FAILED wrong_types",
+   "result": "PASS"
+  },
+  {
+   "check": "F. executeCapability same parsing (alias + parameters_json, dry_run=true) -> 200 preview",
+   "result": "PASS"
+  },
+  {
+   "check": "F2. executeCapability missing nome -> same 422",
+   "result": "PASS"
+  },
+  {
+   "check": "G. parameters_json fallback -> 200, nested fields decoded",
+   "result": "PASS"
+  },
+  {
+   "check": "G2. both present -> parameters wins",
+   "result": "PASS"
+  },
+  {
+   "check": "G3. leaked top-level declared key hoisted into parameters (+ warning teaching the right form)",
+   "result": "PASS"
+  },
+  {
+   "check": "G4. unknown top-level keys are ignored (never hoisted)",
+   "result": "PASS"
+  },
+  {
+   "check": "H. malformed request JSON -> 422",
+   "result": "PASS"
+  },
+  {
+   "check": "H2. malformed parameters_json -> 422 VALIDATION_FAILED",
+   "result": "PASS"
+  },
+  {
+   "check": "H3. parameters_json not an object -> 422",
+   "result": "PASS"
+  },
+  {
+   "check": "H4. parameters as a plain string -> 422",
+   "result": "PASS"
+  },
+  {
+   "check": "H5. action/capability absent -> 422 missing=['action']",
+   "result": "PASS"
+  },
+  {
+   "check": "I. real execute via parameters_json -> still blocked (READ_ONLY key: INSUFFICIENT_SCOPE / READ_ONLY_MODE)",
+   "result": "PASS"
+  },
+  {
+   "check": "I2. media present on real execute -> conditional media:upload still required (blocked)",
+   "result": "PASS"
+  },
+  {
+   "check": "I3. leaked `changes` on real execute -> normalized then blocked by READ_ONLY/scope (no write)",
+   "result": "PASS"
+  },
+  {
+   "check": "I4. approval path untouched: REVIEW/validate preview still works or is scope-limited, never executes",
+   "result": "PASS"
+  },
+  {
+   "check": "J. zero mutation: public total, admin count and slugs identical; no TEST V2 GIULIA",
+   "result": "PASS"
+  },
+  {
+   "check": "temp key revoked",
+   "result": "PASS"
+  }
+ ]
+}
