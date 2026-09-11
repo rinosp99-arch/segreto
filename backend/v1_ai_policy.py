@@ -58,12 +58,40 @@ async def ai_config() -> dict:
 
 
 # ---------------- GUARD ----------------
-# dry_run is a READ-level operation: a write scope can be satisfied by its preview (read) scope when dry_run=true
+# dry_run is a READ-level operation: a write scope can be satisfied by its preview (read) scope when dry_run=true.
+# Explicit map = cases where the preview needs a RICHER read scope than `<area>:read` (publish -> validate, safe_fix -> audit).
 PREVIEW_SCOPE = {
     "models:create": "models:read", "models:update": "models:read", "models:publish": "models:validate", "models:unpublish": "models:read",
     "models:archive": "models:read", "models:feature": "models:read", "seo:safe_fix": "seo:audit",
     "landing:create": "landing:read", "landing:update": "landing:read", "landing:publish": "landing:read", "rollback:execute": "rollback:read",
 }
+# verbs that are already read-level: a preview of them needs the scope itself (no downgrade)
+_READ_VERBS = {"read", "validate", "audit", "status", "daily_summary", "review_prepare"}
+_SELF_SCOPES = {"ai:execute"}   # AI entry scope, not a mutation (jobs:execute IS a mutation -> jobs:read)
+
+
+def preview_scope_for(scope: str) -> str:
+    """Deterministic preview (dry_run) scope for a write scope: explicit map first, otherwise `<area>:read`.
+    Any mutation verb (create/update/write/upload/delete/optimize/replace/run/pause/resume/ack/...) previews with the read
+    scope of its area because a dry_run never writes. Read-level scopes preview with themselves."""
+    if scope in PREVIEW_SCOPE:
+        return PREVIEW_SCOPE[scope]
+    if scope in _SELF_SCOPES:
+        return scope
+    area, _, verb = scope.partition(":")
+    if not verb or verb in _READ_VERBS:
+        return scope
+    return f"{area}:read"
+
+
+def preview_scopes(scopes) -> List[str]:
+    """Deterministic list of scopes required for a dry_run of `scopes` (deduplicated, order preserved)."""
+    out: List[str] = []
+    for s in scopes:
+        p = preview_scope_for(s)
+        if p not in out:
+            out.append(p)
+    return out
 
 
 async def request_is_dry_run(request: Request) -> bool:
@@ -79,12 +107,18 @@ async def request_is_dry_run(request: Request) -> bool:
 
 
 def missing_scopes_for(principal: dict, scopes, dry: bool) -> List[str]:
-    """Scopes still missing; when dry=True a write scope may be replaced by its preview scope."""
+    """Scopes still missing; when dry=True a write scope is satisfied by its deterministic preview (read) scope.
+    Returned entries are the EXECUTE scopes (what the caller would need for a real run) when dry=False, and the
+    PREVIEW scopes still missing when dry=True."""
     out = []
     for s in scopes:
         if has_scope(principal, s):
             continue
-        if dry and s in PREVIEW_SCOPE and has_scope(principal, PREVIEW_SCOPE[s]):
+        if dry:
+            p = preview_scope_for(s)
+            if has_scope(principal, p):
+                continue
+            out.append(p)
             continue
         out.append(s)
     return out

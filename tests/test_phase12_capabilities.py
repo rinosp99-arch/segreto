@@ -413,3 +413,114 @@ async def test_openapi_v2_compact_and_separate(client):
     assert all(p.startswith("/api/v2/ai/") for p in spec["paths"])
     assert "ApiKeyBearer" in spec["components"]["securitySchemes"] and spec["openapi"] == "3.1.0"
     assert "ls_" not in json.dumps(spec).replace("ls_...", "")
+
+
+# =====================================================================================================================
+# Phase 12A fix (found by the REAL production READ_ONLY test): preview scopes must be derived deterministically from the
+# execute scopes, and optional parameters must not require their scope when absent (models.prepare_complete / media:upload).
+# =====================================================================================================================
+async def _counts():
+    return (await models_col.count_documents({}), await versions_col.count_documents({}), await files_col.count_documents({}), await ai_actions_col.count_documents({"action": {"$regex": "^models\\.(create|update)$"}}))
+
+
+async def test_preview_scopes_are_deterministic():
+    from v1_ai_policy import preview_scope_for, preview_scopes
+    assert preview_scope_for("media:upload") == "media:read" and preview_scope_for("jobs:execute") == "jobs:read" and preview_scope_for("categories:write") == "categories:read"
+    assert preview_scope_for("models:publish") == "models:validate" and preview_scope_for("seo:safe_fix") == "seo:audit"      # explicit richer read scopes
+    assert preview_scope_for("models:read") == "models:read" and preview_scope_for("ai:execute") == "ai:execute"           # read-level stay
+    assert preview_scopes(["models:create", "models:update", "media:upload", "seo:safe_fix"]) == ["models:read", "media:read", "seo:audit"]
+    c = C.REGISTRY["models.prepare_complete"]
+    assert c.required_scopes({"nome": "x"}) == ["models:create", "models:update", "seo:safe_fix"]
+    assert c.required_scopes({"nome": "x", "seo_safe_fix": False}) == ["models:create", "models:update"]
+    assert "media:upload" in c.required_scopes({"nome": "x", "media": [{"media": "a", "slot": "card"}]})
+    assert "media:upload" not in c.required_scopes({"nome": "x", "media": []})
+    pub = c.public()
+    assert pub["required_scopes_execute"] == ["models:create", "models:update"] and pub["required_scopes_preview"] == ["models:read"] and "media:upload" in pub["conditional_scopes"]
+
+
+async def test_read_only_key_can_preview_prepare_complete_without_media_upload(client):
+    from v1_security import AI_READ_ONLY_SCOPES
+    raw, _ = await _mk_key(list(AI_READ_ONLY_SCOPES), role="AI_OPERATOR")   # the exact minimum-privilege preset of the panel
+    h = _h(raw)
+    before = await _counts()
+    # metadata: execute none / preview preview_only (never an ambiguous access:none)
+    r = await client.get("/api/v2/ai/capabilities/models.prepare_complete", headers=h)
+    d = r.json()["data"]
+    assert r.status_code == 200 and d["execute_access"] == "none" and d["preview_access"] == "preview_only" and d["access"] == "preview_only", d
+    assert "media:upload" not in d["missing_scopes_preview"] and d["missing_scopes_execute"] == ["models:create", "models:update"]
+    # catalog keeps it (preview_only) instead of hiding it
+    cat = (await client.get("/api/v2/ai/capabilities", headers=h)).json()["data"]["capabilities"]
+    pc = next((c for c in cat if c["id"] == "models.prepare_complete"), None)
+    assert pc and pc["execute_access"] == "none" and pc["preview_access"] == "preview_only"
+    # READ_ONLY + {nome} -> preview PASS, no media:upload requested
+    r = await client.post("/api/v2/ai/preview", json={"action": "models.prepare_complete", "parameters": {"nome": f"TEST V2 GIULIA {TAG}"}}, headers=h)
+    assert r.status_code == 200 and r.json()["ok"] and r.json()["data"]["dry_run"] is True and r.json()["data"]["would_create"] is True and r.json()["data"]["publishes"] is False, r.text
+    assert r.json()["data"]["required_scopes_preview"] == ["models:read", "seo:audit"] and "media:upload" not in json.dumps(r.json()["data"]["required_scopes_preview"])
+    # READ_ONLY + {nome, fields} -> preview PASS (SAFE/REVIEW split visible, nothing applied)
+    r = await client.post("/api/v2/ai/preview", json={"action": "models.prepare_complete", "parameters": {"nome": f"TEST V2 GIULIA {TAG}", "fields": {"frase": "Quello che non vedi.", "tag": ["test"], "tema": {"preset": "bordeaux"}}}}, headers=h)
+    assert r.status_code == 200 and r.json()["ok"] and "frase" in r.json()["data"]["fields_review"] and "tag" in r.json()["data"]["fields_safe"], r.text
+    # media present but READ_ONLY: preview allowed (media:read), media validated against the library, NOTHING fetched/uploaded
+    r = await client.post("/api/v2/ai/preview", json={"action": "models.prepare_complete", "parameters": {"nome": f"TEST V2 GIULIA {TAG}", "media": [{"media": "does-not-exist-zz", "slot": "card"}, {"url": "https://example.com/x.jpg", "slot": "cover"}]}}, headers=h)
+    assert r.status_code == 200 and r.json()["ok"], r.text
+    mp = r.json()["data"]["media_plan"]
+    assert mp[0]["found"] is False and mp[1]["url_ok"] is True and r.json()["warnings"]
+    # real execute -> blocked (READ_ONLY key lacks execute scopes; server is READ_ONLY anyway)
+    r = await client.post("/api/v2/ai/execute", json={"action": "models.prepare_complete", "parameters": {"nome": f"TEST V2 GIULIA {TAG}"}}, headers=h)
+    assert r.status_code == 403 and _code(r) in ("INSUFFICIENT_SCOPE", "READ_ONLY_MODE")
+    if _code(r) == "INSUFFICIENT_SCOPE":
+        assert set(r.json()["detail"]["missing_scopes"]) >= {"models:create", "models:update"} and r.json()["detail"]["mode"] == "execute"
+    # zero mutation in preview
+    assert await _counts() == before
+    assert not await models_col.find_one({"nome": {"$regex": f"TEST V2 GIULIA {TAG}"}})
+
+
+async def test_full_mode_scope_enforcement_prepare_complete_and_approval_no_bypass(client, keys):
+    """FULL (preview DB only): execute without execute scopes -> blocked; with correct scopes -> allowed (then undone);
+    an approval never bypasses scopes. READ_ONLY is restored by the session guard AND here."""
+    from v1_security import AI_READ_ONLY_SCOPES
+    ro_raw, _ = await _mk_key(list(AI_READ_ONLY_SCOPES), role="AI_OPERATOR")
+    ok_raw, ok_id = await _mk_key(["ai:execute", "models:read", "models:create", "models:update", "models:validate", "seo:audit", "seo:safe_fix", "rollback:read", "rollback:execute"], role="AI_OPERATOR")
+    nome = f"TEST V2 GIULIA FULL {TAG}"
+    sid = f"ses_{TAG}_v2giulia"
+    appr = None
+    await _set_mode(True)
+    try:
+        before = await _counts()
+        # FULL without execute scopes -> blocked with the execute scopes listed (preview still fine)
+        r = await client.post("/api/v2/ai/execute", json={"action": "models.prepare_complete", "parameters": {"nome": nome}, "session_id": sid}, headers=_h(ro_raw))
+        assert r.status_code == 403 and _code(r) == "INSUFFICIENT_SCOPE" and set(r.json()["detail"]["missing_scopes"]) == {"models:create", "models:update", "seo:safe_fix"}, r.text
+        assert (await client.post("/api/v2/ai/preview", json={"action": "models.prepare_complete", "parameters": {"nome": nome}}, headers=_h(ro_raw))).status_code == 200
+        assert await _counts() == before
+        # FULL, media passed but key lacks media:upload -> blocked BEFORE anything is created (conditional scope enforced)
+        r = await client.post("/api/v2/ai/execute", json={"action": "models.prepare_complete", "parameters": {"nome": nome, "media": [{"media": "x", "slot": "card"}]}, "session_id": sid}, headers=_h(ok_raw))
+        assert r.status_code == 403 and r.json()["detail"]["missing_scopes"] == ["media:upload"], r.text
+        assert await _counts() == before
+        # FULL with the correct execute scopes -> allowed (real draft, never published)
+        r = await client.post("/api/v2/ai/execute", json={"action": "models.prepare_complete", "parameters": {"nome": nome, "fields": {"tag": ["test"], "frase": "REVIEW field"}}, "session_id": sid}, headers=_h(ok_raw))
+        assert r.status_code == 200 and r.json()["ok"] and r.json()["data"]["published"] is False, r.text
+        mid = r.json()["data"]["id"]
+        assert r.json().get("approval_required") and r.json()["approval"].get("token")   # REVIEW field -> approval proposal
+        appr = r.json()["approval"]
+        # approval must NOT bypass scopes: strip models:update from the key, then approve -> 403, field untouched
+        await api_keys_col.update_one({"id": ok_id}, {"$set": {"scopes": ["ai:execute", "models:read", "models:create", "models:validate", "seo:audit", "seo:safe_fix", "rollback:read", "rollback:execute"]}})
+        r = await client.post(f"/api/v2/ai/approvals/{appr['id']}/approve", json={"token": appr["token"]}, headers=_h(ok_raw))
+        assert r.status_code == 403 and _code(r) == "INSUFFICIENT_SCOPE", r.text
+        doc = await models_col.find_one({"id": mid}, {"_id": 0, "frase": 1, "stato": 1})
+        assert doc["stato"] == "bozza" and doc.get("frase") != "REVIEW field"
+        # deny > allow still holds with the new access computation
+        await api_keys_col.update_one({"id": ok_id}, {"$set": {"capability_allow": ["models.*"], "capability_deny": ["models.prepare_complete"]}})
+        r = await client.post("/api/v2/ai/preview", json={"action": "models.prepare_complete", "parameters": {"nome": nome}}, headers=_h(ok_raw))
+        assert r.status_code == 403 and _code(r) == "CAPABILITY_DENIED"
+        await api_keys_col.update_one({"id": ok_id}, {"$set": {"capability_allow": None, "capability_deny": []}})
+        # undo everything of the session (history kept), then purge this test's soft-deleted draft
+        r = await client.post("/api/v2/ai/rollback", json={"session_id": sid}, headers=_h(ok_raw))
+        assert r.status_code == 200 and not r.json()["data"]["errors"], r.text
+        assert (await models_col.find_one({"id": mid}, {"_id": 0, "is_deleted": 1}) or {}).get("is_deleted") is True
+    finally:
+        await _set_mode(False)
+        ids = [m["id"] async for m in models_col.find({"nome": nome, "is_deleted": True}, {"_id": 0, "id": 1})]
+        await models_col.delete_many({"id": {"$in": ids}})
+        await versions_col.delete_many({"entity_id": {"$in": ids}})
+        await seo_issues_col.delete_many({"entity_id": {"$in": ids}})
+        await approvals_col.delete_many({"id": appr["id"]} if appr else {"actor": {"$regex": TAG}})
+    assert await _mode() is False

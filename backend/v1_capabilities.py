@@ -32,7 +32,7 @@ from database import (models_col, files_col, categories_col, settings_col, confi
                       backups_col, versions_col, ai_actions_col, admins_col, landings_col, seo_issues_col, redirects_col, idempotency_col, api_keys_col, db as _db, now_iso)
 from v1_security import resolve_principal, has_scope, actor_of, request_id_of, rate_limit_shared, err
 from v1_ai_policy import (redact, ai_config, classify_model_changes, create_approval, list_pending_approvals, approvals_col,
-                          missing_scopes_for, bump, ERROR_CODES)
+                          missing_scopes_for, preview_scopes, bump, ERROR_CODES)
 from v1_models import (resolve_model, create_model, patch_model, transition, validate_model, deep_merge, enrich, workflow_status,
                        ALLOWED_FIELDS, unique_slug)
 from v1_versioning import record_version, audit_log, rollback_version, diff_fields
@@ -68,17 +68,59 @@ class Capability:
     read_only: bool = False     # pure read (never a mutation) -> allowed in READ_ONLY and never needs dry_run
     status: str = BOUND         # BOUND | UNBOUND (binding verification failed at startup -> never executable) | CRITICAL_BLOCKED
     unbound_reason: Optional[str] = None
+    # scope -> (predicate(params) -> bool, human description): required ONLY when the optional parameter that needs it is present.
+    # e.g. models.prepare_complete needs media:upload only if `media` is passed. Never used to widen a key: it only adds requirements.
+    conditional_scopes: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def executable(self) -> bool:
         return self.status == BOUND and self.handler is not None and self.risk != CRITICAL
 
+    def required_scopes(self, params: Optional[dict] = None) -> List[str]:
+        """EXECUTE scopes for this call: base scopes + conditional ones whose predicate holds for `params`.
+        With params=None (catalog/metadata) only the base scopes are returned."""
+        out = list(self.scopes)
+        if params is not None:
+            for sc, (pred, _desc) in self.conditional_scopes.items():
+                try:
+                    needed = bool(pred(params or {}))
+                except Exception:
+                    needed = True   # a broken predicate must never relax a requirement
+                if needed and sc not in out:
+                    out.append(sc)
+        return out
+
+    def required_preview_scopes(self, params: Optional[dict] = None) -> List[str]:
+        """PREVIEW (dry_run) scopes: deterministic read-level counterpart of the execute scopes (v1_ai_policy.preview_scopes).
+        Read-only capabilities preview with their own scopes."""
+        return preview_scopes(self.required_scopes(params))
+
     def public(self) -> dict:
-        return {"id": self.id, "category": self.category, "description": self.description, "required_scopes": self.scopes, "risk": self.risk,
+        return {"id": self.id, "category": self.category, "description": self.description, "required_scopes": self.scopes,
+                "required_scopes_execute": self.required_scopes(), "required_scopes_preview": self.required_preview_scopes() if not self.read_only else list(self.scopes),
+                "conditional_scopes": {sc: desc for sc, (_p, desc) in self.conditional_scopes.items()}, "risk": self.risk,
                 "supports_dry_run": self.dry_run and not self.read_only, "supports_rollback": self.rollback and not self.read_only, "supports_batch": self.batch,
                 "requires_approval": self.requires_approval or self.risk == REVIEW, "read_only": self.read_only, "target": self.target,
                 "parameters_schema": {"type": "object", "properties": self.params}, "examples": self.examples, "natural_references": self.natural,
                 "capability_version": self.version, "status": self.status}
+
+
+def access_for(principal: dict, c: "Capability", params: Optional[dict] = None) -> dict:
+    """Separate EXECUTE vs PREVIEW access for a principal (both computed from the same deterministic scope rules).
+    execute_access: full | none. preview_access: preview_only | none | n/a (read-only capability or no dry_run support).
+    access (legacy): full | preview_only | none."""
+    if not c.executable:
+        return {"execute_access": "none", "preview_access": "none", "access": "none"}
+    exec_missing = missing_scopes_for(principal, ("ai:execute", *c.required_scopes(params)), False)
+    execute_access = "full" if not exec_missing else "none"
+    if c.read_only or not c.dry_run:
+        preview_access = "n/a"
+    else:
+        prev_missing = missing_scopes_for(principal, ("ai:execute", *c.required_scopes(params)), True)
+        preview_access = "preview_only" if not prev_missing else "none"
+    legacy = "full" if execute_access == "full" else ("preview_only" if preview_access == "preview_only" else "none")
+    return {"execute_access": execute_access, "preview_access": preview_access, "access": legacy,
+            "missing_scopes_execute": exec_missing, "missing_scopes_preview": [] if preview_access != "none" else prev_missing}
 
 
 REGISTRY: Dict[str, Capability] = {}
@@ -1630,7 +1672,9 @@ async def _rb_window(ctx: Ctx):
 # WORKFLOW: models.prepare_complete
 # =====================================================================================================================
 @cap("models.prepare_complete", "workflow", "Workflow deterministico: crea (o usa) la bozza → compila i campi → assegna media agli slot → fix SEO SAFE → ALT default → valida → readiness. NON pubblica mai. Tutto sotto lo stesso session_id (annullabile con rollback.session).",
-     ["models:create", "models:update", "media:upload", "seo:safe_fix"], rollback=True,
+     ["models:create", "models:update"], rollback=True,
+     conditional_scopes={"media:upload": (lambda p: bool(p.get("media")), "solo se il parametro opzionale `media` è presente"),
+                         "seo:safe_fix": (lambda p: p.get("seo_safe_fix", True) is not False, "solo se seo_safe_fix non è false (default true)")},
      params={"nome": {"type": "string", "required": True}, "fields": {"type": "object"}, "media": {"type": "array", "items": {"type": "object"}, "description": "[{media|url, slot, alt}]"}, "seo_safe_fix": {"type": "boolean", "default": True}},
      examples=[{"action": "models.prepare_complete", "parameters": {"nome": "Giulia Rossi", "fields": {"frase": "Il lato che non mostro a tutti.", "categorie": ["more"], "onlyfans_url": "https://onlyfans.com/giulia_rossi"}, "media": [{"media": "giulia-1.jpg", "slot": "public_photo_1"}]}}],
      natural=["prepara Giulia completamente ma non pubblicarla", "crea una nuova modella con queste foto e preparala tutta"])
@@ -1648,9 +1692,46 @@ async def _prepare_complete(ctx: Ctx):
     safe_fields = {k: v for k, v in fields.items() if k not in review_roots}
     review_fields = {k: v for k, v in fields.items() if k in review_roots}
     if ctx.dry:
-        return R(f"Anteprima workflow '{nome}': bozza + {len(safe_fields)} campi SAFE + {len(review_fields)} campi REVIEW (approvazione) + {len(media)} media + SEO safe + validate (nessuna pubblicazione)",
-                 {"dry_run": True, "plan": ["models.create", f"models.update SAFE ({sorted(safe_fields)})"] + ([f"models.update REVIEW → approvazione ({sorted(review_fields)})"] if review_fields else [])
-                  + [f"media.assign {m.get('slot')}" for m in media] + ["seo.safe_fix", "models.validate"]})
+        # READ-ONLY analysis: nothing is created, fetched or written. Media references are validated against the library
+        # (URLs are only syntax-checked: no download in preview), slots are parsed with the real slot rules.
+        from sanitize import slugify
+        existing = await models_col.find_one({"is_deleted": {"$ne": True}, "$or": [{"id": nome}, {"slug": slugify(nome)},
+                                                                                 {"nome": {"$regex": f"^{re.escape(nome)}$", "$options": "i"}}, {"nome_artistico": {"$regex": f"^{re.escape(nome)}$", "$options": "i"}}]}, {"_id": 0, "id": 1, "slug": 1, "stato": 1})
+        media_plan, warnings = [], []
+        for m in media:
+            item = {"slot": m.get("slot"), "ref": m.get("media") or m.get("url")}
+            try:
+                tech, side, tipo, n = parse_slot(m.get("slot") or "")
+                item.update({"technical_slot": tech, "side": side, "tipo": tipo})
+            except HTTPException:
+                item["error"] = "slot non valido"
+                warnings.append(f"slot '{m.get('slot')}' non valido")
+            if m.get("media"):
+                try:
+                    f = await find_media(m["media"])
+                    item.update({"media_id": f["id"], "media_tipo": f.get("tipo"), "found": True})
+                except HTTPException:
+                    item["found"] = False
+                    warnings.append(f"media '{m.get('media')}' non trovato in libreria")
+            elif m.get("url"):
+                item["found"] = None
+                item["url_ok"] = bool(re.match(r"^https?://", str(m["url"])))
+                if not item["url_ok"]:
+                    warnings.append(f"url non valido: {m['url']}")
+                item["note"] = "download e controlli anti-SSRF/magic-bytes avvengono solo all'esecuzione reale"
+            media_plan.append(item)
+        seo_fix = ctx.params.get("seo_safe_fix", True) is not False
+        plan = [("models.create" + (f" (saltato: esiste già {existing['slug']})" if existing else f" → bozza '{nome}' (slug {await unique_slug(nome)})"))]
+        if safe_fields:
+            plan.append(f"models.update SAFE ({sorted(safe_fields)})")
+        if review_fields:
+            plan.append(f"models.update REVIEW → approvazione ({sorted(review_fields)})")
+        plan += [f"media.assign {m.get('slot')}" for m in media] + (["seo.safe_fix"] if seo_fix else []) + ["models.validate"]
+        return R(f"Anteprima workflow '{nome}': bozza + {len(safe_fields)} campi SAFE + {len(review_fields)} campi REVIEW (approvazione) + {len(media)} media + {'SEO safe + ' if seo_fix else ''}validate (nessuna pubblicazione, nessuna scrittura)",
+                 {"dry_run": True, "would_create": not bool(existing), "existing": existing, "plan": plan, "fields_safe": sorted(safe_fields), "fields_review": sorted(review_fields),
+                  "media_plan": media_plan, "seo_safe_fix": seo_fix, "publishes": False,
+                  "required_scopes_execute": REGISTRY["models.prepare_complete"].required_scopes(ctx.params), "required_scopes_preview": REGISTRY["models.prepare_complete"].required_preview_scopes(ctx.params)},
+                 warnings=warnings, next_steps=["Esegui senza dry_run (modalità FULL) per creare la bozza; i campi REVIEW richiederanno approvazione; annullabile con rollback.session"])
     vids: List[str] = []
     secondary: List[dict] = []
     # reuse ONLY an exact match (id / slug / exact name): never a fuzzy hit on a real model
@@ -1971,10 +2052,14 @@ async def run_capability(principal: dict, request: Request, body: ExecuteBody, *
         raise err(403, "CAPABILITY_DISABLED", f"Capability '{body.action}' disattivata dall'amministratore")
     dry = bool(force_dry or body.dry_run) and not capability.read_only
     write = not capability.read_only
-    # 3. scopes (allow-list can never replace them)
-    missing = missing_scopes_for(principal, ("ai:execute", *capability.scopes), dry and write)
+    # 3. scopes (allow-list can never replace them). EXECUTE scopes for a real run, deterministic PREVIEW (read) scopes for a
+    #    dry_run; conditional scopes (e.g. media:upload) are required only when the optional parameter that needs them is present.
+    req_scopes = capability.required_scopes(body.parameters or {})
+    missing = missing_scopes_for(principal, ("ai:execute", *req_scopes), dry and write)
     if missing:
-        raise err(403, "INSUFFICIENT_SCOPE", "Permessi insufficienti", missing_scopes=missing, capability=body.action, hint="Con dry_run=true bastano gli scope di lettura")
+        raise err(403, "INSUFFICIENT_SCOPE", "Permessi insufficienti", missing_scopes=missing, capability=body.action, mode="preview" if (dry and write) else "execute",
+                  required_scopes_execute=req_scopes, required_scopes_preview=capability.required_preview_scopes(body.parameters or {}),
+                  hint="Con dry_run=true bastano gli scope di lettura (anteprima)" if not (dry and write) else "Mancano scope di lettura per l'anteprima")
     # 4. per-key capability policy (deny > allow > scopes)
     why = key_allows(principal, body.action)
     if why:
@@ -2091,13 +2176,12 @@ def catalog_for(principal: dict, disabled: List[str], mode: str, category: Optio
             continue
         if q and q.lower() not in (c.id + " " + c.description + " " + " ".join(c.natural)).lower():
             continue
-        missing = missing_scopes_for(principal, ("ai:execute", *c.scopes), False)
-        access = "full" if not missing else ("preview_only" if (not c.read_only and c.dry_run and not missing_scopes_for(principal, ("ai:execute", *c.scopes), True)) else "none")
-        if access == "none" or c.id in disabled or key_allows(principal, c.id):
-            continue
+        acc = access_for(principal, c)   # base scopes only: conditional scopes depend on the call's parameters
+        if acc["access"] == "none" or c.id in disabled or key_allows(principal, c.id):
+            continue   # a dry_run-capable capability stays listed (preview_only) even if the key lacks its mutation scopes
         d = c.public() if not compact else {"id": c.id, "category": c.category, "description": c.description, "risk": c.risk, "target": c.target, "read_only": c.read_only,
                                              "parameters": sorted((c.params or {}).keys()), "capability_version": c.version}
-        d["access"] = access
+        d["access"], d["execute_access"], d["preview_access"] = acc["access"], acc["execute_access"], acc["preview_access"]
         if mode == "READ_ONLY" and not c.read_only:
             d["read_only_note"] = "Modalità READ_ONLY: solo dry_run=true"
         items.append(d)
@@ -2127,8 +2211,7 @@ async def v2_get_capability(capability_id: str, request: Request, principal: dic
     if not c:
         raise HTTPException(status_code=404, detail={"code": "UNKNOWN_CAPABILITY", "message": f"Capability '{capability_id}' inesistente", "suggestions": [k for k in REGISTRY if capability_id.split('.')[0] in k][:10]})
     pub = c.public()
-    missing = missing_scopes_for(principal, ("ai:execute", *c.scopes), False)
-    pub["access"] = "none" if not c.executable else ("full" if not missing else ("preview_only" if not missing_scopes_for(principal, ("ai:execute", *c.scopes), True) else "none"))
+    pub.update(access_for(principal, c))   # execute_access / preview_access / access (legacy) + missing scopes per mode
     pub["disabled"] = capability_id in await disabled_capabilities()
     pub["key_restriction"] = key_allows(principal, capability_id)
     pub["mode"] = cfg["mode"]

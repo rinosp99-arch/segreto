@@ -1,6 +1,6 @@
 {
- "base_url": "https://secret-side.emergent.host",
- "started_at": "2026-09-11T07:59:12Z",
+ "base_url": "https://secret-side.preview.emergentagent.com",
+ "started_at": "2026-09-11T08:26:11Z",
  "v2": [
   {
    "check": "getSystemStatus 200 + mode READ_ONLY",
@@ -78,7 +78,7 @@
    "note": ""
   },
   {
-   "check": "findModel natural reference 'Vanessa' -> slug (or 409 AMBIGUOUS with candidates)",
+   "check": "findModel natural reference 'Francesca' -> slug (or 409 AMBIGUOUS with candidates)",
    "result": "PASS",
    "note": ""
   },
@@ -243,7 +243,32 @@
    "note": ""
   },
   {
-   "check": "READ_ONLY-scoped catalog: write capabilities at most preview_only (never full), settings.update absent",
+   "check": "getCapability(models.prepare_complete) READ_ONLY key: execute_access=none, preview_access=preview_only",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "previewCapability(models.prepare_complete, {nome:'TEST V2 GIULIA'}) READ_ONLY key -> 200 dry_run, no media:upload required, publishes=false",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "previewCapability(models.prepare_complete, {nome, fields}) READ_ONLY key -> 200 (SAFE/REVIEW split, nothing applied)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "executeCapability(models.prepare_complete) READ_ONLY key -> 403 blocked",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "zero mutation: TEST V2 GIULIA never created (public catalogue unchanged)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "READ_ONLY-scoped catalog: every write capability is preview_only (never full); reads full",
    "result": "PASS",
    "note": ""
   },
@@ -411,13 +436,13 @@
   },
   {
    "check": "sitemap.xml 200, production URLs, includes model page",
-   "result": "PASS",
-   "note": ""
+   "result": "FAIL",
+   "note": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n<url><loc>https://se"
   },
   {
    "check": "robots.txt 200 with production sitemap",
-   "result": "PASS",
-   "note": ""
+   "result": "FAIL",
+   "note": "# As a condition of accessing this website, you agree to abide by the following\n# content signals:\n\n# (a)  If a Content-Signal = yes, you may collect content fo"
   },
   {
    "check": "RSS 200 (xml)",
@@ -426,28 +451,77 @@
   }
  ],
  "read_only": true,
- "openapi_v2_url": "https://secret-side.emergent.host/api/v2/ai/openapi-chatgpt.json",
+ "openapi_v2_url": "https://secret-side.preview.emergentagent.com/api/v2/ai/openapi-chatgpt.json",
  "openapi_v2_operations": 12,
  "capabilities_total": 97,
  "capabilities_bound": 97,
  "capabilities_unbound": 0,
  "getjob_note": "async AI jobs are created only by FULL batch operations: in production READ_ONLY only auth + 404 path is exercisable (200 path verified in preview coverage).",
  "idempotency_note": "v2 per-capability replay (same key -> same result, different body -> 409 IDEMPOTENCY_CONFLICT) is only exercisable with real writes (FULL): verified in preview coverage, not in production READ_ONLY.",
+ "prepare_complete_preview_output": {
+  "ok": true,
+  "action": "models.prepare_complete",
+  "summary": "Anteprima workflow 'TEST V2 GIULIA': bozza + 0 campi SAFE + 0 campi REVIEW (approvazione) + 0 media + SEO safe + validate (nessuna pubblicazione, nessuna scrittura)",
+  "data": {
+   "dry_run": true,
+   "would_create": true,
+   "existing": null,
+   "plan": [
+    "models.create \u2192 bozza 'TEST V2 GIULIA' (slug test-v2-giulia)",
+    "seo.safe_fix",
+    "models.validate"
+   ],
+   "fields_safe": [],
+   "fields_review": [],
+   "media_plan": [],
+   "seo_safe_fix": true,
+   "publishes": false,
+   "required_scopes_execute": [
+    "models:create",
+    "models:update",
+    "seo:safe_fix"
+   ],
+   "required_scopes_preview": [
+    "models:read",
+    "seo:audit"
+   ],
+   "capability": "models.prepare_complete",
+   "capability_version": "1.0",
+   "risk": "SAFE",
+   "session_id": "ses_3e71a39f2c81",
+   "mode": "READ_ONLY",
+   "rollback": {
+    "available": false,
+    "version_ids": [],
+    "undo": null
+   }
+  },
+  "warnings": [],
+  "next_steps": [
+   "Esegui senza dry_run (modalit\u00e0 FULL) per creare la bozza; i campi REVIEW richiederanno approvazione; annullabile con rollback.session"
+  ],
+  "request_id": "d21e4730-36eb-4ee4-98bf-3523738196d5",
+  "changes": [],
+  "approval_required": false
+ },
  "health_overall": "ok",
  "open_alerts": 0,
  "test_connection": "13/13 controlli superati",
  "public_models": 10,
  "seo_open": {
   "SAFE_AUTO_FIX": 0,
-  "REVIEW_REQUIRED": 4,
+  "REVIEW_REQUIRED": 1,
   "CRITICAL": 0
  },
  "health_latest": {
   "overall": "ok",
-  "checked_at": "2026-09-11T07:51:59.151740+00:00"
+  "checked_at": "2026-09-11T08:24:09.698817+00:00"
  },
- "v2_pass": "54/54",
- "regressions_pass": "30/30",
- "problems": [],
- "conclusion": "PRODUCTION V2 READY FOR GPT REIMPORT"
+ "v2_pass": "59/59",
+ "regressions_pass": "28/30",
+ "problems": [
+  "sitemap.xml 200, production URLs, includes model page: <?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n<url><loc>https://se",
+  "robots.txt 200 with production sitemap: # As a condition of accessing this website, you agree to abide by the following\n# content signals:\n\n# (a)  If a Content-Signal = yes, you may collect content fo"
+ ],
+ "conclusion": "PRODUCTION V2 NOT READY"
 }

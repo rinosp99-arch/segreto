@@ -112,6 +112,7 @@ try:
     ok("v2", "getCapabilities 200 compact (AI_OPERATOR sees a large allowlisted catalog)", r.status_code == 200 and len(caps) >= 60 and all({"id", "risk", "category"} <= set(c) for c in caps), len(caps))
     rf = S.get(f"{BASE}/api/v2/ai/capabilities?compact=false", headers=K, timeout=60)
     full = j(rf).get("data", {}).get("capabilities", [])
+    READ_ONLY_IDS = {c["id"] for c in full if c.get("read_only")}
     ok("v2", "catalog (full): no CRITICAL, all BOUND, stable ids + versions", rf.status_code == 200 and full and all(c["risk"] != "CRITICAL" and c.get("status") == "BOUND" and c.get("capability_version") for c in full), (rf.status_code, len(full)))
     r = S.get(f"{BASE}/api/v2/ai/capabilities/models.update", headers=K, timeout=60)
     ok("v2", "getCapability models.update BOUND with parameters_schema", r.status_code == 200 and j(r)["data"]["status"] == "BOUND" and "parameters_schema" in j(r)["data"])
@@ -209,10 +210,26 @@ try:
     r = S.patch(f"{BASE}/api/v1/auth/keys/{KID_RO}/capabilities", json={"capability_allow": ["settings.*", "models.*"], "capability_deny": []}, headers=JWT, timeout=60)
     r = post("/api/v2/ai/execute", {"action": "settings.update", "parameters": {"changes": {"brand_name": "X"}}}, K_RO)
     ok("v2", "allow-list cannot grant a capability the scopes don't cover (settings.update -> 403)", r.status_code == 403 and code(r) in ("INSUFFICIENT_SCOPE", "READ_ONLY_MODE"), r.text[:160])
+    # --- the exact production scenario reported by the user: READ_ONLY-preset key, TEST V2 GIULIA, no media
+    r = S.get(f"{BASE}/api/v2/ai/capabilities/models.prepare_complete", headers=K_RO, timeout=60)
+    meta = j(r).get("data", {})
+    ok("v2", "getCapability(models.prepare_complete) READ_ONLY key: execute_access=none, preview_access=preview_only",
+       r.status_code == 200 and meta.get("execute_access") == "none" and meta.get("preview_access") == "preview_only", {k: meta.get(k) for k in ("access", "execute_access", "preview_access", "missing_scopes_preview")})
+    r = S.post(f"{BASE}/api/v2/ai/preview", json={"action": "models.prepare_complete", "parameters": {"nome": "TEST V2 GIULIA"}, "dry_run": True}, headers=K_RO, timeout=120)
+    pcv = j(r)
+    ok("v2", "previewCapability(models.prepare_complete, {nome:'TEST V2 GIULIA'}) READ_ONLY key -> 200 dry_run, no media:upload required, publishes=false",
+       r.status_code == 200 and pcv.get("ok") and pcv["data"].get("dry_run") is True and pcv["data"].get("publishes") is False and "media:upload" not in json.dumps(pcv["data"].get("required_scopes_preview", [])), r.text[:240])
+    REPORT["prepare_complete_preview_output"] = pcv if r.status_code == 200 else {"status": r.status_code, "body": pcv}
+    r = S.post(f"{BASE}/api/v2/ai/preview", json={"action": "models.prepare_complete", "parameters": {"nome": "TEST V2 GIULIA", "fields": {"frase": "Quello che non vedi.", "tag": ["test"]}}}, headers=K_RO, timeout=120)
+    ok("v2", "previewCapability(models.prepare_complete, {nome, fields}) READ_ONLY key -> 200 (SAFE/REVIEW split, nothing applied)", r.status_code == 200 and j(r).get("ok") and "frase" in (j(r).get("data") or {}).get("fields_review", []), r.text[:200])
+    r = S.post(f"{BASE}/api/v2/ai/execute", json={"action": "models.prepare_complete", "parameters": {"nome": "TEST V2 GIULIA"}}, headers=K_RO, timeout=120)
+    ok("v2", "executeCapability(models.prepare_complete) READ_ONLY key -> 403 blocked", r.status_code == 403 and code(r) in ("INSUFFICIENT_SCOPE", "READ_ONLY_MODE"), r.text[:160])
+    pm_after = j(S.get(f"{BASE}/api/models", timeout=60))
+    ok("v2", "zero mutation: TEST V2 GIULIA never created (public catalogue unchanged)", pm_after.get("total") == pm0.get("total") and not any("giulia" in (m.get("slug") or "") and "v2" in (m.get("slug") or "") for m in pm_after.get("items", [])), pm_after.get("total"))
     cat3 = {c["id"]: c.get("access") for c in j(S.get(f"{BASE}/api/v2/ai/capabilities", headers=K_RO, timeout=60)).get("data", {}).get("capabilities", [])}
-    ok("v2", "READ_ONLY-scoped catalog: write capabilities at most preview_only (never full), settings.update absent",
-       cat3 and "settings.update" not in cat3 and all(acc == "full" if cid in ("models.list", "models.get") else acc in ("preview_only", "full") for cid, acc in cat3.items())
-       and all(cat3[cid] == "preview_only" for cid in ("models.update", "models.create", "models.archive") if cid in cat3), {k: v for k, v in list(cat3.items())[:6]})
+    full_writes = [cid for cid, acc in cat3.items() if acc == "full" and cid not in READ_ONLY_IDS]
+    ok("v2", "READ_ONLY-scoped catalog: every write capability is preview_only (never full); reads full",
+       cat3 and not full_writes and cat3.get("models.list") == "full" and all(cat3[cid] == "preview_only" for cid in ("models.update", "models.create", "models.prepare_complete") if cid in cat3), full_writes[:8] or {k: v for k, v in list(cat3.items())[:6]})
     # ------------------------------------------------------------------------------------------ rate limit cluster-wide (dedicated key, floor 10/min)
     KID_RL, K_RL, RAW_RL = mk_key(f"{TAG}-ratelimit", rate=10)
     def _hit(_):

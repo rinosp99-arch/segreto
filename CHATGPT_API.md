@@ -242,3 +242,12 @@ KPI (totale, bound/unbound, attive/disattivate, SAFE/REVIEW/CRITICAL, modalità)
 
 ## G. Attivazione (decisione utente, non automatica)
 1. Deploy della build 12A in produzione (utente) → 2. verificare `GET /api/v2/ai/status` READ_ONLY e 97 bound → 3. re-import dello schema v2 nel GPT (`/api/v2/ai/openapi-chatgpt.json`) con la stessa API key → 4. test in READ_ONLY → 5. solo dopo, eventuale FULL controllato dal pannello (kill switch sempre disponibile).
+
+## H. Policy preview vs execute (fix 11/09, trovato dal test reale in produzione)
+**Bug:** `previewCapability(models.prepare_complete, {nome})` con la chiave READ_ONLY → `INSUFFICIENT_SCOPE: media:upload` e `access: none`, benché `media` fosse opzionale/assente e la preview non scriva nulla. Causa: la mappa `PREVIEW_SCOPE` copriva solo gli scope Phase 10 (27 capability 12A non erano previewabili con il preset READ_ONLY) e la capability dichiarava `media:upload`/`seo:safe_fix` incondizionati.
+**Fix (lato API, nessuno scope aggiunto alla chiave):**
+- `v1_ai_policy.preview_scope_for(scope)`: preview scope **deterministico** = mappa esplicita (publish→validate, safe_fix→audit, …) altrimenti `<area>:read`; gli scope di lettura restano se stessi; `ai:execute` invariato (`jobs:execute` → `jobs:read`).
+- `Capability.conditional_scopes` (`scope → predicato(params)`): `models.prepare_complete` richiede `media:upload` **solo se `media` è presente** e `seo:safe_fix` solo se `seo_safe_fix` non è `false`. Il dispatcher usa `required_scopes(params)` per l'esecuzione e `required_preview_scopes(params)` per il dry-run.
+- Metadata (`getCapability`, catalogo): `execute_access` (`full|none`), `preview_access` (`preview_only|none|n/a`), `required_scopes_execute`, `required_scopes_preview`, `conditional_scopes`, `missing_scopes_execute/preview`; `access` legacy conservato. Il catalogo mantiene le capability dry-run-capable come `preview_only` invece di nasconderle.
+- Preview di `prepare_complete` arricchita (sola lettura): modello esistente/slug, split SAFE/REVIEW, `media_plan` (riferimenti libreria verificati, URL solo sintassi: **nessun download**), `publishes: false`.
+**Invarianti confermate dai test:** execute reale bloccata (READ_ONLY o scope), FULL senza scope execute → 403 con gli scope mancanti, FULL con scope corretti → consentito, approvazione re-verifica gli scope (non li aggira), deny > allow, zero mutation in preview.

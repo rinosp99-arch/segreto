@@ -11,7 +11,7 @@ from dotenv import load_dotenv  # noqa: E402
 load_dotenv("/app/backend/.env")
 
 TEST_MODEL_RX = re.compile(r"^(Zeta Testuale|Idem Test|Francesca \(copia\)|Test |TEST GIULIA|Cov |Audit Test|Test Giulia|OF Test|Vanessa Test)", re.I)
-TEST_KEY_RX = re.compile(r"^(test-|sim-|smoke-|cov12a-|chatgpt-test$|dbg$|seo-only$|ChatGPT Production READ_ONLY \(simulazione\)$)")
+TEST_KEY_RX = re.compile(r"^(test-|sim-|smoke-|cov12a-|prodcheck12a-|chatgpt-test$|dbg$|seo-only$|ChatGPT Production READ_ONLY \(simulazione\)$)")
 TEST_LANDING_RX = re.compile(r"^(test-|e2e-|landing-cov-|landing-test)")
 
 
