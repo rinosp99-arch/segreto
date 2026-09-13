@@ -74,6 +74,8 @@ async def test_inspection_cache_and_budget():
 # ------------------------------------------------------------------ service: sitemap sync debounce
 async def test_sitemap_sync_debounce_and_force():
     saved = await google_search_state_col.find_one({"id": "global"}, {"_id": 0}) or {}
+    prev_sync = os.environ.get("GOOGLE_SEARCH_SYNC_ENABLED")
+    os.environ["GOOGLE_SEARCH_SYNC_ENABLED"] = "true"     # the preview .env may keep the automatic sync off
     try:
         await google_search_state_col.update_one({"id": "global"}, {"$set": {"sitemap_dirty": True, "sitemap_last_hash": None, "sitemap_last_submitted_at": None}}, upsert=True)
         d = await gs.sitemap_sync(dry_run=True)
@@ -89,7 +91,22 @@ async def test_sitemap_sync_debounce_and_force():
         assert r4["submitted"] is True and r4["reason"] == "force"
         st = await gs.status()
         assert st["connection"]["status"] == "CONNECTED" and st["sitemap"]["dirty"] is False and "credentials" in st and "private_key" not in str(st)
+        # GOOGLE_SEARCH_SYNC_ENABLED=false governs the AUTOMATIC job only: auto run skipped, explicit manual force=true submits once
+        os.environ["GOOGLE_SEARCH_SYNC_ENABLED"] = "false"
+        try:
+            await gs.mark_sitemap_dirty("test publish 2")
+            await google_search_state_col.update_one({"id": "global"}, {"$set": {"sitemap_last_submitted_at": None}})
+            r5 = await gs.sitemap_sync()
+            assert not r5.get("submitted") and r5["sync_enabled"] is False and "disattivato" in (r5["skipped_reason"] or "")
+            r6 = await gs.sitemap_sync(force=True)
+            assert r6["submitted"] is True and r6["reason"] == "force" and r6["sync_enabled"] is False
+        finally:
+            os.environ["GOOGLE_SEARCH_SYNC_ENABLED"] = "true"
     finally:
+        if prev_sync is None:
+            os.environ.pop("GOOGLE_SEARCH_SYNC_ENABLED", None)
+        else:
+            os.environ["GOOGLE_SEARCH_SYNC_ENABLED"] = prev_sync
         await google_search_state_col.update_one({"id": "global"}, {"$set": {k: saved.get(k) for k in ("sitemap_dirty", "sitemap_last_hash", "sitemap_last_submitted_at", "sitemap_last_submit_result")}}, upsert=True)
 
 

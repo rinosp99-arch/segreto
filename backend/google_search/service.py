@@ -133,8 +133,9 @@ async def sitemap_sync(force: bool = False, dry_run: bool = False) -> dict:
         if configured():
             out["registered"] = await _registered_sitemap()
         return out
-    if not configured() or not cfg.sync_enabled:
-        out.update({"submitted": False, "skipped_reason": "Search Console non configurata o sync disattivato"})
+    # sync_enabled governs the AUTOMATIC job only; an explicit manual request (force=true via the capability) may submit once.
+    if not configured() or (not cfg.sync_enabled and not force):
+        out.update({"submitted": False, "skipped_reason": "Search Console non configurata o sync automatico disattivato (usa force=true per un invio manuale)"})
         return out
     try:
         await _adapter().submit_sitemap(cfg.property_url, sitemap_url())
