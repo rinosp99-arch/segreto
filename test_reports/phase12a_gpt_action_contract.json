@@ -1,7 +1,7 @@
 {
  "base": "http://localhost:8001",
- "pass": 34,
- "total": 34,
+ "pass": 35,
+ "total": 35,
  "results": [
   {
    "check": "OpenAPI: previewCapability body requires action + parameters, parameters described with explicit example",
@@ -24,7 +24,11 @@
    "result": "PASS"
   },
   {
-   "check": "getCapability: required_parameters=['nome'], example_parameters={'nome': 'TEST V2 GIULIA'}, request_example present",
+   "check": "getCapability: required_parameters=['nome'], COMPLETE example_parameters (nome + fields{frase,bio,bio_segreta,tema,regia,cta_temporizzata,messaggio_35s,seo,...} + seo_safe_fix), request_example present",
+   "result": "PASS"
+  },
+  {
+   "check": "getCapability: parameters_schema.fields is EXPLICIT (properties with type/description, nested tema/regia/seo/cta_temporizzata/messaggio_35s, enums/ranges)",
    "result": "PASS"
   },
   {
@@ -32,7 +36,7 @@
    "result": "PASS"
   },
   {
-   "check": "A. previewCapability with request_example (parameters.nome) -> 200, plan for TEST V2 GIULIA, publishes=false",
+   "check": "A. previewCapability with request_example (parameters.nome + full fields) -> 200 dry_run, publishes=false, every field classified SAFE or REVIEW (none silently lost)",
    "result": "PASS"
   },
   {

@@ -1,7 +1,7 @@
 {
- "run": "0df201",
+ "run": "e563d9",
  "base": "https://secret-side.preview.emergentagent.com",
- "started_at": "2026-09-11T11:42:30",
+ "started_at": "2026-09-13T11:33:26",
  "capabilities": {
   "models.list": [
    {
@@ -147,7 +147,7 @@
    {
     "mode": "read",
     "result": "PASS",
-    "note": "1 alert correnti (0 critici), 11 risolti nelle ultime 24h"
+    "note": "1 alert correnti (0 critici), 1 risolti nelle ultime 24h"
    }
   ],
   "jobs.list": [
@@ -168,7 +168,7 @@
    {
     "mode": "read",
     "result": "PASS",
-    "note": "7 backup, ultimo 2026-09-11T01:06"
+    "note": "9 backup, ultimo 2026-09-13T10:11"
    }
   ],
   "admins.list": [
@@ -194,7 +194,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model 0df201 aggiornata (cta_testo); stato DRAFT"
+    "note": "Cov Model e563d9 aggiornata (cta_testo); stato DRAFT"
    }
   ],
   "models.set_secret_side": [
@@ -206,7 +206,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model 0df201 aggiornata (tema); stato DRAFT"
+    "note": "Cov Model e563d9 aggiornata (tema); stato DRAFT"
    }
   ],
   "models.set_regia": [
@@ -218,7 +218,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model 0df201 aggiornata (regia); stato DRAFT"
+    "note": "Cov Model e563d9 aggiornata (regia); stato DRAFT"
    }
   ],
   "models.set_cta": [
@@ -230,7 +230,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model 0df201 aggiornata (cta_temporizzata); stato DRAFT"
+    "note": "Cov Model e563d9 aggiornata (cta_temporizzata); stato DRAFT"
    }
   ],
   "models.set_secret_message": [
@@ -242,7 +242,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model 0df201 aggiornata (messaggio_35s); stato DRAFT"
+    "note": "Cov Model e563d9 aggiornata (messaggio_35s); stato DRAFT"
    }
   ],
   "models.set_social": [
@@ -254,7 +254,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model 0df201 aggiornata (social); stato DRAFT"
+    "note": "Cov Model e563d9 aggiornata (social); stato DRAFT"
    }
   ],
   "models.set_seo": [
@@ -266,7 +266,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model 0df201 aggiornata (seo); stato DRAFT"
+    "note": "Cov Model e563d9 aggiornata (seo); stato DRAFT"
    }
   ],
   "models.feature": [
@@ -278,7 +278,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model 0df201 aggiornata (badge); stato DRAFT"
+    "note": "Cov Model e563d9 aggiornata (badge); stato DRAFT"
    }
   ],
   "models.unfeature": [
@@ -290,7 +290,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model 0df201 aggiornata (badge, badge_tipo); stato DRAFT"
+    "note": "Cov Model e563d9 aggiornata (badge, badge_tipo); stato DRAFT"
    }
   ],
   "models.publish": [
@@ -332,12 +332,12 @@
    {
     "mode": "preview",
     "result": "PASS",
-    "note": "Anteprima: verrebbe creata la bozza 'Clone 0df201' clonando francesca-rossi"
+    "note": "Anteprima: verrebbe creata la bozza 'Clone e563d9' clonando francesca-rossi"
    },
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Clone creato: 'Cov Clone 0df201' (slug cov-clone-0df201, bozza)"
+    "note": "Clone creato: 'Cov Clone e563d9' (slug cov-clone-e563d9, bozza)"
    }
   ],
   "models.copy_config": [
@@ -349,7 +349,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model 0df201 aggiornata (regia, tema); stato INCOMPLETE"
+    "note": "Cov Model e563d9 aggiornata (regia, tema); stato INCOMPLETE"
    }
   ],
   "models.tags.add": [
@@ -361,7 +361,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model 0df201 aggiornata (tag); stato DRAFT"
+    "note": "Cov Model e563d9 aggiornata (tag); stato DRAFT"
    }
   ],
   "models.tags.remove": [
@@ -373,7 +373,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model 0df201 aggiornata (tag); stato DRAFT"
+    "note": "Cov Model e563d9 aggiornata (tag); stato DRAFT"
    }
   ],
   "tags.normalize": [
@@ -385,7 +385,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "tag 'cov-0df201' \u2192 'cov2-0df201' su 1 modelle"
+    "note": "tag 'cov-e563d9' \u2192 'cov2-e563d9' su 1 modelle"
    }
   ],
   "media.assign": [
@@ -397,32 +397,32 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media assegnato a public_photo_1 di Cov Model 0df201"
+    "note": "Media assegnato a public_photo_1 di Cov Model e563d9"
    },
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media assegnato a secret_photo_1 di Cov Model 0df201"
+    "note": "Media assegnato a secret_photo_1 di Cov Model e563d9"
    },
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media assegnato a card di Cov Model 0df201"
+    "note": "Media assegnato a card di Cov Model e563d9"
    },
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media assegnato a cover di Cov Model 0df201"
+    "note": "Media assegnato a cover di Cov Model e563d9"
    },
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media assegnato a secret_hero di Cov Model 0df201"
+    "note": "Media assegnato a secret_hero di Cov Model e563d9"
    },
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media assegnato a public_photo_2 di Cov Model 0df201"
+    "note": "Media assegnato a public_photo_2 di Cov Model e563d9"
    }
   ],
   "media.replace_slot": [
@@ -434,7 +434,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media assegnato a public_photo_1 di Cov Model 0df201"
+    "note": "Media assegnato a public_photo_1 di Cov Model e563d9"
    }
   ],
   "media.remove_from_slot": [
@@ -446,7 +446,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model 0df201 aggiornata (media_pairs); stato INCOMPLETE"
+    "note": "Cov Model e563d9 aggiornata (media_pairs); stato INCOMPLETE"
    }
   ],
   "media.reorder_pairs": [
@@ -458,7 +458,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model 0df201 aggiornata (media_pairs); stato INCOMPLETE"
+    "note": "Cov Model e563d9 aggiornata (media_pairs); stato INCOMPLETE"
    }
   ],
   "media.update": [
@@ -537,7 +537,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model 0df201 aggiornata (pellicola_home); stato DRAFT"
+    "note": "Cov Model e563d9 aggiornata (pellicola_home); stato DRAFT"
    }
   ],
   "settings.update": [
@@ -575,12 +575,12 @@
    {
     "mode": "preview",
     "result": "PASS",
-    "note": "Anteprima: categoria 'Cat 0df201' (cat-0df201)"
+    "note": "Anteprima: categoria 'Cat e563d9' (cat-e563d9)"
    },
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Categoria 'Cov Cat 0df201' creata (cov-cat-0df201)"
+    "note": "Categoria 'Cov Cat e563d9' creata (cov-cat-e563d9)"
    }
   ],
   "categories.update": [
@@ -592,7 +592,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Categoria cov-cat-0df201 aggiornata (descrizione, seo_title)"
+    "note": "Categoria cov-cat-e563d9 aggiornata (descrizione, seo_title)"
    }
   ],
   "categories.archive": [
@@ -611,7 +611,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Categoria cov-cat-0df201 aggiornata (stato)"
+    "note": "Categoria cov-cat-e563d9 aggiornata (stato)"
    }
   ],
   "categories.reorder": [
@@ -623,7 +623,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "ordine categorie: ['cov-cat-0df201', 'eleganti']"
+    "note": "ordine categorie: ['cov-cat-e563d9', 'eleganti']"
    }
   ],
   "categories.assign_models": [
@@ -635,7 +635,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "categoria cov-cat-0df201 assegnata a 1 modelle"
+    "note": "categoria cov-cat-e563d9 assegnata a 1 modelle"
    }
   ],
   "models.categories.set": [
@@ -647,7 +647,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model 0df201 aggiornata (categorie); stato DRAFT"
+    "note": "Cov Model e563d9 aggiornata (categorie); stato DRAFT"
    }
   ],
   "seo.safe_fix": [
@@ -659,7 +659,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "5 fix SAFE su Cov Model 0df201 (0 saltati)"
+    "note": "5 fix SAFE su Cov Model e563d9 (0 saltati)"
    }
   ],
   "seo.safe_fix_all": [
@@ -685,12 +685,12 @@
    {
     "mode": "preview",
     "result": "PASS",
-    "note": "Anteprima landing 'Landing 0df201' (bozza, 1 modelle)"
+    "note": "Anteprima landing 'Landing e563d9' (bozza, 1 modelle)"
    },
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Landing 'Landing cov 0df201' creata in bozza (landing-cov-0df201)"
+    "note": "Landing 'Landing cov e563d9' creata in bozza (landing-cov-e563d9)"
    }
   ],
   "alerts.resolve": [
@@ -735,7 +735,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Backup creato (cc9355fe-fbd7-4d84-a727-575683854092)"
+    "note": "Backup creato (9980c056-05e7-48bd-8484-1a25f7ea4430)"
    }
   ],
   "system.health_run": [
@@ -747,21 +747,21 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Health ok: 0 check non ok, alert risolti []"
+    "note": "Health warn: 1 check non ok, alert risolti []"
    }
   ],
   "rollback.window": [
    {
     "mode": "preview",
     "result": "PASS",
-    "note": "Anteprima: 2 modifiche su francesca-rossi verrebbero annullate"
+    "note": "Anteprima: 1 modifiche su francesca-rossi verrebbero annullate"
    }
   ],
   "models.prepare_complete": [
    {
     "mode": "preview",
     "result": "PASS",
-    "note": "Anteprima workflow 'Anteprima 0df201': bozza + 1 campi SAFE + 1 campi REVIEW (approvazione) + 1 media + SEO safe + validate (nessuna pubblicazione, nessuna scrittura)"
+    "note": "Anteprima workflow 'Anteprima e563d9': bozza + 0 campi SAFE + 1 campi REVIEW (una approvazione) + 1 media + SEO safe + validate (nessuna pubblicazione, nessuna scrittura)"
    }
   ],
   "media.upload_url": [
@@ -773,7 +773,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media caricato:  (image); assegnato a public_photo_3 di Cov Model 0df201"
+    "note": "Media caricato:  (image); assegnato a public_photo_3 di Cov Model e563d9"
    }
   ],
   "READ_ONLY enforcement": [
@@ -787,7 +787,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Bozza 'Cov Model 0df201' creata (slug cov-model-0df201); stato DRAFT"
+    "note": "Bozza 'Cov Model e563d9' creata (slug cov-model-e563d9); stato DRAFT"
    }
   ],
   "models.update (REVIEW\u2192approval)": [
@@ -801,28 +801,28 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Cov Model 0df201 aggiornata (frase, onlyfans_url); stato DRAFT"
+    "note": "Cov Model e563d9 aggiornata (frase, onlyfans_url); stato DRAFT"
    }
   ],
   "media.assign (video\u2192filmstrip pair)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media assegnato a public_video_1 di Cov Model 0df201"
+    "note": "Media assegnato a public_video_1 di Cov Model e563d9"
    }
   ],
   "media.assign (filmstrip_public)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Media assegnato a filmstrip_public di Cov Model 0df201"
+    "note": "Media assegnato a filmstrip_public di Cov Model e563d9"
    }
   ],
   "seo.audit (test model)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "SEO Cov Model 0df201: score 95 \u2014 {'SAFE_AUTO_FIX': 5, 'REVIEW_REQUIRED': 0, 'CRITICAL': 0}"
+    "note": "SEO Cov Model e563d9: score 95 \u2014 {'SAFE_AUTO_FIX': 5, 'REVIEW_REQUIRED': 0, 'CRITICAL': 0}"
    }
   ],
   "seo.fix_issue": [
@@ -836,7 +836,7 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Landing landing-cov-0df201 (bozza), validazione 79"
+    "note": "Landing landing-cov-e563d9 (bozza), validazione 79"
    }
   ],
   "landing.validate": [
@@ -850,21 +850,21 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Landing landing-cov-0df201 aggiornata (subtitle)"
+    "note": "Landing landing-cov-e563d9 aggiornata (subtitle)"
    }
   ],
   "landing.unpublish": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Landing landing-cov-0df201 in bozza"
+    "note": "Landing landing-cov-e563d9 in bozza"
    }
   ],
   "landing.publish (validator/approval)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Landing landing-cov-0df201 pubblicata"
+    "note": "Landing landing-cov-e563d9 pubblicata"
    }
   ],
   "models.publish (dry, test model)": [
@@ -878,35 +878,35 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "cov-model-0df201 eliminata logicamente (recuperabile)"
+    "note": "cov-model-e563d9 eliminata logicamente (recuperabile)"
    }
   ],
   "models.undelete": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "cov-model-0df201 recuperata (bozza)"
+    "note": "cov-model-e563d9 recuperata (bozza)"
    }
   ],
   "rollback.version": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Rollback eseguito su model 6bd1b949-679b-4bb3-bf49-720255b7d845 (nuova versione None)"
+    "note": "Rollback eseguito su model 5dce6f36-9565-4a01-896f-d1a573bbe21e (nuova versione None)"
    }
   ],
   "rollback.window (dry)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Anteprima: 36 modifiche su cov-model-0df201 verrebbero annullate"
+    "note": "Anteprima: 36 modifiche su cov-model-e563d9 verrebbero annullate"
    }
   ],
   "rollback.session (gruppo A)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Sessione ses_covA_0df201: 44 modifiche annullate, 17 effetti secondari ripristinati, 0 errori (storia e audit conservati)"
+    "note": "Sessione ses_covA_e563d9: 44 modifiche annullate, 17 effetti secondari ripristinati, 0 errori (storia e audit conservati)"
    }
   ],
   "flags.set (REVIEW\u2192approve)": [
@@ -934,42 +934,42 @@
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Categoria cov-cat-0df201 aggiornata (stato)"
+    "note": "Categoria cov-cat-e563d9 aggiornata (stato)"
    }
   ],
   "seo.redirect.create (REVIEW\u2192approve)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Redirect /vecchia-0df201 \u2192 /modelle/francesca-rossi creato"
+    "note": "Redirect /vecchia-e563d9 \u2192 /modelle/francesca-rossi creato"
    }
   ],
   "seo.redirect.delete (REVIEW\u2192approve)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Redirect /vecchia-0df201 disattivato"
+    "note": "Redirect /vecchia-e563d9 disattivato"
    }
   ],
   "rollback.session (gruppo B)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Sessione ses_covB_0df201: 21 modifiche annullate, 0 effetti secondari ripristinati, 0 errori (storia e audit conservati)"
+    "note": "Sessione ses_covB_e563d9: 21 modifiche annullate, 0 effetti secondari ripristinati, 0 errori (storia e audit conservati)"
    }
   ],
   "jobs.run (health_check)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Job health_check: ok in 1133 ms"
+    "note": "Job health_check: ok in 1076 ms"
    }
   ],
   "jobs.run (media_check)": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Job media_check: ok in 3183 ms"
+    "note": "Job media_check: ok in 3023 ms"
    }
   ],
   "jobs.pause (REVIEW\u2192approve)": [
@@ -979,18 +979,25 @@
     "note": "Job seo_scan in pausa"
    }
   ],
-  "alerts.ack / alerts.inspect / alerts.resolve": [
+  "alerts.inspect": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "nessun alert aperto in preview (health ok): verificate solo anteprime/letture"
+    "note": "Alert health:tracking: open (warning)"
+   }
+  ],
+  "alerts.ack (dry)": [
+   {
+    "mode": "full",
+    "result": "PASS",
+    "note": "Anteprima: alert health:tracking verrebbe preso in carico"
    }
   ],
   "backup.verify": [
    {
     "mode": "full",
     "result": "PASS",
-    "note": "Backup cc9355fe-fbd7-4d84-a727-575683854092 del 2026-09-11T11:43: 13 collection, integrit\u00e0 OK"
+    "note": "Backup 9980c056-05e7-48bd-8484-1a25f7ea4430 del 2026-09-13T11:34: 13 collection, integrit\u00e0 OK"
    }
   ],
   "backup.restore_plan": [
@@ -1012,32 +1019,58 @@
   "prepare_complete": {
    "status": 200,
    "ok": true,
-   "summary": "'TEST GIULIA' preparata (slug test-giulia, stato INCOMPLETE, NON pubblicata): 12 passi ok, 9 versioni, 6 campi REVIEW in attesa di approvazione. Mancano: 3 foto Lato Pubblico, 3 foto Lato Segreto, Video segreto 1, Claim, Descrizione pubblica, Descrizione Lato Segreto, Link OnlyFans, Video Pellicola segreto",
+   "summary": "'TEST GIULIA' preparata (slug test-giulia, stato INCOMPLETE, NON pubblicata): 12 passi ok, 13 versioni, 18 campi SAFE applicati, 7 campi REVIEW preparati in 1 approvazione. Mancano solo: media 4 \u00b7 dati reali 1 \u00b7 in approvazione 7",
    "steps": [
     {
      "step": "models.create",
      "ok": true,
      "slug": "test-giulia",
-     "version_id": "81688219-65c1-4616-8073-57251bc00ab1"
+     "version_id": "c9b12a2f-b0e6-4b7f-8956-311922ff88d7"
     },
     {
-     "step": "models.update",
+     "step": "models.update (SAFE)",
      "ok": true,
      "fields": [
-      "badge",
       "badge_tipo",
       "categorie",
-      "conferma_maggiorenne",
-      "cta_temporizzata",
       "cta_testo",
-      "messaggio_35s",
-      "regia",
-      "social",
+      "messaggio_35s.attivo",
+      "messaggio_35s.testo",
+      "messaggio_35s.timer",
+      "regia.audio.traccia",
+      "seo.alt_default",
+      "seo.keywords",
+      "seo.topics",
+      "social.instagram",
+      "social.tiktok",
       "tag",
       "teaser_copy",
-      "tema"
+      "tema.frase_attivazione",
+      "tema.glow",
+      "tema.grain",
+      "tema.preset"
      ],
-     "version_id": "9d363955-77c4-4fdf-bb18-6d31357c17d2"
+     "applied": [
+      "badge_tipo",
+      "categorie",
+      "cta_testo",
+      "messaggio_35s.attivo",
+      "messaggio_35s.testo",
+      "messaggio_35s.timer",
+      "regia.audio.traccia",
+      "seo.alt_default",
+      "seo.keywords",
+      "seo.topics",
+      "social.instagram",
+      "social.tiktok",
+      "tag",
+      "teaser_copy",
+      "tema.frase_attivazione",
+      "tema.glow",
+      "tema.grain",
+      "tema.preset"
+     ],
+     "version_id": "2822e8e3-71b5-4d9f-8951-3b4b91fb0426"
     },
     {
      "step": "models.update (REVIEW)",
@@ -1049,63 +1082,96 @@
       "frase",
       "nome_artistico",
       "onlyfans_url",
-      "seo"
+      "seo.meta_description",
+      "seo.title"
      ],
-     "approval_id": "110a9a57-a88d-4387-a895-1e039fd249ff"
+     "approval_id": "ddd8c148-98cb-4d62-8a01-a808499d1cfc"
     },
     {
      "step": "media.assign",
      "ok": true,
      "slot": "card",
-     "version_id": "08aa31a8-7e78-440b-947d-a72caed2e7f8"
+     "version_id": "7a4811d7-6944-4a5b-a32e-23ca2fe2f2fe"
     },
     {
      "step": "media.assign",
      "ok": true,
      "slot": "cover",
-     "version_id": "e064c9f8-4605-4422-a009-abec6488f7fa"
+     "version_id": "5efd61f8-6b31-42bf-bd40-460185509607"
     },
     {
      "step": "media.assign",
      "ok": true,
      "slot": "public_photo_1",
-     "version_id": "9d738164-d27d-4026-8e55-c09e8dfbb9d5"
+     "version_id": "fbc3b23d-f888-4dea-9474-aa12446fe149"
     },
     {
      "step": "media.assign",
      "ok": true,
      "slot": "secret_photo_1",
-     "version_id": "ad93c358-7f29-4ded-b644-5b6693b8a473"
+     "version_id": "29a1088d-de34-4c70-a874-6b32d0102c79"
     },
     {
      "step": "media.assign",
      "ok": true,
      "slot": "secret_hero",
-     "version_id": "53b16dc9-cb63-42d8-9d52-cfaeb8df33ff"
+     "version_id": "4dfbf7c2-f39d-434b-abef-773f2b28227b"
     },
     {
      "step": "media.assign",
      "ok": true,
      "slot": "public_video_1",
-     "version_id": "ee47fd18-2027-4fc2-9c37-e315fd938402"
+     "version_id": "eee0cf96-48db-4f74-94c0-26affe7bc059"
     },
     {
      "step": "media.assign",
      "ok": true,
      "slot": "filmstrip_public",
-     "version_id": "22d6ea01-6361-47c6-9aef-2656b42891df"
+     "version_id": "3796df77-7408-4f2d-95d2-3630a6836564"
     },
     {
-     "step": "seo.safe_fix",
+     "step": "seo.audit + seo.safe_fix",
      "ok": true,
-     "fixes": 0,
-     "skipped": 0
+     "fixes": 4,
+     "fixed": [
+      {
+       "code": "MISSING_ALT_MEDIA",
+       "field": "media_pairs[].alt",
+       "version_id": "7b1c63f0-0461-4292-af0b-1a25c2450414"
+      },
+      {
+       "code": "MISSING_CANONICAL",
+       "field": "seo.canonical",
+       "version_id": "4057e9b2-ed28-4927-8454-d7665fabdfd1"
+      },
+      {
+       "code": "MISSING_OG_IMAGE",
+       "field": "seo.og_image",
+       "version_id": "98cff899-2393-4dfb-81a4-af2a6d820502"
+      },
+      {
+       "code": "MISSING_OG_TITLE",
+       "field": "seo.og_title",
+       "version_id": "a8b9e8eb-4284-4ac6-8c10-9f12a0946697"
+      }
+     ],
+     "deferred_to_review": [
+      {
+       "code": "MISSING_META_DESCRIPTION",
+       "field": "seo.meta_description",
+       "reason": "valore gi\u00e0 preparato nella approval REVIEW"
+      }
+     ],
+     "skipped": [],
+     "seo_review_issues_open": 0,
+     "canonical": "derivabile"
     },
     {
      "step": "models.validate",
      "ok": true,
      "ready": false,
      "missing": [
+      "Creator maggiorenne confermata",
       "3 foto Lato Pubblico",
       "3 foto Lato Segreto",
       "Video segreto 1",
@@ -1120,7 +1186,7 @@
    "approval_required": true
   },
   "model": {
-   "id": "c38e86be-ea59-411b-b2bb-c1e66733cd06",
+   "id": "4abf179d-a593-47d8-ab52-6ea7f5bf4e28",
    "slug": "test-giulia",
    "workflow_status": "INCOMPLETE",
    "published": false,
@@ -1142,6 +1208,11 @@
    "workflow_status": "INCOMPLETE",
    "errors": [
     {
+     "code": "AGE_CONFIRMATION_MISSING",
+     "field": "Creator maggiorenne confermata",
+     "message": "Manca: Creator maggiorenne confermata"
+    },
+    {
      "code": "PUBLIC_PHOTOS_LT_3",
      "field": "3 foto Lato Pubblico",
      "message": "Manca: 3 foto Lato Pubblico"
@@ -1162,19 +1233,9 @@
      "message": "Manca: Video Pellicola segreto"
     }
    ],
-   "warnings": [
-    {
-     "code": "SEO_OG_IMAGE_MISSING",
-     "field": "seo.og_image",
-     "message": "Immagine OpenGraph mancante"
-    },
-    {
-     "code": "ALT_MISSING",
-     "field": "media_pairs[1].pubblico.alt",
-     "message": "ALT mancante su media 2 (pubblico)"
-    }
-   ],
+   "warnings": [],
    "missing": [
+    "Creator maggiorenne confermata",
     "3 foto Lato Pubblico",
     "3 foto Lato Segreto",
     "Video segreto 1",
@@ -1184,7 +1245,7 @@
    "capability_version": "1.0",
    "risk": "SAFE",
    "dry_run": false,
-   "session_id": "ses_e784f3b5353c",
+   "session_id": "ses_8cc567b15bab",
    "mode": "FULL",
    "rollback": {
     "available": false,
@@ -1193,10 +1254,10 @@
    },
    "target": {
     "type": "model",
-    "id": "c38e86be-ea59-411b-b2bb-c1e66733cd06",
+    "id": "4abf179d-a593-47d8-ab52-6ea7f5bf4e28",
     "slug": "test-giulia",
     "nome": "Test Giulia",
-    "etag": "2026-09-11T11:43:10.818548+00:00"
+    "etag": "2026-09-13T11:34:11.217079+00:00"
    }
   },
   "state_after_prepare": {
@@ -1205,15 +1266,9 @@
    "onlyfans": "https://onlyfans.com/testgiulia12a",
    "preset": "bordeaux",
    "regia_audio": {
-    "traccia": "velluto-nero",
-    "volume": 0.25,
-    "attiva": true
+    "traccia": "velluto-nero"
    },
-   "cta": {
-    "attiva": true,
-    "ritardo_secondi": 20,
-    "testo": "Continua con me"
-   },
+   "cta": {},
    "social": {
     "instagram": "https://instagram.com/testgiulia",
     "tiktok": "https://tiktok.com/@testgiulia"
@@ -1259,24 +1314,46 @@
   },
   "not_public": true,
   "rollback_plan": {
-   "versions": 12,
+   "versions": 16,
    "secondary": 7
   },
   "rollback": {
    "status": 200,
-   "summary": "Sessione ses_giulia_0df201: 12 modifiche annullate, 8 effetti secondari ripristinati, 0 errori (storia e audit conservati)",
-   "done": 12,
+   "summary": "Sessione ses_giulia_e563d9: 16 modifiche annullate, 13 effetti secondari ripristinati, 0 errori (storia e audit conservati)",
+   "done": 16,
    "side_effects": [
     {
+     "kind": "seo_issue_reopened",
+     "issue_id": "4894fac2-d3ce-41e4-93e4-d51e4466480d"
+    },
+    {
+     "kind": "seo_issue_reopened",
+     "issue_id": "4bfeff4f-175b-4998-8bf7-0a22142f74e3"
+    },
+    {
+     "kind": "seo_issue_reopened",
+     "issue_id": "b89dfd38-9031-44e8-828d-86ced8f990de"
+    },
+    {
+     "kind": "seo_issue_reopened",
+     "issue_id": "e234e8e8-e652-4d6c-9ee1-0a5bc3c37e33"
+    },
+    {
+     "kind": "seo_issues_resolved",
+     "entity": "model",
+     "entity_id": "4abf179d-a593-47d8-ab52-6ea7f5bf4e28",
+     "count": 5
+    },
+    {
      "kind": "file_links_cleared",
-     "model_id": "c38e86be-ea59-411b-b2bb-c1e66733cd06",
+     "model_id": "4abf179d-a593-47d8-ab52-6ea7f5bf4e28",
      "count": 3
     },
     {
      "kind": "file_link_restored",
      "file_id": "ccae8058-187a-4fac-8a00-b49440a2d0fe",
      "to": {
-      "model_id": "c38e86be-ea59-411b-b2bb-c1e66733cd06",
+      "model_id": "4abf179d-a593-47d8-ab52-6ea7f5bf4e28",
       "slot": "public_video_1"
      }
     },
@@ -1292,7 +1369,7 @@
      "kind": "file_link_restored",
      "file_id": "1e08a563-5f1d-4723-ae56-f52000b56628",
      "to": {
-      "model_id": "c38e86be-ea59-411b-b2bb-c1e66733cd06",
+      "model_id": "4abf179d-a593-47d8-ab52-6ea7f5bf4e28",
       "slot": "secret_photo_1"
      }
     },
@@ -1300,7 +1377,7 @@
      "kind": "file_link_restored",
      "file_id": "1e08a563-5f1d-4723-ae56-f52000b56628",
      "to": {
-      "model_id": "c38e86be-ea59-411b-b2bb-c1e66733cd06",
+      "model_id": "4abf179d-a593-47d8-ab52-6ea7f5bf4e28",
       "slot": "cover"
      }
     },
@@ -1308,7 +1385,7 @@
      "kind": "file_link_restored",
      "file_id": "d5f02f70-bb02-417e-87fc-5083ff539723",
      "to": {
-      "model_id": "c38e86be-ea59-411b-b2bb-c1e66733cd06",
+      "model_id": "4abf179d-a593-47d8-ab52-6ea7f5bf4e28",
       "slot": "card"
      }
     },
@@ -1361,8 +1438,8 @@
   "model_soft_deleted": true,
   "history_preserved": {
    "versions_total_grew": true,
-   "model_versions": 24,
-   "rolled_back_flags": 12,
+   "model_versions": 32,
+   "rolled_back_flags": 16,
    "ai_actions_session": 5,
    "actions_total_grew": true
   },
@@ -1487,7 +1564,7 @@
   }
  ],
  "notes": [
-  "RATE_LIMITED on landing.unpublish: waited 11s"
+  "RATE_LIMITED on landing.unpublish: waited 19s"
  ],
  "final_mode_read_only": true,
  "temp_key_revoked": true,
@@ -1495,18 +1572,18 @@
   "models": 3,
   "files": 4,
   "file_versions": 3,
-  "seo_issues": 5,
+  "seo_issues": 10,
   "landings": 1,
   "categories": 1,
   "redirects": 1,
-  "versions": 114,
+  "versions": 122,
   "api_key": 1
  },
  "totals": {
-  "checks": 156,
-  "pass": 156,
+  "checks": 157,
+  "pass": 157,
   "fail": 0,
-  "capabilities_touched": 112,
+  "capabilities_touched": 113,
   "hash_checks_identical": true
  }
 }

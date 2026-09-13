@@ -1,30 +1,30 @@
 [
   {
-    "content": "Audit GOOGLE SEO CORE",
+    "content": "Audit form editor + schemas + v1_models + prepare_complete handler; write PREPARE_COMPLETE_MATRIX.md",
     "status": "completed"
   },
   {
-    "content": "backend/google_search package",
+    "content": "Explicit parameters_schema.fields + example_parameters for models.prepare_complete",
     "status": "completed"
   },
   {
-    "content": "Sitemap unificata + dirty + job",
+    "content": "Fix orchestrator: apply all non-media fields, SAFE/REVIEW split by path, SEO audit+safe fix, truthful readiness",
     "status": "completed"
   },
   {
-    "content": "7 capabilities Phase 13 (104 bound)",
+    "content": "E2E controlled test on ZZTEST draft (session, rollback, no publish, cleanup)",
     "status": "completed"
   },
   {
-    "content": "Frontend LandingPage /l/:slug + canonical",
+    "content": "GPT-contract HTTP test with parameters.fields (update expectations)",
     "status": "completed"
   },
   {
-    "content": "Tests phase13 7/7 + regressioni verdi + lint/esbuild",
+    "content": "Regressions Phase 12 + contract + smoke; update plan.md",
     "status": "completed"
   },
   {
-    "content": "Report PHASE 13 + istruzioni Service Account",
+    "content": "deployment_agent check",
     "status": "completed"
   }
 ]

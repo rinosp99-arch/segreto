@@ -77,13 +77,20 @@ try:
     # ---------------------------------------------------------------- GPT flow: getCapability -> request_example -> preview
     r = S.get(f"{BASE}/api/v2/ai/capabilities/models.prepare_complete", headers=K, timeout=60)
     meta = j(r)["data"]
-    ok("getCapability: required_parameters=['nome'], example_parameters={'nome': 'TEST V2 GIULIA'}, request_example present", r.status_code == 200 and meta["required_parameters"] == ["nome"] and meta["example_parameters"] == {"nome": NAME} and meta["request_example"]["action"] == "models.prepare_complete" and meta["request_example"]["parameters"] == {"nome": NAME} and meta["request_example"]["dry_run"] is True, {k: meta.get(k) for k in ("required_parameters", "example_parameters", "request_example")})
+    ex = meta.get("example_parameters") or {}
+    fsch = ((meta.get("parameters_schema") or {}).get("properties") or {}).get("fields") or {}
+    ok("getCapability: required_parameters=['nome'], COMPLETE example_parameters (nome + fields{frase,bio,bio_segreta,tema,regia,cta_temporizzata,messaggio_35s,seo,...} + seo_safe_fix), request_example present",
+       r.status_code == 200 and meta["required_parameters"] == ["nome"] and ex.get("nome") and ex.get("seo_safe_fix") is True and set(ex.get("fields") or {}) >= {"frase", "bio", "bio_segreta", "teaser_copy", "cta_testo", "categorie", "tag", "badge", "tema", "regia", "cta_temporizzata", "messaggio_35s", "seo"}
+       and meta["request_example"]["action"] == "models.prepare_complete" and meta["request_example"]["parameters"] == ex and meta["request_example"]["dry_run"] is True, {k: meta.get(k) for k in ("required_parameters",)})
+    ok("getCapability: parameters_schema.fields is EXPLICIT (properties with type/description, nested tema/regia/seo/cta_temporizzata/messaggio_35s, enums/ranges)",
+       fsch.get("type") == "object" and set(fsch.get("properties") or {}) >= {"frase", "bio", "bio_segreta", "tema", "regia", "cta_temporizzata", "messaggio_35s", "seo", "categorie", "tag", "badge", "teaser_copy", "cta_testo", "slug", "nome_artistico", "pellicola_home", "social", "onlyfans_url"}
+       and "properties" in fsch["properties"]["regia"] and "properties" in fsch["properties"]["seo"] and fsch["properties"]["regia"]["properties"]["fumo"].get("maximum") == 100 and "enum" in fsch["properties"]["badge"] and "og_image" not in fsch["properties"]["seo"]["properties"] and "stato" not in fsch["properties"], sorted(fsch.get("properties") or {}))
     ok("getCapability: how_to_call + execute_access none / preview_access preview_only for READ_ONLY key", "parameters" in meta.get("how_to_call", "") and meta["execute_access"] == "none" and meta["preview_access"] == "preview_only")
     req = dict(meta["request_example"])            # exactly what a GPT copies
     req["reason"] = "gpt contract test"
     r = post("/api/v2/ai/preview", req)
     A = j(r)
-    ok("A. previewCapability with request_example (parameters.nome) -> 200, plan for TEST V2 GIULIA, publishes=false", r.status_code == 200 and A.get("ok") and A["data"]["dry_run"] is True and NAME in A["summary"] and A["data"]["publishes"] is False, r.text[:200])
+    ok("A. previewCapability with request_example (parameters.nome + full fields) -> 200 dry_run, publishes=false, every field classified SAFE or REVIEW (none silently lost)", r.status_code == 200 and A.get("ok") and A["data"]["dry_run"] is True and ex["nome"] in A["summary"] and A["data"]["publishes"] is False and not A["data"].get("fields_dropped") and len(A["data"].get("fields_safe_paths", [])) >= 25 and len(A["data"].get("fields_review_paths", [])) >= 5, r.text[:300])
     # user's exact body form (capability alias + target null + session_id null)
     r = post("/api/v2/ai/preview", {"capability": "models.prepare_complete", "target": None, "parameters": {"nome": NAME}, "dry_run": True, "reason": "...", "session_id": None})
     ok("A2. user body form {capability, target:null, parameters:{nome}, dry_run, reason, session_id:null} -> 200", r.status_code == 200 and j(r).get("ok") and j(r)["action"] == "models.prepare_complete", r.text[:200])
@@ -91,7 +98,7 @@ try:
     r = post("/api/v2/ai/preview", {"action": "models.prepare_complete", "parameters": {}, "dry_run": True})
     B = j(r)
     det = B.get("data", B)
-    ok("B. missing nome -> 422 VALIDATION_FAILED missing=['nome'] + received body echoed + request_example", r.status_code == 422 and code(r) == "VALIDATION_FAILED" and det.get("missing") == ["nome"] and det.get("received", {}).get("parameters") == {} and det.get("request_example", {}).get("parameters") == {"nome": NAME}, r.text[:300])
+    ok("B. missing nome -> 422 VALIDATION_FAILED missing=['nome'] + received body echoed + request_example", r.status_code == 422 and code(r) == "VALIDATION_FAILED" and det.get("missing") == ["nome"] and det.get("received", {}).get("parameters") == {} and (det.get("request_example", {}).get("parameters") or {}).get("nome") and "fields" in det.get("request_example", {}).get("parameters", {}), r.text[:300])
     r = post("/api/v2/ai/preview", {"action": "models.prepare_complete", "dry_run": True})
     ok("B2. parameters absent entirely -> 422 missing=['nome'] (received.parameters=null)", r.status_code == 422 and j(r).get("data", {}).get("missing") == ["nome"] and j(r)["data"]["received"]["parameters"] is None, r.text[:200])
     # audited with the received body (redacted): visible in the activity log

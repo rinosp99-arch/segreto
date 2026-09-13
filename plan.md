@@ -279,3 +279,18 @@ Invarianti:
   6) regressioni Phase 12 e API v1/v2 PASS
 
 **Chiusura 13 (11/09, preview):** modulo `backend/google_search/` (config env-only, auth SA, client retry/log, mock, service), 4 collection + indici, sitemap unificata con lastmod/landing-flag/dedupe + `sitemap_dirty` (publish/unpublish/slug/canonical) + job `google_sitemap_sync` (debounce 6h), 7 capability (`google.status`, `google.sitemap.sync`, `google.url.inspect`, `google.analytics.summary`, `google.analytics.queries`, `seo.indexability`, `growth.prepare_model`) → registry 104/104 bound, frontend `LandingPage` `/l/:slug` + canonical pulito. Test `test_phase13_google_core.py` 7/7 + regressioni tutte verdi; harness produzione esteso (sezione p13). Audit: produzione senza X-Robots noindex, robots ok, sitemap ok; preview è noindex per piattaforma (atteso). Google NON ancora configurato: servono service account + variabili env (vedi CHATGPT_API.md §B) e aggiunta del SA alla proprietà GSC. Flag `public_landing_routes` OFF in produzione fino a decisione utente.
+
+---
+
+## Phase 12B — FIX DEFINITIVO `models.prepare_complete` compila TUTTO il formulario (Status: COMPLETED in preview, 13/09)
+Bug reale (FLAVIA RUSSO): applicati solo badge/categorie/tag/CTA; SEO/bio/timing non compilati. Cause trovate:
+1. split SAFE/REVIEW per **root** (`seo` intero in REVIEW perché `seo.title` è REVIEW → keywords/topics/alt/og mai applicati);
+2. `seo.safe_fix` applicava solo issue già presenti in `seo_issues` → su bozza nuova (mai auditata) 0 fix;
+3. `parameters_schema.fields` opaco + `MODEL_FIELDS_DOC` con nomi errati (`ritardo_secondi`, `audio.volume`…) → GPT non sapeva cosa inviare / inviava chiavi sbagliate accettate nei dict liberi (`regia`, `cta_temporizzata`);
+4. readiness indistinta (media vs dati reali vs review).
+Fix (solo questa capability, nessuna feature nuova):
+- `backend/v1_prepare_fields.py` (nuovo): schema esplicito `PREPARE_FIELDS_SCHEMA` (FORM→DB, tipi, enum, range, esempi), filtro deterministico (media/stato/conferma_maggiorenne/chiavi sconosciute → `fields_dropped` con motivo), split per **path**, `readiness_breakdown` (MISSING_MEDIA / MISSING_REAL_DATA / PENDING_REVIEW / missing_text_not_provided), `EXAMPLE_FIELDS_FULL`.
+- `backend/v1_capabilities.py`: workflow riscritto — 1 chiamata = 1 session: create → tutti i SAFE path in 1 patch → tutti i REVIEW path in **una** approval (con meta/og description derivate dalla bio proposta) → media → `run_audit(entity)` + `apply_issue_fix` per ogni SAFE issue (esclusi i campi già in approval) → readiness veritiera. `example_parameters` completo. `MODEL_FIELDS_DOC` corretto. Bindings estesi.
+- Matrice formale: `/app/PREPARE_COMPLETE_MATRIX.md`.
+- Test: `tests/test_prepare_complete_full_form.py` 3/3 (fixture `ZZTEST PREPARE …`, 37 path SAFE applicati, 8+2 REVIEW in 1 approval, approve senza perdita SAFE, altri modelli intatti, no publish, rollback.session → soft-delete, cleanup); `gpt_action_contract_v2.py` 35/35 (aggiornato per example_parameters completo); Phase 12 + 13 pytest 32/32; smoke 35/35; bindings 30/30; coverage 157/157. FLAVIA RUSSO non toccata (3 approval pendenti intatte).
+- Da fare dall'utente: deploy in produzione, poi rilanciare `models.prepare_complete` su FLAVIA RUSSO (riuso bozza esistente per nome esatto: applica SAFE + 1 approval REVIEW).

@@ -353,9 +353,9 @@ async def settings_change(ctx: Ctx, changes: dict, reason: str, allowed: set) ->
 # =====================================================================================================================
 MODEL_FIELDS_DOC = ("nome, nome_artistico, slug(R), frase(R), bio(R), bio_segreta(R), teaser_copy, categorie[], tag[], badge, badge_tipo, onlyfans_url(R), cta_testo, "
                     "tema{preset, colore_primario, colore_secondario, grain, glow, sfondo_stile, frase_attivazione, testo_dopo_click, effetti_touch}, "
-                    "messaggio_35s{attivo, ritardo_secondi, testo, foto, video, timer}, seo{title(R), meta_description(R), canonical(R), robots(R), indexable(R), keywords, topics, alt_default, og_image, schema_data}, "
-                    "regia{fumo, luci, glow, movimento, audio{traccia, volume, attiva}}, cta_temporizzata{attiva, ritardo_secondi, testo}, social{instagram, tiktok, telegram, x, sito}, "
-                    "pellicola_home{attiva, priorita, ordine, pubblico{video_url, poster_url}, segreto{video_url, poster_url}}, ordine, conferma_maggiorenne. (R)=richiede approvazione")
+                    "messaggio_35s{attivo, timer, testo, cta_testo, foto, video}, seo{title(R), meta_description(R), canonical(R), robots(R), indexable(R), keywords[], topics[], alt_default, og_title, og_description, og_image, structured_data_type}, "
+                    "regia{preset, fumo, luci, glow, movimento, audio{ambiente, traccia, volume_ambiente, volume_effetto}}, cta_temporizzata{attivo, ritardo, testo_intro, testo_pulsante}, social{instagram, tiktok, x, telegram, youtube, facebook, threads, snapchat, sito}, "
+                    "pellicola_home{attiva, priorita, ordine, pubblico{video_url, poster_url}, segreto{video_url, poster_url}}, ordine, conferma_maggiorenne. (R)=richiede approvazione. Nomi esatti: getCapability('models.prepare_complete').parameters_schema.fields")
 
 
 @cap("models.list", "models", "Elenca le modelle con stato workflow, opzionalmente filtrate per stato/categoria/tag.", ["models:read"], read_only=True,
@@ -1704,36 +1704,78 @@ async def _rb_window(ctx: Ctx):
 
 
 # =====================================================================================================================
-# WORKFLOW: models.prepare_complete
+# WORKFLOW: models.prepare_complete — the ONE model-creation workflow (matrix: /app/PREPARE_COMPLETE_MATRIX.md)
 # =====================================================================================================================
-@cap("models.prepare_complete", "workflow", "Workflow deterministico: crea (o usa) la bozza → compila i campi → assegna media agli slot → fix SEO SAFE → ALT default → valida → readiness. NON pubblica mai. Tutto sotto lo stesso session_id (annullabile con rollback.session).",
+from v1_prepare_fields import (PREPARE_FIELDS_SCHEMA, EXAMPLE_FIELDS_FULL, filter_prepare_fields, split_by_review_paths, flatten_paths as _paths,
+                               readiness_breakdown, MEDIA_LABELS as _MEDIA_LABELS)
+
+_PREPARE_EXAMPLE_FULL = {"action": "models.prepare_complete", "parameters": {"nome": "Giulia Rossi", "fields": EXAMPLE_FIELDS_FULL, "seo_safe_fix": True},
+                         "reason": "Crea la bozza completa (tutti i campi testuali/configurazione); foto/video e link reali li aggiunge l'utente"}
+
+
+def _seo_trunc(text: str, n: int) -> str:
+    text = " ".join((text or "").split())
+    if len(text) <= n:
+        return text
+    cut = text[:n].rsplit(" ", 1)[0]
+    return cut.rstrip(" ,;:") + "…"
+
+
+def _derive_review_seo(doc: dict, review: dict, provided: set) -> dict:
+    """SEO values that depend on REVIEW text (bio) and were not provided: prepared INSIDE the same approval instead of writing a weak
+    placeholder from an empty bio. Deterministic, same rule as v1_seo.audit_model (MISSING_META_DESCRIPTION)."""
+    name = (review.get("nome_artistico") or doc.get("nome_artistico") or doc.get("nome") or "Creator").strip()
+    seo_now = doc.get("seo") or {}
+    out = {}
+    bio = (review.get("bio") or "").strip()
+    if bio and "seo.meta_description" not in provided and not (seo_now.get("meta_description") or "").strip():
+        out["meta_description"] = _seo_trunc(f"Scopri {name}: {bio}", 155)
+        if "seo.og_description" not in provided and not (seo_now.get("og_description") or "").strip():
+            out["og_description"] = out["meta_description"]
+    return out
+
+
+@cap("models.prepare_complete", "workflow",
+     "UNICO workflow di creazione modella (deterministico): crea/usa la bozza → applica TUTTI i campi non-media del formulario passati in `fields` "
+     "(SAFE subito; REVIEW preparati in una sola approval) → media negli slot (opzionale) → SEO audit + safe fix (title, meta, canonical, robots, keywords, ALT) → readiness veritiera "
+     "(MISSING_MEDIA / MISSING_REAL_DATA / PENDING_REVIEW). NON pubblica mai, non inventa link/foto/età. Una session_id, annullabile con rollback.session.",
      ["models:create", "models:update"], rollback=True,
      conditional_scopes={"media:upload": (lambda p: bool(p.get("media")), "solo se il parametro opzionale `media` è presente"),
                          "seo:safe_fix": (lambda p: p.get("seo_safe_fix", True) is not False, "solo se seo_safe_fix non è false (default true)")},
-     params={"nome": {"type": "string", "required": True}, "fields": {"type": "object"}, "media": {"type": "array", "items": {"type": "object"}, "description": "[{media|url, slot, alt}]"}, "seo_safe_fix": {"type": "boolean", "default": True}},
-     examples=[{"action": "models.prepare_complete", "parameters": {"nome": "TEST V2 GIULIA"}, "dry_run": True},
-               {"action": "models.prepare_complete", "parameters": {"nome": "Giulia Rossi", "fields": {"frase": "Il lato che non mostro a tutti.", "categorie": ["more"], "onlyfans_url": "https://onlyfans.com/giulia_rossi"}, "media": [{"media": "giulia-1.jpg", "slot": "public_photo_1"}]}}],
-     natural=["prepara Giulia completamente ma non pubblicarla", "crea una nuova modella con queste foto e preparala tutta"])
+     params={"nome": {"type": "string", "required": True, "description": "Nome della modella (crea la bozza; se esiste ESATTAMENTE viene riusata)", "example": "Giulia Rossi"},
+             "fields": PREPARE_FIELDS_SCHEMA,
+             "media": {"type": "array", "items": {"type": "object", "properties": {"media": {"type": "string", "description": "id/nome di un media già in libreria"}, "url": {"type": "string", "description": "URL https da scaricare (alternativa a media)"},
+                                                                                   "slot": {"type": "string", "description": "card | cover | teaser | secret_hero | public_photo_1..3 | secret_photo_1..3 | public_video_1..3 | secret_video_1..3 | filmstrip_public | filmstrip_secret | og_image"},
+                                                                                   "alt": {"type": "string"}}},
+                       "description": "Opzionale: media reali già disponibili. MAI inventare URL. Senza media la bozza resta MISSING_MEDIA (foto/video li carica l'utente)."},
+             "seo_safe_fix": {"type": "boolean", "default": True, "description": "true (default): dopo i campi esegue SEO audit + tutte le correzioni SAFE (title, meta, canonical, robots, keywords/topics, ALT, OG). og_image resta MISSING_MEDIA finché non esiste una foto card."}},
+     examples=[_PREPARE_EXAMPLE_FULL,
+               {"action": "models.prepare_complete", "parameters": {"nome": "TEST V2 GIULIA"}, "dry_run": True},
+               {"action": "models.prepare_complete", "parameters": {"nome": "Giulia Rossi", "fields": {"frase": "Il lato che non mostro a tutti.", "categorie": ["more"]}, "media": [{"media": "giulia-1.jpg", "slot": "public_photo_1"}]}}],
+     natural=["prepara Giulia completamente ma non pubblicarla", "crea una nuova modella e compila tutto il formulario tranne foto e link"])
 async def _prepare_complete(ctx: Ctx):
     steps = []
     nome = (ctx.params.get("nome") or "").strip()
     if not nome:
         raise err(422, "VALIDATION_FAILED", "nome obbligatorio")
-    fields = {k: v for k, v in (ctx.params.get("fields") or {}).items() if k in ALLOWED_FIELDS}
-    fields.pop("stato", None)   # the workflow never publishes
+    raw_fields = ctx.params.get("fields") or {}
+    fields, dropped = filter_prepare_fields(raw_fields)
+    provided_paths = set(_paths(fields))
     media = ctx.params.get("media") or []
     cfg = await ai_config()
     cls = classify_model_changes(fields, cfg["policy"]) if fields else {"level": SAFE, "review_fields": []}
-    review_roots = {f.split(".")[0] for f in cls.get("review_fields") or []}
-    safe_fields = {k: v for k, v in fields.items() if k not in review_roots}
-    review_fields = {k: v for k, v in fields.items() if k in review_roots}
+    review_paths = sorted(set(cls.get("review_fields") or []))
+    safe_fields, review_fields = split_by_review_paths(fields, review_paths)
+    safe_paths, rev_paths = sorted(_paths(safe_fields)), sorted(_paths(review_fields))
+    seo_fix = ctx.params.get("seo_safe_fix", True) is not False
+    warnings = [f"fields.{d['path']} ignorato: {d['reason']}" for d in dropped]
+    from sanitize import slugify
+    q_exist = {"is_deleted": {"$ne": True}, "$or": [{"id": nome}, {"slug": slugify(nome)}, {"nome": {"$regex": f"^{re.escape(nome)}$", "$options": "i"}}, {"nome_artistico": {"$regex": f"^{re.escape(nome)}$", "$options": "i"}}]}
     if ctx.dry:
         # READ-ONLY analysis: nothing is created, fetched or written. Media references are validated against the library
         # (URLs are only syntax-checked: no download in preview), slots are parsed with the real slot rules.
-        from sanitize import slugify
-        existing = await models_col.find_one({"is_deleted": {"$ne": True}, "$or": [{"id": nome}, {"slug": slugify(nome)},
-                                                                                 {"nome": {"$regex": f"^{re.escape(nome)}$", "$options": "i"}}, {"nome_artistico": {"$regex": f"^{re.escape(nome)}$", "$options": "i"}}]}, {"_id": 0, "id": 1, "slug": 1, "stato": 1})
-        media_plan, warnings = [], []
+        existing = await models_col.find_one(q_exist, {"_id": 0, "id": 1, "slug": 1, "stato": 1})
+        media_plan = []
         for m in media:
             item = {"slot": m.get("slot"), "ref": m.get("media") or m.get("url")}
             try:
@@ -1756,24 +1798,26 @@ async def _prepare_complete(ctx: Ctx):
                     warnings.append(f"url non valido: {m['url']}")
                 item["note"] = "download e controlli anti-SSRF/magic-bytes avvengono solo all'esecuzione reale"
             media_plan.append(item)
-        seo_fix = ctx.params.get("seo_safe_fix", True) is not False
+        derived = _derive_review_seo(existing or {"nome": nome}, review_fields, provided_paths) if review_fields else {}
+        review_prepared = review_fields if not derived else {**review_fields, "seo": {**(review_fields.get("seo") or {}), **derived}}
         plan = [("models.create" + (f" (saltato: esiste già {existing['slug']})" if existing else f" → bozza '{nome}' (slug {await unique_slug(nome)})"))]
-        if safe_fields:
-            plan.append(f"models.update SAFE ({sorted(safe_fields)})")
+        if safe_paths:
+            plan.append(f"models.update SAFE ({safe_paths})")
         if review_fields:
-            plan.append(f"models.update REVIEW → approvazione ({sorted(review_fields)})")
-        plan += [f"media.assign {m.get('slot')}" for m in media] + (["seo.safe_fix"] if seo_fix else []) + ["models.validate"]
-        return R(f"Anteprima workflow '{nome}': bozza + {len(safe_fields)} campi SAFE + {len(review_fields)} campi REVIEW (approvazione) + {len(media)} media + {'SEO safe + ' if seo_fix else ''}validate (nessuna pubblicazione, nessuna scrittura)",
-                 {"dry_run": True, "would_create": not bool(existing), "existing": existing, "plan": plan, "fields_safe": sorted(safe_fields), "fields_review": sorted(review_fields),
+            plan.append(f"models.update REVIEW → una approval ({sorted(_paths(review_prepared))})")
+        plan += [f"media.assign {m.get('slot')}" for m in media] + (["seo.audit + seo.safe_fix (campi in REVIEW esclusi)"] if seo_fix else []) + ["models.validate"]
+        return R(f"Anteprima workflow '{nome}': bozza + {len(safe_paths)} campi SAFE + {len(rev_paths)} campi REVIEW (una approvazione) + {len(media)} media + {'SEO safe + ' if seo_fix else ''}validate (nessuna pubblicazione, nessuna scrittura)",
+                 {"dry_run": True, "would_create": not bool(existing), "existing": existing, "plan": plan,
+                  "fields_safe": sorted({p.split(".")[0] for p in safe_paths}), "fields_review": sorted({p.split(".")[0] for p in rev_paths}),
+                  "fields_safe_paths": safe_paths, "fields_review_paths": rev_paths, "fields_dropped": dropped,
+                  "review_prepared_values": review_prepared, "safe_values": safe_fields,
                   "media_plan": media_plan, "seo_safe_fix": seo_fix, "publishes": False,
                   "required_scopes_execute": REGISTRY["models.prepare_complete"].required_scopes(ctx.params), "required_scopes_preview": REGISTRY["models.prepare_complete"].required_preview_scopes(ctx.params)},
-                 warnings=warnings, next_steps=["Esegui senza dry_run (modalità FULL) per creare la bozza; i campi REVIEW richiederanno approvazione; annullabile con rollback.session"])
+                 warnings=warnings, next_steps=["Esegui senza dry_run (modalità FULL) per creare la bozza; i campi REVIEW richiederanno UNA approvazione; annullabile con rollback.session"])
     vids: List[str] = []
     secondary: List[dict] = []
     # reuse ONLY an exact match (id / slug / exact name): never a fuzzy hit on a real model
-    from sanitize import slugify
-    existing = await models_col.find_one({"is_deleted": {"$ne": True}, "$or": [{"id": nome}, {"slug": slugify(nome)},
-                                                                             {"nome": {"$regex": f"^{re.escape(nome)}$", "$options": "i"}}, {"nome_artistico": {"$regex": f"^{re.escape(nome)}$", "$options": "i"}}]}, {"_id": 0})
+    existing = await models_col.find_one(q_exist, {"_id": 0})
     if existing:
         doc = existing
         steps.append({"step": "models.create", "skipped": True, "reason": f"esiste già ({doc['slug']})"})
@@ -1784,22 +1828,32 @@ async def _prepare_complete(ctx: Ctx):
         if ver:
             vids.append(ver["id"])
         steps.append({"step": "models.create", "ok": True, "slug": doc["slug"], "version_id": ver["id"] if ver else None})
+    # 1) ALL SAFE paths in one versioned patch (deep-merge: nothing else on the document is touched)
+    applied_paths: List[str] = []
     if safe_fields:
         sub = Ctx(ctx.principal, ctx.request, {}, dry=False, reason="Workflow: campi", session_id=ctx.session_id, approved=False)   # SAFE only: no approval bypass
-        r = await model_change(sub, doc, safe_fields, "Workflow prepare_complete: campi")
+        r = await model_change(sub, doc, safe_fields, "Workflow prepare_complete: campi SAFE")
         vids += r["version_ids"]
-        steps.append({"step": "models.update", "ok": True, "fields": sorted(safe_fields), "version_id": r.get("rollback_ref")})
         doc = await models_col.find_one({"id": doc["id"]}, {"_id": 0})
+        applied_paths = [p for p in safe_paths if str(_get(doc, p)) == str(_get(safe_fields, p))]
+        steps.append({"step": "models.update (SAFE)", "ok": True, "fields": safe_paths, "applied": applied_paths, "version_id": r.get("rollback_ref")})
+    # 2) ALL REVIEW paths fully prepared in ONE approval proposal (models.update on the REVIEW subset, same session_id).
+    #    Derived SEO that depends on REVIEW text (meta/og description from the proposed bio) travels in the same approval.
     approval = None
+    review_prepared: dict = {}
     if review_fields:
-        # REVIEW fields are NOT applied: a real approval proposal (models.update) is created, exactly like a direct models.update would do
-        preview = await patch_model(doc, review_fields, ctx.principal, ctx.request, "Workflow prepare_complete: campi REVIEW", source=ctx.source, dry_run=True)
-        payload = {"action": "models.update", "target": doc["id"], "parameters": {"changes": review_fields}, "reason": "Workflow prepare_complete: campi REVIEW", "session_id": ctx.session_id, "expected_updated_at": None}   # workflow keeps editing the model: don't pin concurrency
-        approval = await create_approval("CAPABILITY", ctx.actor, _tgt(doc), payload, preview["before"], preview["proposed_after"], f"models.update ({', '.join(sorted(review_fields))})", request_id_of(ctx.request))
+        derived = _derive_review_seo(doc, review_fields, provided_paths)
+        review_prepared = review_fields if not derived else {**review_fields, "seo": {**(review_fields.get("seo") or {}), **derived}}
+        preview = await patch_model(doc, review_prepared, ctx.principal, ctx.request, "Workflow prepare_complete: campi REVIEW", source=ctx.source, dry_run=True)
+        payload = {"action": "models.update", "target": doc["id"], "parameters": {"changes": review_prepared}, "reason": "Workflow prepare_complete: campi REVIEW", "session_id": ctx.session_id, "expected_updated_at": None}   # workflow keeps editing the model: don't pin concurrency
+        approval = await create_approval("CAPABILITY", ctx.actor, _tgt(doc), payload, preview["before"], preview["proposed_after"], f"models.update ({', '.join(sorted(_paths(review_prepared)))})", request_id_of(ctx.request))
         approval["id"] = approval.get("approval_id")
         approval["capability"] = "models.update"
         approval["confirm_with"] = f"POST /api/v2/ai/approvals/{approval['id']}/approve {{token}}"
-        steps.append({"step": "models.update (REVIEW)", "ok": True, "pending_approval": True, "fields": sorted(review_fields), "approval_id": approval["id"]})
+        approval["prepared_values"] = review_prepared
+        steps.append({"step": "models.update (REVIEW)", "ok": True, "pending_approval": True, "fields": sorted(_paths(review_prepared)), "approval_id": approval["id"]})
+    pending_paths = sorted(_paths(review_prepared))
+    # 3) media (optional, real references only)
     for m in media:
         try:
             sub = Ctx(ctx.principal, ctx.request, {}, dry=False, reason="Workflow: media", session_id=ctx.session_id, approved=False)
@@ -1825,25 +1879,70 @@ async def _prepare_complete(ctx: Ctx):
             doc = await models_col.find_one({"id": doc["id"]}, {"_id": 0})
         except Exception as e:
             steps.append({"step": "media.assign", "ok": False, "slot": m.get("slot"), "error": str(getattr(e, "detail", e))[:200]})
-    if ctx.params.get("seo_safe_fix", True):
-        from v1_seo import apply_safe_fixes
-        r = await apply_safe_fixes(scope="models", entity_id=doc["id"], actor=ctx.actor, request_id=request_id_of(ctx.request), source=ctx.source, dry_run=False)
-        n_fix, v_ids, _ = _safe_fix_view(r)
-        vids += v_ids
-        steps.append({"step": "seo.safe_fix", "ok": True, "fixes": n_fix, "skipped": r.get("skipped", 0)})
+    # 4) SEO: a fresh draft has NO open issues until audited -> audit THIS entity, then apply every SAFE fix, except the
+    #    fields already prepared in the REVIEW approval (they would be overwritten by the approval anyway: no double write).
+    if seo_fix:
+        from v1_seo import run_audit, apply_issue_fix, SAFE as SEO_SAFE, REVIEW as SEO_REVIEW
+        await run_audit(scope="models", entity_id=doc["id"])
+        issues = await seo_issues_col.find({"status": "open", "severity": SEO_SAFE, "entity_type": "model", "entity_id": doc["id"]}, {"_id": 0}).to_list(200)
+        fixed, deferred, skipped = [], [], []
+        for it in issues:
+            fld = it.get("field") or ""
+            if fld in pending_paths or (fld == "seo.meta_description" and "seo.meta_description" in pending_paths):
+                deferred.append({"code": it["code"], "field": fld, "reason": "valore già preparato nella approval REVIEW"})
+                continue
+            r = await apply_issue_fix(it, ctx.actor, request_id_of(ctx.request), source=ctx.source)
+            if r.get("applied"):
+                fixed.append({"code": r["code"], "field": r.get("field"), "version_id": r.get("version_id")})
+                if r.get("version_id"):
+                    vids.append(r["version_id"])
+            else:
+                skipped.append({"code": it["code"], "field": fld, "reason": r.get("reason")})
         doc = await models_col.find_one({"id": doc["id"]}, {"_id": 0})
+        review_open = await seo_issues_col.count_documents({"status": "open", "severity": SEO_REVIEW, "entity_type": "model", "entity_id": doc["id"]})
+        base_ok = bool(await site_base_url_safe())
+        steps.append({"step": "seo.audit + seo.safe_fix", "ok": True, "fixes": len(fixed), "fixed": fixed, "deferred_to_review": deferred, "skipped": skipped, "seo_review_issues_open": review_open,
+                      "canonical": "derivabile" if base_ok else "non derivabile: site.base_url non configurato (config.site)"})
+    # 5) truthful readiness
     v = validate_model(doc)
+    breakdown = readiness_breakdown(doc, v, pending_paths, sorted(provided_paths), dropped)
+    missing_media = [e["field"] for e in v["errors"] if e["field"] in _MEDIA_LABELS]
     steps.append({"step": "models.validate", "ok": True, "ready": v["ready"], "missing": [e["field"] for e in v["errors"]]})
-    res = R(f"'{doc.get('nome_artistico') or nome}' preparata (slug {doc['slug']}, stato {workflow_status(doc)}, NON pubblicata): {len([s for s in steps if s.get('ok')])} passi ok, {len(vids)} versioni"
-            + (f", {len(review_fields)} campi REVIEW in attesa di approvazione" if review_fields else "") + ". " + ("Pronta alla pubblicazione." if v["ready"] else f"Mancano: {', '.join(e['field'] for e in v['errors'])}"),
-            {"id": doc["id"], "slug": doc["slug"], "workflow_status": workflow_status(doc), "steps": steps, "readiness": v, "session_id": ctx.session_id, "published": False, "pending_review_fields": sorted(review_fields)},
-            version_ids=[x for x in vids if x], target=_tgt(doc), secondary=secondary,
-            next_steps=(["Conferma i campi REVIEW: approveApproval {token}"] if approval else []) + ["models.publish (separato, dopo la tua approvazione)", f"rollback.session {{session_id:'{ctx.session_id}'}} per annullare tutto"])
+    if breakdown["missing_text_not_provided"]:
+        warnings.append("Campi testuali obbligatori NON passati in fields (il workflow li avrebbe compilati): " + ", ".join(x["field"] for x in breakdown["missing_text_not_provided"]))
+    n_ok = len([s for s in steps if s.get("ok")])
+    res = R(f"'{doc.get('nome_artistico') or nome}' preparata (slug {doc['slug']}, stato {workflow_status(doc)}, NON pubblicata): {n_ok} passi ok, {len(vids)} versioni, "
+            f"{len(applied_paths)} campi SAFE applicati" + (f", {len(pending_paths)} campi REVIEW preparati in 1 approvazione" if pending_paths else "") + ". "
+            + ("Pronta alla pubblicazione." if v["ready"] else f"Mancano solo: media {len(missing_media)} · dati reali {len(breakdown['missing_real_data'])} · in approvazione {len(pending_paths)}"
+               + (f" · testi non forniti {len(breakdown['missing_text_not_provided'])}" if breakdown["missing_text_not_provided"] else "")),
+            {"id": doc["id"], "slug": doc["slug"], "workflow_status": workflow_status(doc), "steps": steps, "readiness": v, "readiness_breakdown": breakdown,
+             "fields_applied": applied_paths, "fields_review_pending": pending_paths, "fields_dropped": dropped, "review_prepared_values": review_prepared,
+             "session_id": ctx.session_id, "published": False, "pending_review_fields": sorted({p.split(".")[0] for p in pending_paths})},
+            version_ids=[x for x in vids if x], target=_tgt(doc), secondary=secondary, warnings=warnings,
+            next_steps=(["Conferma i campi REVIEW (una sola approvazione): approveApproval {token}"] if approval else [])
+                       + (["Carica foto/video reali: media.assign o editor (MISSING_MEDIA)"] if missing_media else [])
+                       + (["Dati reali dall'utente: onlyfans_url / social / conferma_maggiorenne via models.update (MISSING_REAL_DATA)"] if breakdown["missing_real_data"] else [])
+                       + ["models.publish (separato, dopo la tua approvazione)", f"rollback.session {{session_id:'{ctx.session_id}'}} per annullare tutto"])
     if approval:
         res["approval"] = approval   # pre-built proposal (models.update on the REVIEW subset), surfaced by the dispatcher as approval_required
     return res
 
 
+def _get(d: Any, path: str) -> Any:
+    cur = d
+    for p in path.split("."):
+        if not isinstance(cur, dict):
+            return None
+        cur = cur.get(p)
+    return cur
+
+
+async def site_base_url_safe() -> str:
+    try:
+        from v1_seo import site_base_url
+        return await site_base_url()
+    except Exception:
+        return ""
 
 
 # =====================================================================================================================
@@ -1856,7 +1955,7 @@ _BINDING_MODULES = ("v1_models", "v1_media", "v1_seo", "v1_landings", "v1_health
 BINDINGS: Dict[str, List[str]] = {
     "models.*": ["v1_models.resolve_model", "v1_models.patch_model(dry_run, expected_updated_at, source)", "v1_models.validate_model", "v1_versioning.record_version(meta, request_id)"],
     "models.create": ["v1_models.create_model"],
-    "models.prepare_complete": ["v1_models.create_model", "v1_models.patch_model(dry_run)", "v1_media.slot_changes(url, slot, side, tipo, pair_index)", "v1_seo.apply_safe_fixes(entity_id, dry_run)"],
+    "models.prepare_complete": ["v1_models.create_model", "v1_models.patch_model(dry_run)", "v1_media.slot_changes(url, slot, side, tipo, pair_index)", "v1_seo.apply_safe_fixes(entity_id, dry_run)", "v1_seo.run_audit(scope, entity_id)", "v1_seo.apply_issue_fix(issue, actor, request_id, source)", "v1_seo.site_base_url"],
     "models.publish": ["v1_models.transition(dry_run)"], "models.unpublish": ["v1_models.transition(dry_run)"], "models.submit_review": ["v1_models.transition(dry_run)"],
     "models.approve": ["v1_models.transition(dry_run)"], "models.reject": ["v1_models.transition(dry_run)"], "models.back_to_draft": ["v1_models.transition(dry_run)"],
     "tags.*": ["v1_models.patch_model(dry_run)"],
@@ -2766,7 +2865,7 @@ def build_openapi_v2(base_url: str, mode: str) -> dict:
         "parameters": {"type": "object", "additionalProperties": True, "description": PARAMS_DESC,
                        "properties": {"nome": {"type": "string", "description": "e.g. models.prepare_complete / models.create: name of the model to create"},
                                       "changes": {"type": "object", "additionalProperties": True, "description": "e.g. models.update / settings.update: fields to change"},
-                                      "fields": {"type": "object", "additionalProperties": True, "description": "e.g. models.prepare_complete: form fields to set on the draft"},
+                                      "fields": {"type": "object", "additionalProperties": True, "description": "models.prepare_complete: ALL non-media form fields to set on the draft (frase, bio, bio_segreta, teaser_copy, cta_testo, categorie, tag, badge, tema{...}, regia{...}, cta_temporizzata{...}, messaggio_35s{...}, pellicola_home{attiva,priorita}, seo{title, meta_description, alt_default, keywords, topics, robots, indexable, ...}). Exact names, types, enums and a complete example: getCapability('models.prepare_complete').parameters_schema.fields / example_parameters. Never invent onlyfans_url/social links; media go in `media`."},
                                       "media": {"description": "e.g. media.assign: media reference (string) / models.prepare_complete: array of {media|url, slot, alt}"},
                                       "slot": {"type": "string", "description": "e.g. media.assign: card, cover, public_photo_1, secret_photo_1, filmstrip_public..."}},
                        "example": {"nome": "TEST V2 GIULIA"}},
