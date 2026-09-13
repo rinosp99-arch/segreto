@@ -80,12 +80,28 @@ def mk_key(name, role="AI_OPERATOR", scopes=None, rate=300):
 
 
 TAG = f"prodcheck12a-{uuid.uuid4().hex[:6]}"
+
+
+def _state_snapshot():
+    """Zero-mutation guard: public total + every admin model (slug, stato, updated_at, badge)."""
+    pm = j(S.get(f"{BASE}/api/models", timeout=60))
+    am = j(S.get(f"{BASE}/api/admin/models", headers=JWT, timeout=60))
+    items = am.get("items", am) if isinstance(am, dict) else am
+    return pm.get("total"), sorted((m.get("slug"), m.get("stato"), m.get("updated_at"), m.get("badge")) for m in items)
+
+
+SNAP0 = _state_snapshot()
 try:
-    KID, K, RAW = mk_key(f"{TAG}-operator")
+    # PRODUCTION-SAFE: the temporary operator key carries READ-ONLY scopes ONLY. Production may be in FULL mode (business decision):
+    # every "mutation must be blocked" check below is therefore enforced by scopes (INSUFFICIENT_SCOPE) or by the mode (READ_ONLY_MODE),
+    # and this harness can never write to production whatever the mode is.
+    KID, K, RAW = mk_key(f"{TAG}-operator", scopes=list(AI_READ_ONLY_SCOPES))
+    BLOCKED = ("INSUFFICIENT_SCOPE", "READ_ONLY_MODE")
     # ------------------------------------------------------------------------------------------ mode invariant
     st = j(S.get(f"{BASE}/api/v2/ai/status", headers=K, timeout=60))
     d = st.get("data", {})
-    ok("v2", "getSystemStatus 200 + mode READ_ONLY", st.get("ok") and d.get("mode") == "READ_ONLY", json.dumps(st)[:200])
+    ok("v2", f"getSystemStatus 200 + mode reported ({d.get('mode')})", st.get("ok") and d.get("mode") in ("READ_ONLY", "FULL"), json.dumps(st)[:200])
+    MODE0 = d.get("mode")
     ok("v2", "status: no double envelope, registry total 104", "ok" not in d and d.get("capabilities_registry", {}).get("total") == 104, d.get("capabilities_registry"))
     ok("v2", "status: registry bound 104 / unbound 0", d.get("capabilities_registry", {}).get("bound") == 104 and d.get("capabilities_registry", {}).get("unbound", 0) == 0, d.get("capabilities_registry"))
     REPORT["read_only"] = d.get("mode") == "READ_ONLY"
@@ -140,11 +156,11 @@ try:
     ok("v2", "previewCapability 200 dry_run (no write, rollback not available)", r.status_code == 200 and pv.get("ok") and pv["data"].get("dry_run") is True and pv["data"]["rollback"]["available"] is False and pv.get("changes"), r.text[:200])
     etag_before = pv["data"].get("etag") if r.status_code == 200 else None
     r = post("/api/v2/ai/execute", body, K)
-    ok("v2", "executeCapability mutation in READ_ONLY -> 403 READ_ONLY_MODE (blocked)", r.status_code == 403 and code(r) == "READ_ONLY_MODE", r.text[:200])
+    ok("v2", "executeCapability mutation with read-only key -> 403 blocked (INSUFFICIENT_SCOPE / READ_ONLY_MODE)", r.status_code == 403 and code(r) in BLOCKED, r.text[:200])
     r = post("/api/v2/ai/execute", {"action": "models.prepare_complete", "parameters": {"nome": "PRODCHECK NO", "fields": {}}}, K)
-    ok("v2", "executeCapability workflow (prepare_complete) in READ_ONLY -> 403 blocked", r.status_code == 403 and code(r) == "READ_ONLY_MODE", r.text[:200])
+    ok("v2", "executeCapability workflow (prepare_complete) with read-only key -> 403 blocked", r.status_code == 403 and code(r) in BLOCKED, r.text[:200])
     r = post("/api/v2/ai/execute", {"action": "media.upload_url", "parameters": {"url": "https://example.com/x.jpg"}}, K)
-    ok("v2", "executeCapability upload in READ_ONLY -> 403 blocked (no fetch)", r.status_code == 403 and code(r) == "READ_ONLY_MODE", r.text[:200])
+    ok("v2", "executeCapability upload with read-only key -> 403 blocked (no fetch)", r.status_code == 403 and code(r) in BLOCKED, r.text[:200])
     r = post("/api/v2/ai/execute", {"action": "models.list"}, K)
     ok("v2", "executeCapability read (models.list) 200", r.status_code == 200 and j(r).get("ok") and j(r)["data"].get("items"), r.text[:160])
     r = post("/api/v2/ai/execute", {"action": "models.get", "target": SLUG}, K)
@@ -171,7 +187,7 @@ try:
     r = post("/api/v2/ai/rollback", {"session_id": "ses_prodcheck_none", "dry_run": True}, K)
     ok("v2", "rollback preview (dry_run) 200, nothing to undo", r.status_code == 200 and j(r).get("ok") and not (j(r).get("data") or {}).get("done"), r.text[:160])
     r = post("/api/v2/ai/rollback", {"session_id": "ses_prodcheck_none", "dry_run": False}, K)
-    ok("v2", "rollback real in READ_ONLY -> blocked or no-op without writes", r.status_code in (403, 200) and (code(r) == "READ_ONLY_MODE" or "Nessuna modifica" in (j(r).get("summary") or "")), r.text[:160])
+    ok("v2", "rollback real with read-only key -> blocked or no-op without writes", r.status_code in (403, 200) and (code(r) in BLOCKED or "Nessuna modifica" in (j(r).get("summary") or "")), r.text[:160])
     # ------------------------------------------------------------------------------------------ concurrency (409) in preview
     stale = "2000-01-01T00:00:00+00:00"
     r = post("/api/v2/ai/preview", {**body, "expected_updated_at": stale}, K)
@@ -248,7 +264,7 @@ try:
     # ------------------------------------------------------------------------------------------ REGRESSIONS: Phase 10/11 + v1
     ok("reg", "v1 capabilities (API key)", S.get(f"{BASE}/api/v1/ai/capabilities", headers=K, timeout=60).status_code == 200)
     r = S.get(f"{BASE}/api/v1/ai/status", headers=K, timeout=60)
-    ok("reg", "v1 status 200 READ_ONLY", r.status_code == 200 and "READ_ONLY" in r.text)
+    ok("reg", "v1 status 200 (mode reported)", r.status_code == 200 and ("READ_ONLY" in r.text or "FULL" in r.text))
     r = S.get(f"{BASE}/api/v1/ai/site-health", headers=K, timeout=120)
     sh = j(r).get("data", {})
     ok("reg", "v1 site-health 200, reconciled (current vs resolved_recent alerts)", r.status_code == 200 and "alerts" in sh and "alerts_resolved_recent" in sh and "health_checked_at" in sh, r.text[:160])
@@ -256,7 +272,7 @@ try:
     ok("reg", "alert reconciliation: open alerts are current, resolved have resolved_at", all(a.get("current") is True for a in sh.get("alerts", [])) and all(a.get("current") is False and a.get("resolved_at") for a in sh.get("alerts_resolved_recent", [])))
     REPORT["health_overall"], REPORT["open_alerts"] = sh.get("health_overall"), len(sh.get("alerts", []))
     r = post("/api/v1/ai/command", {"action": "models.update", "target": SLUG, "parameters": {"changes": {"badge": "x"}}}, K)
-    ok("reg", "v1 command mutation blocked READ_ONLY", r.status_code == 403 and code(r) == "READ_ONLY_MODE", r.text[:160])
+    ok("reg", "v1 command mutation blocked (read-only key)", r.status_code == 403 and code(r) in BLOCKED, r.text[:160])
     r = post("/api/v1/ai/command", {"action": "models.update", "target": SLUG, "parameters": {"changes": {"badge": "x"}}, "dry_run": True}, K)
     ok("reg", "v1 command dry_run allowed", r.status_code == 200, r.text[:160])
     r = S.get(f"{BASE}/api/v1/ai/recommendations?limit=20", headers=K, timeout=120)
@@ -352,7 +368,9 @@ try:
     ok("p13", "public landing API: unknown/unpublished -> 404", lr.status_code == 404)
     # ------------------------------------------------------------------------------------------ final mode invariant
     st2 = j(S.get(f"{BASE}/api/v2/ai/status", headers=K, timeout=60)).get("data", {})
-    ok("v2", "mode still READ_ONLY at the end (no FULL, no mutation)", st2.get("mode") == "READ_ONLY")
+    ok("v2", f"mode unchanged at the end ({MODE0}); harness performed no mutation (read-only key)", st2.get("mode") == MODE0)
+    SNAP1 = _state_snapshot()
+    ok("v2", "ZERO MUTATION: public total + every model (slug, stato, updated_at, badge) identical before/after", SNAP0 == SNAP1, [x for x in SNAP1[1] if x not in SNAP0[1]][:3])
 finally:
     revoked = 0
     for kid in created_keys:

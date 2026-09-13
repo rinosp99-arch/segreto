@@ -1,9 +1,9 @@
 {
- "base_url": "https://secret-side.preview.emergentagent.com",
- "started_at": "2026-09-11T12:03:16Z",
+ "base_url": "https://secret-side.emergent.host",
+ "started_at": "2026-09-13T14:57:33Z",
  "v2": [
   {
-   "check": "getSystemStatus 200 + mode READ_ONLY",
+   "check": "getSystemStatus 200 + mode reported (FULL)",
    "result": "PASS",
    "note": ""
   },
@@ -78,7 +78,7 @@
    "note": ""
   },
   {
-   "check": "findModel natural reference 'Francesca' -> slug (or 409 AMBIGUOUS with candidates)",
+   "check": "findModel natural reference 'Vanessa' -> slug (or 409 AMBIGUOUS with candidates)",
    "result": "PASS",
    "note": ""
   },
@@ -98,17 +98,17 @@
    "note": ""
   },
   {
-   "check": "executeCapability mutation in READ_ONLY -> 403 READ_ONLY_MODE (blocked)",
+   "check": "executeCapability mutation with read-only key -> 403 blocked (INSUFFICIENT_SCOPE / READ_ONLY_MODE)",
    "result": "PASS",
    "note": ""
   },
   {
-   "check": "executeCapability workflow (prepare_complete) in READ_ONLY -> 403 blocked",
+   "check": "executeCapability workflow (prepare_complete) with read-only key -> 403 blocked",
    "result": "PASS",
    "note": ""
   },
   {
-   "check": "executeCapability upload in READ_ONLY -> 403 blocked (no fetch)",
+   "check": "executeCapability upload with read-only key -> 403 blocked (no fetch)",
    "result": "PASS",
    "note": ""
   },
@@ -173,7 +173,7 @@
    "note": ""
   },
   {
-   "check": "rollback real in READ_ONLY -> blocked or no-op without writes",
+   "check": "rollback real with read-only key -> blocked or no-op without writes",
    "result": "PASS",
    "note": ""
   },
@@ -283,7 +283,12 @@
    "note": ""
   },
   {
-   "check": "mode still READ_ONLY at the end (no FULL, no mutation)",
+   "check": "mode unchanged at the end (FULL); harness performed no mutation (read-only key)",
+   "result": "PASS",
+   "note": ""
+  },
+  {
+   "check": "ZERO MUTATION: public total + every model (slug, stato, updated_at, badge) identical before/after",
    "result": "PASS",
    "note": ""
   },
@@ -305,7 +310,7 @@
    "note": ""
   },
   {
-   "check": "v1 status 200 READ_ONLY",
+   "check": "v1 status 200 (mode reported)",
    "result": "PASS",
    "note": ""
   },
@@ -325,7 +330,7 @@
    "note": ""
   },
   {
-   "check": "v1 command mutation blocked READ_ONLY",
+   "check": "v1 command mutation blocked (read-only key)",
    "result": "PASS",
    "note": ""
   },
@@ -436,13 +441,13 @@
   },
   {
    "check": "sitemap.xml 200, production URLs, includes model page",
-   "result": "FAIL",
-   "note": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n<url><loc>https://se"
+   "result": "PASS",
+   "note": ""
   },
   {
    "check": "robots.txt 200 with production sitemap",
-   "result": "FAIL",
-   "note": "# As a condition of accessing this website, you agree to abide by the following\n# content signals:\n\n# (a)  If a Content-Signal = yes, you may collect content fo"
+   "result": "PASS",
+   "note": ""
   },
   {
    "check": "RSS 200 (xml)",
@@ -473,8 +478,8 @@
   },
   {
    "check": "seo.indexability: published model technically indexable (HTTP 200, robots ok, in sitemap, no X-Robots noindex)",
-   "result": "FAIL",
-   "note": "['X_ROBOTS_TAG', 'ROBOTS_TXT']"
+   "result": "PASS",
+   "note": ""
   },
   {
    "check": "growth.prepare_model preview 200 (dry_run, publishes=false)",
@@ -492,8 +497,8 @@
    "note": ""
   }
  ],
- "read_only": true,
- "openapi_v2_url": "https://secret-side.preview.emergentagent.com/api/v2/ai/openapi-chatgpt.json",
+ "read_only": false,
+ "openapi_v2_url": "https://secret-side.emergent.host/api/v2/ai/openapi-chatgpt.json",
  "openapi_v2_operations": 12,
  "capabilities_total": 104,
  "capabilities_bound": 104,
@@ -503,18 +508,23 @@
  "prepare_complete_preview_output": {
   "ok": true,
   "action": "models.prepare_complete",
-  "summary": "Anteprima workflow 'TEST V2 GIULIA': bozza + 0 campi SAFE + 0 campi REVIEW (approvazione) + 0 media + SEO safe + validate (nessuna pubblicazione, nessuna scrittura)",
+  "summary": "Anteprima workflow 'TEST V2 GIULIA': bozza + 0 campi SAFE + 0 campi REVIEW (una approvazione) + 0 media + SEO safe + validate (nessuna pubblicazione, nessuna scrittura)",
   "data": {
    "dry_run": true,
    "would_create": true,
    "existing": null,
    "plan": [
-    "models.create \u2192 bozza 'TEST V2 GIULIA' (slug test-v2-giulia)",
-    "seo.safe_fix",
+    "models.create \u2192 bozza 'TEST V2 GIULIA' (slug test-v2-giulia-2)",
+    "seo.audit + seo.safe_fix (campi in REVIEW esclusi)",
     "models.validate"
    ],
    "fields_safe": [],
    "fields_review": [],
+   "fields_safe_paths": [],
+   "fields_review_paths": [],
+   "fields_dropped": [],
+   "review_prepared_values": {},
+   "safe_values": {},
    "media_plan": [],
    "seo_safe_fix": true,
    "publishes": false,
@@ -530,8 +540,8 @@
    "capability": "models.prepare_complete",
    "capability_version": "1.0",
    "risk": "SAFE",
-   "session_id": "ses_0f3b50eb2213",
-   "mode": "READ_ONLY",
+   "session_id": "ses_8155849267fb",
+   "mode": "FULL",
    "rollback": {
     "available": false,
     "version_ids": [],
@@ -540,9 +550,9 @@
   },
   "warnings": [],
   "next_steps": [
-   "Esegui senza dry_run (modalit\u00e0 FULL) per creare la bozza; i campi REVIEW richiederanno approvazione; annullabile con rollback.session"
+   "Esegui senza dry_run (modalit\u00e0 FULL) per creare la bozza; i campi REVIEW richiederanno UNA approvazione; annullabile con rollback.session"
   ],
-  "request_id": "7520df8a-697a-4db6-a8b6-4c211038a9f9",
+  "request_id": "fe51e1d5-6335-443b-a4a1-386d14ebd14e",
   "changes": [],
   "approval_required": false
  },
@@ -552,38 +562,31 @@
  "public_models": 10,
  "seo_open": {
   "SAFE_AUTO_FIX": 0,
-  "REVIEW_REQUIRED": 1,
+  "REVIEW_REQUIRED": 4,
   "CRITICAL": 0
  },
  "health_latest": {
   "overall": "ok",
-  "checked_at": "2026-09-11T12:03:09.138412+00:00"
+  "checked_at": "2026-09-13T14:52:52.669170+00:00"
  },
  "google_connection": {
   "status": "NOT_CONFIGURED",
   "detail": "Imposta GOOGLE_SEARCH_ENABLED=true e GOOGLE_SEARCH_CREDENTIALS_JSON (service account) sul server; aggiungi l'email del service account come utente della propriet\u00e0 Search Console"
  },
  "inspection_sample": {
-  "url": "https://secret-side.preview.emergentagent.com/modelle/francesca-rossi",
+  "url": "https://secret-side.emergent.host/modelle/vanessa-bella",
   "state": "NOT_CONFIGURED",
   "source": "none",
   "detail": "URL Inspection non disponibile: Search Console non configurata (o inspection disattivata)"
  },
  "indexability_sample": {
-  "url": "https://secret-side.preview.emergentagent.com/modelle/francesca-rossi",
-  "ok": false,
-  "failing": [
-   "X_ROBOTS_TAG",
-   "ROBOTS_TXT"
-  ]
+  "url": "https://secret-side.emergent.host/modelle/vanessa-bella",
+  "ok": true,
+  "failing": []
  },
- "p13_pass": "7/8",
- "v2_pass": "59/59",
- "regressions_pass": "28/30",
- "problems": [
-  "sitemap.xml 200, production URLs, includes model page: <?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n<url><loc>https://se",
-  "robots.txt 200 with production sitemap: # As a condition of accessing this website, you agree to abide by the following\n# content signals:\n\n# (a)  If a Content-Signal = yes, you may collect content fo",
-  "seo.indexability: published model technically indexable (HTTP 200, robots ok, in sitemap, no X-Robots noindex): ['X_ROBOTS_TAG', 'ROBOTS_TXT']"
- ],
+ "p13_pass": "8/8",
+ "v2_pass": "60/60",
+ "regressions_pass": "30/30",
+ "problems": [],
  "conclusion": "PRODUCTION V2 NOT READY"
 }
