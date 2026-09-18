@@ -13,7 +13,7 @@ import { captureAttribution } from '@/lib/attribution';
 import { track } from '@/lib/api';
 
 import Home from '@/pages/Home';
-import ModelProfile from '@/pages/ModelProfile';
+import ProfileSwipe from '@/pages/ProfileSwipe';
 import CategoryPage from '@/pages/CategoryPage';
 import LandingPage from '@/pages/LandingPage';
 import ArticlesList from '@/pages/ArticlesList';
@@ -69,7 +69,7 @@ export default function App() {
         <Routes>
           <Route element={<PublicLayout />}>
             <Route path="/" element={<Home />} />
-            <Route path="/modelle/:slug" element={<ModelProfile />} />
+            <Route path="/modelle/:slug" element={<ProfileSwipe />} />
             <Route path="/categorie/:slug" element={<CategoryPage />} />
             <Route path="/l/:slug" element={<LandingPage />} />
             <Route path="/articoli" element={<ArticlesList />} />

@@ -13,6 +13,7 @@ import {
   getSessionId, markDiscovered, messageShownFor, markMessageShown,
   ofClickedFor, markOfClicked,
 } from '@/lib/session';
+import { peekCarry, consumeCarry, noteProfileSeen, journeyMeta } from '@/lib/profileNav';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -50,6 +51,7 @@ export default function ModelProfile() {
   const gridRef = useRef(null);
   const ctaRef = useRef(null);
   const teaserFallback = useRef(null);
+  const carriedSecret = useRef(null);   // swipe arrived in Lato Segreto: start timers/audio once secretData is in state
 
   const goToCta = useCallback(() => {
     track({ tipo: 'teaser_finale_click', model_slug: slug, session_id: getSessionId() });
@@ -89,13 +91,25 @@ export default function ModelProfile() {
 
   useEffect(() => {
     let alive = true;
-    setModel(null); setSecretData(null); setSecret(false); setNotFound(false);
-    setEnvelopeVisible(false); setEnvelopeOpen(false);
+    // Swipe carry-over: the previous profile was in Lato Segreto -> this one opens directly in ITS Lato Segreto
+    // (theme stays on, no blackout, audio continuity). Public -> public. Consumed once; back/forward -> normal.
+    const carry = consumeCarry();
+    const openSecret = !!(carry && carry.secret);
+    setModel(null); setSecretData(null); setSecret(openSecret); setNotFound(false);
+    setEnvelopeVisible(false); setEnvelopeOpen(false); setCtaTimed(false);
+    if (!openSecret) { setPhase('idle'); setTransforming(false); }
     pageLoadedAt.current = Date.now();
-    getModel(slug).then((m) => {
-      if (!alive) return;
-      setModel(m);
-      track({ tipo: 'page_view', model_slug: slug, model_id: m.id, session_id: getSessionId() });
+    const preloadSecret = (s) => {
+      (s.media_pairs || []).forEach((p) => {
+        if (p.segreto?.url) {
+          if (p.tipo === 'image') { const im = new Image(); im.src = mediaUrl(p.segreto.url); }
+          else if (p.segreto.poster) { const im = new Image(); im.src = mediaUrl(p.segreto.poster); }
+        }
+      });
+    };
+    const afterModel = (m) => {
+      noteProfileSeen(slug);
+      track({ tipo: 'page_view', model_slug: slug, model_id: m.id, session_id: getSessionId(), meta: carry ? { via: carry.via, mode: openSecret ? 'secret' : 'public' } : {} });
       setSeo({
         title: m.seo?.title || `${m.nome_artistico} | ${SITE.name}`,
         description: m.seo?.meta_description || m.bio,
@@ -103,32 +117,62 @@ export default function ModelProfile() {
         noindex: !!m.anteprima,
         jsonLd: { '@context': 'https://schema.org', '@type': 'Person', name: m.nome_artistico, description: m.bio, image: m.foto_card },
       });
-      getModelSecret(slug).then((s) => {
-        if (!alive) return;
-        setSecretData(s);
-        // preload secret media
-        (s.media_pairs || []).forEach((p) => {
-          if (p.segreto?.url) {
-            if (p.tipo === 'image') { const im = new Image(); im.src = mediaUrl(p.segreto.url); }
-            else if (p.segreto.poster) { const im = new Image(); im.src = mediaUrl(p.segreto.poster); }
-          }
-        });
-      }).catch(() => {});
       getRelated(slug).then((d) => { if (alive) setRelated(d.items || []); }).catch(() => {});
-    }).catch(() => { if (alive) setNotFound(true); });
+    };
+    if (openSecret) {
+      // model + secret together: the page renders straight in Lato Segreto (no public flash)
+      Promise.all([getModel(slug), getModelSecret(slug).catch(() => null)]).then(([m, sd]) => {
+        if (!alive) return;
+        if (sd) { setSecretData(sd); preloadSecret(sd); }
+        setModel(m);
+        afterModel(m);
+        applyTheme(true);
+        secretEnteredAt.current = Date.now();
+        markDiscovered(slug);
+        track({ tipo: 'secret_activate', model_slug: slug, session_id: getSessionId(), valore: 0, meta: { via: 'swipe' } });
+        carriedSecret.current = { audio: sd?.regia?.audio || {} };
+      }).catch(() => { if (alive) setNotFound(true); });
+    } else {
+      getModel(slug).then((m) => {
+        if (!alive) return;
+        setModel(m);
+        afterModel(m);
+        getModelSecret(slug).then((sd) => { if (!alive) return; setSecretData(sd); preloadSecret(sd); }).catch(() => {});
+      }).catch(() => { if (alive) setNotFound(true); });
+    }
     return () => {
       alive = false;
       if (msgTimer.current) clearTimeout(msgTimer.current);
       if (ctaTimer.current) clearTimeout(ctaTimer.current);
-      getAudio()?.cleanup();
       if (secretEnteredAt.current) {
         const secs = Math.round((Date.now() - secretEnteredAt.current) / 1000);
         track({ tipo: 'secret_time', model_slug: slug, session_id: getSessionId(), valore: secs, _beacon: true });
+        secretEnteredAt.current = null;
       }
+      const next = peekCarry();
+      if (next && next.secret) return;            // swipe in Lato Segreto: keep theme + ambient running (next profile takes over / crossfades)
+      getAudio()?.cleanup();
       document.documentElement.classList.remove('theme-secret');
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
+
+  // Carried Lato Segreto: once secretData is in state, run the same post-activation steps as `activate`
+  // (timed CTA / 35s message) and continue or crossfade the ambient track.
+  useEffect(() => {
+    const c = carriedSecret.current;
+    if (!c || !model) return;
+    carriedSecret.current = null;
+    const audio = getAudio();
+    const a = c.audio || {};
+    if (soundOn && audio && a.ambiente !== false) {
+      audio.switchAmbient(urlsForAudioCfg(a), Math.max(0, Math.min(1, (a.volume_ambiente ?? 22) / 100)), 700);
+    } else if (audio) {
+      audio.stopAmbient(400);
+    }
+    startEnvelopeTimer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model, secretData]);
 
   const startEnvelopeTimer = useCallback(() => {
     // timed CTA (default 10s)
@@ -247,8 +291,9 @@ export default function ModelProfile() {
   const openOnlyFans = (source) => {
     const url = secretData?.onlyfans_url || model?.onlyfans_url;
     if (!url) return;
-    track({ tipo: 'cta_click', model_slug: slug, session_id: getSessionId(), cta_source: source });
-    track({ tipo: 'of_click', model_slug: slug, session_id: getSessionId(), cta_source: source });
+    const journey = journeyMeta();   // how many profiles were seen / swiped before this click (attribution)
+    track({ tipo: 'cta_click', model_slug: slug, session_id: getSessionId(), cta_source: source, meta: journey });
+    track({ tipo: 'of_click', model_slug: slug, session_id: getSessionId(), cta_source: source, meta: journey });
     markOfClicked(slug); setEnvelopeVisible(false); setCtaTimed(false);
     const sep = url.includes('?') ? '&' : '?';
     window.open(`${url}${sep}utm_source=lato_segreto&utm_medium=profilo&utm_campaign=lato_segreto&creator=${slug}&cta=${source}`, '_blank', 'noopener');

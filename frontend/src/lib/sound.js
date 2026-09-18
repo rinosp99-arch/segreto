@@ -114,6 +114,28 @@ class AudioController {
     return undefined;
   }
 
+  /* Profile-to-profile switch (swipe) while in Lato Segreto: same track -> keep playing untouched;
+     different track -> short crossfade (old fades out while the new one fades in); never two loops left running. */
+  isPlayingUrls(urls) {
+    const cur = this.currentUrls || {};
+    const same = !!urls && (cur.m4a || cur.mp3) && ((urls.m4a && urls.m4a === cur.m4a) || (urls.mp3 && urls.mp3 === cur.mp3));
+    const playing = this.useFallback ? !!(this.fallbackEl && !this.fallbackEl.paused) : !!this.source;
+    return same && playing;
+  }
+
+  async switchAmbient(urls, volume = 0.22, fadeMs = 600) {
+    if (this.muted) return undefined;
+    if (this.isPlayingUrls(urls)) {
+      this.vol = Math.max(0, Math.min(1, volume));
+      if (!this.useFallback && this.gain && this.ctx) this._rampGainOn(this.gain, this.ctx, this.vol, fadeMs);
+      else if (this.fallbackEl) this.fallbackEl.volume = this.vol;
+      return undefined;
+    }
+    if (this.useFallback) { this._fallbackStop(0); return this.startAmbient(urls, volume, fadeMs); }   // single <audio>: swap src cleanly
+    this.stopAmbient(Math.min(350, fadeMs));           // detaches this.source -> startAmbient creates the new one
+    return this.startAmbient(urls, volume, fadeMs);
+  }
+
   stopAmbient(fadeMs = 1500) {
     this._token++;
     if (this.useFallback) return this._fallbackStop(fadeMs);
