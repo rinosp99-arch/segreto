@@ -1,12 +1,42 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { mediaUrl } from '@/lib/api';
 import { tryPlayVideo, pauseVideo, primeVideo, useVisibilityRetry } from '@/lib/videoAutoplay';
+import { track, once } from '@/lib/analytics';
 
-function Layer({ item, active, reduced, grade, visible, extraFilter, fit = 'cover', objPos = 'center 20%', onNatural, onTime }) {
+/* Video telemetry (profile grid): video_impression / video_start / video_25 / video_50 / video_75 / video_complete /
+   video_replay — each AT MOST ONCE per (visit, model, slot, media mode). No progress stream: milestones only.
+   `video_replay` = the loop wrapped after playing past 80% (the tile was watched more than once). */
+function useVideoTelemetry({ enabled, slug, slot, mediaMode }) {
+  const st = useRef({ fired: new Set(), prev: 0 });
+  const emit = useCallback((ev, extra) => {
+    if (!enabled || !slug) return;
+    const s = st.current;
+    if (s.fired.has(ev)) return;
+    s.fired.add(ev);                                   // in-memory short-circuit (onTimeUpdate fires ~4x/s)
+    if (!once(`${ev}:${slug}:${slot}:${mediaMode}`)) return;
+    track({ tipo: ev, model_slug: slug, slot, mode: mediaMode, meta: { media_mode: mediaMode, ...(extra || {}) } });
+  }, [enabled, slug, slot, mediaMode]);
+  const onProgress = useCallback((cur, dur) => {
+    if (!enabled || !dur || !isFinite(dur)) return;
+    const s = st.current;
+    if (cur + 1 < s.prev && s.prev > dur * 0.8) emit('video_replay', { dur: Math.round(dur) });
+    s.prev = cur;
+    const p = cur / dur;
+    if (p >= 0.25) emit('video_25');
+    if (p >= 0.5) emit('video_50');
+    if (p >= 0.75) emit('video_75');
+    if (p >= 0.95) emit('video_complete', { dur: Math.round(dur) });
+  }, [enabled, emit]);
+  return { emit, onProgress };
+}
+
+function Layer({ item, active, reduced, grade, visible, impVisible = false, extraFilter, fit = 'cover', objPos = 'center 20%', onNatural, onTime, slug = null, slot = null, mediaMode = 'public' }) {
   const videoRef = useRef(null);
   const [ready, setReady] = useState(false);   // first decoded frame available -> video shown above its poster
   const isVideo = item?.tipo === 'video';
   const wantPlay = isVideo && active && visible;
+  const vt = useVideoTelemetry({ enabled: isVideo && !!slug, slug, slot, mediaMode });
+  useEffect(() => { if (isVideo && active && impVisible) vt.emit('video_impression'); }, [isVideo, active, impVisible, vt]);
 
   // Same strategy as the Home FilmStrip (proven on iPhone): prime muted/inline as PROPERTIES, then play(); never throw.
   const tryPlay = useCallback(() => { tryPlayVideo(videoRef.current); }, []);
@@ -78,9 +108,9 @@ function Layer({ item, active, reduced, grade, visible, extraFilter, fit = 'cove
           onLoadedMetadata={(e) => { onNatural?.(e.target.videoWidth, e.target.videoHeight); if (wantPlay) tryPlay(); }}
           onLoadedData={() => { setReady(true); if (wantPlay) tryPlay(); }}
           onCanPlay={() => { setReady(true); if (wantPlay) tryPlay(); }}
-          onPlaying={() => setReady(true)}
+          onPlaying={() => { setReady(true); if (active) vt.emit('video_start'); }}
           onError={() => setReady(false)}
-          onTimeUpdate={(e) => { if (active) onTime?.(e.target.currentTime, e.target.duration); }}
+          onTimeUpdate={(e) => { if (active) { onTime?.(e.target.currentTime, e.target.duration); vt.onProgress(e.target.currentTime, e.target.duration); } }}
           {...common}
           style={{ ...common.style, opacity: active && ready ? 1 : 0 }}
         >
@@ -102,9 +132,10 @@ function Layer({ item, active, reduced, grade, visible, extraFilter, fit = 'cove
   );
 }
 
-export function MediaMorph({ pub, sec, secret, reduced, effect = 'flash', delay = 0, ambient = false, className = '', ratio = '3 / 4', fit = 'cover', maxVh = null, adaptRatio = false, onTime, children }) {
+export function MediaMorph({ pub, sec, secret, reduced, effect = 'flash', delay = 0, ambient = false, className = '', ratio = '3 / 4', fit = 'cover', maxVh = null, adaptRatio = false, onTime, children, modelSlug = null, slot = null }) {
   const wrapRef = useRef(null);
   const [visible, setVisible] = useState(false);
+  const [impVisible, setImpVisible] = useState(false);   // >=50% in viewport: the impression threshold (telemetry only)
   const [shown, setShown] = useState(secret);
   const [fx, setFx] = useState(false);
   const [pubRatio, setPubRatio] = useState(null);
@@ -114,7 +145,11 @@ export function MediaMorph({ pub, sec, secret, reduced, effect = 'flash', delay 
     const el = wrapRef.current; if (!el) return undefined;
     const io = new IntersectionObserver((e) => setVisible(e[0].isIntersecting), { threshold: 0.2 });
     io.observe(el);
-    return () => io.disconnect();
+    if (!modelSlug) return () => io.disconnect();
+    const io2 = new IntersectionObserver((e) => setImpVisible(e[0].isIntersecting && e[0].intersectionRatio >= 0.5), { threshold: [0.5] });
+    io2.observe(el);
+    return () => { io.disconnect(); io2.disconnect(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -158,8 +193,8 @@ export function MediaMorph({ pub, sec, secret, reduced, effect = 'flash', delay 
       style={wrapStyle}
       data-testid="media-tile"
     >
-      <Layer item={pub} active={!showSec} reduced={reduced} visible={visible} fit={fit} onTime={onTime} onNatural={(w, h) => { if (w && h) setPubRatio(`${w} / ${h}`); }} />
-      {sec && sec.url && <Layer item={sec} active={showSec} reduced={reduced} grade visible={visible} fit={fit} onTime={onTime} extraFilter={showSec ? blurFilter : ''} onNatural={(w, h) => { if (w && h) setSecRatio(`${w} / ${h}`); }} />}
+      <Layer item={pub} active={!showSec} reduced={reduced} visible={visible} impVisible={impVisible} fit={fit} onTime={onTime} slug={modelSlug} slot={slot} mediaMode="public" onNatural={(w, h) => { if (w && h) setPubRatio(`${w} / ${h}`); }} />
+      {sec && sec.url && <Layer item={sec} active={showSec} reduced={reduced} grade visible={visible} impVisible={impVisible} fit={fit} onTime={onTime} slug={modelSlug} slot={slot} mediaMode="secret" extraFilter={showSec ? blurFilter : ''} onNatural={(w, h) => { if (w && h) setSecRatio(`${w} / ${h}`); }} />}
 
       {/* persistent stage-light sheen on secret tiles */}
       {showSec && ambient && !reduced && <div className="secret-sheen" />}

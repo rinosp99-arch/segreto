@@ -118,7 +118,7 @@ def enrich_event(doc: dict, request: Request) -> dict:
     doc["source"] = _source(ref, doc.get("fonte"), page_url)
     doc["geo"] = _geo(request)
     doc["country"] = doc["geo"]["country"]
-    doc["path"] = parsed.path if parsed else ((doc.get("meta") or {}).get("path") or "")
+    doc["path"] = doc.get("path") or (parsed.path if parsed else ((doc.get("meta") or {}).get("path") or ""))
     doc["landing"] = (doc.get("meta") or {}).get("landing") or doc.get("landing") or ""
     q = parse_qs(parsed.query) if parsed else {}
     utm = {k[4:]: v[0] for k, v in q.items() if k.startswith("utm_")}

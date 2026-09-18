@@ -1,8 +1,14 @@
+import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { MediaImage } from '@/components/MediaImage';
 import { isDiscovered } from '@/lib/session';
+import { track } from '@/lib/api';
+import { setEntry, observeImpression, currentMode } from '@/lib/analytics';
 import { Lock, Unlock } from 'lucide-react';
+
+/* placement -> entry_source of the profile opened from this card */
+const ENTRY_BY_PLACEMENT = { home: 'home_card', related: 'related_models', category: 'category' };
 
 const BADGE_STYLES = {
   'IN TENDENZA': { bg: 'hsl(var(--primary) / 0.16)', bd: 'hsl(var(--primary) / 0.45)', c: 'hsl(var(--primary))' },
@@ -11,19 +17,35 @@ const BADGE_STYLES = {
   'PIÙ VISTA': { bg: 'hsl(var(--primary) / 0.16)', bd: 'hsl(var(--primary) / 0.45)', c: 'hsl(var(--primary))' },
 };
 
-export function ModelCard({ model, index = 0, teaser = false }) {
+export function ModelCard({ model, index = 0, teaser = false, placement = 'home', context = null }) {
   const discovered = isDiscovered(model.slug);
   const badge = model.badge;
   const bs = badge ? BADGE_STYLES[badge] || BADGE_STYLES['IN TENDENZA'] : null;
+  const ref = useRef(null);
+
+  // home_model_card_impression: card really visible (>=50% for 500ms), once per visit per card per Home mode
+  useEffect(() => {
+    if (placement !== 'home') return undefined;
+    const mode = teaser ? 'secret' : 'public';
+    return observeImpression(ref.current, () => {
+      track({ tipo: 'home_model_card_impression', model_slug: model.slug, placement, mode, meta: { position: index, context } });
+    }, { threshold: 0.5, minMs: 500, key: `card_imp:${model.slug}:${mode}` });
+  }, [model.slug, placement, teaser, index, context]);
+
+  const onOpen = () => {
+    setEntry(ENTRY_BY_PLACEMENT[placement] || placement, { position: index });
+    track({ tipo: placement === 'home' ? 'home_model_card_click' : 'model_card_click', model_slug: model.slug, placement, mode: placement === 'home' ? (teaser ? 'secret' : 'public') : currentMode(), meta: { position: index, context } });
+  };
 
   return (
     <motion.div
+      ref={ref}
       initial={{ opacity: 0, y: 18 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-40px' }}
       transition={{ duration: 0.5, delay: Math.min(index * 0.04, 0.4), ease: [0.2, 0.8, 0.2, 1] }}
     >
-      <Link to={`/modelle/${model.slug}`} data-testid="model-card"
+      <Link to={`/modelle/${model.slug}`} data-testid="model-card" onClick={onOpen}
         className="group relative block rounded-2xl overflow-hidden border border-border/60 bg-card card-elev hover:card-elev-2 transition-shadow">
         <div className="relative" style={{ aspectRatio: '3 / 4' }}>
           {/* PUBLIC image */}

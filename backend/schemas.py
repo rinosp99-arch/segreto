@@ -182,6 +182,30 @@ class TrackEventIn(BaseModel):
     fonte: Optional[str] = None
     campagna: Optional[str] = None
     meta: Dict[str, Any] = {}
+    # ---- common analytics schema (frontend/src/lib/analytics.js) — all optional, privacy-safe ----
+    visitor_id: Optional[str] = None      # anonymous persistent random id (== session_id)
+    visit_id: Optional[str] = None        # one per visit (30 min inactivity / new tab / campaign landing)
+    seq: Optional[int] = None             # order inside the visit
+    ts_client: Optional[int] = None       # client epoch ms (batch ordering only)
+    path: Optional[str] = None
+    mode: Optional[str] = None            # public | secret
+    entry_source: Optional[str] = None    # home_card | filmstrip | surprise | swipe | swipe_button | related_models | direct_profile | campaign | search | category
+    profile_pos: Optional[int] = None     # n-th distinct profile seen in the visit
+    device_type: Optional[str] = None
+    platform: Optional[str] = None        # social platform
+    cta_type: Optional[str] = None        # gallery | timed | message | teaser
+    cta_position: Optional[str] = None
+    slot: Optional[int] = None            # media slot 1..6
+    from_model: Optional[str] = None
+    to_model: Optional[str] = None
+    input: Optional[str] = None           # gesture | button | keyboard
+    placement: Optional[str] = None       # home | profile | related | category
+
+
+class TrackBatchIn(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+    events: List[TrackEventIn] = Field(default_factory=list, max_length=50)
+    sent_at: Optional[int] = None
 
 
 class WebhookArticleIn(BaseModel):

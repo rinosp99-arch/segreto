@@ -51,7 +51,7 @@ export default function CategoryPage() {
         <div className="py-20 text-center"><SearchX className="h-10 w-10 mx-auto mb-3 text-muted-foreground" /><p className="text-muted-foreground">Questa categoria non contiene ancora profili.</p></div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5">
-          {items.map((m, i) => <ModelCard key={m.slug} model={m} index={i} />)}
+          {items.map((m, i) => <ModelCard key={m.slug} model={m} index={i} placement="category" context={slug} />)}
         </div>
       )}
     </div>

@@ -92,6 +92,7 @@ export const an2Timeseries = (filters, granularity) => v2('timeseries', { ...fil
 export const an2Compare = (filters, slugs) => v2('compare', { ...filters, slugs: slugs.join(',') });
 export const an2Events = (filters, limit = 50, skip = 0, tipo) => v2('events', { ...filters, limit, skip, tipo: tipo || undefined });
 export const an2Filters = (filters) => v2('filters', filters);
+export const an2Visit = (visitId) => v2(`visit/${encodeURIComponent(visitId)}`, {});
 export const an2ExportUrl = (kind, filters, slug) => {
   const q = new URLSearchParams({ kind, ...Object.fromEntries(Object.entries({ ...filters, slug }).filter(([, v]) => v !== undefined && v !== null && v !== '')) });
   return `${process.env.REACT_APP_BACKEND_URL}/api/admin/analytics/v2/export.csv?${q.toString()}`;

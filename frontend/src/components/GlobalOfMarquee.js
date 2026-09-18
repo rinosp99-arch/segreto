@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { track } from '@/lib/api';
 import { getSessionId } from '@/lib/session';
 import { getAttribution } from '@/lib/attribution';
+import { observeImpression } from '@/lib/analytics';
 
 export const GLOBAL_OF_URL = 'https://onlyfans.com/latosegreto/c28';
 const PHRASE_A = 'TUTTE LE MODELLE. UN SOLO LATO SEGRETO.';
@@ -61,6 +62,12 @@ export function GlobalOfMarquee({ placement = 'home', modelSlug = null, secret =
     return () => ro.disconnect();
   }, []);
 
+  // of_global_marquee_impression: strip really visible (>=50% for 300ms), once per visit per placement / model / mode
+  useEffect(() => observeImpression(boxRef.current, () => {
+    const attr = getAttribution() || {};
+    track({ tipo: 'of_global_marquee_impression', model_slug: modelSlug || undefined, placement, mode: secret ? 'secret' : 'public', cta_source: `of_global_marquee_${placement}`, meta: { mode: secret ? 'SECRET' : 'PUBLIC', ref: attr.ref || null, fonte: attr.fonte || null, campagna: attr.campagna || null } });
+  }, { threshold: 0.5, key: `marquee_imp:${placement}:${modelSlug || '-'}:${secret ? 'secret' : 'public'}` }), [placement, modelSlug, secret]);
+
   const [flash, setFlash] = useState(null);   // {x, y, id}: soft glow where the strip was touched
   const onPointerDown = (e) => {
     if (e.pointerType === 'mouse') return;
@@ -72,7 +79,7 @@ export function GlobalOfMarquee({ placement = 'home', modelSlug = null, secret =
 
   const onClick = () => {
     const attr = getAttribution() || {};
-    const base = { session_id: getSessionId(), cta_source: `of_global_marquee_${placement}` };
+    const base = { session_id: getSessionId(), cta_source: `of_global_marquee_${placement}`, placement, mode: secret ? 'secret' : 'public' };
     if (placement === 'profile') {
       track({ tipo: 'of_global_marquee_profile_click', model_slug: modelSlug, ...base, meta: { mode: secret ? 'SECRET' : 'PUBLIC', ref: attr.ref || null, fonte: attr.fonte || null, campagna: attr.campagna || null } });
     } else {

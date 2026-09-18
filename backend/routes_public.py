@@ -1,13 +1,14 @@
 import uuid
 import secrets
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Request, Response
 from typing import Optional
 
 from database import (
     models_col, categories_col, articles_col, events_col, settings_col, files_col,
-    now_iso, serialize_doc,
+    serialize_doc,
 )
-from schemas import TrackEventIn
+from schemas import TrackEventIn, TrackBatchIn
 from storage import get_object
 from auth import decode_token
 
@@ -294,24 +295,73 @@ async def get_pellicola():
     return {"config": cfg, "items": items}
 
 
-@public_router.post("/track")
-async def track_event(ev: TrackEventIn, request: Request):
-    doc = ev.model_dump()
+MAX_BATCH = 50
+MAX_CLIENT_SKEW_MS = 60 * 60 * 1000       # ts_client offsets beyond 1h are ignored (clock skew)
+_BAD_KEYS = {"password", "token", "email", "authorization", "cookie"}
+
+
+def _clean_meta(meta):
+    """Defensive privacy filter: never persist obviously sensitive keys even if a client sends them."""
+    if not isinstance(meta, dict):
+        return {}
+    return {k: v for k, v in meta.items() if str(k).lower() not in _BAD_KEYS and len(str(v)) <= 500}
+
+
+async def _prepare_event(ev: TrackEventIn, request: Request, received: datetime, sent_at: Optional[int], slug_ids: Optional[dict] = None) -> dict:
+    doc = ev.model_dump(exclude_none=True)
     doc["id"] = str(uuid.uuid4())
-    doc["timestamp"] = now_iso()
-    # resolve model_id from slug if missing
+    doc["meta"] = _clean_meta(doc.get("meta"))
+    if doc.get("mode"):
+        doc["mode"] = str(doc["mode"]).lower()
+    # timestamp: server receipt time, shifted back by the client-side age of the event (keeps batch order; skew-safe)
+    ts = received
+    if sent_at and doc.get("ts_client"):
+        age = sent_at - int(doc["ts_client"])
+        if 0 <= age <= MAX_CLIENT_SKEW_MS:
+            ts = received - timedelta(milliseconds=age)
+    doc["timestamp"] = ts.isoformat()
+    if not doc.get("session_id"):
+        doc["session_id"] = doc.get("visitor_id") or ""
+    if not doc.get("visitor_id") and doc.get("session_id"):
+        doc["visitor_id"] = doc["session_id"]
     if not doc.get("model_id") and doc.get("model_slug"):
-        m = await models_col.find_one({"slug": doc["model_slug"]}, {"_id": 0, "id": 1})
-        if m:
-            doc["model_id"] = m["id"]
-    # SUPER API: canonical event name + device/source/geo enrichment (Italy Engine)
+        if slug_ids is not None:
+            if doc["model_slug"] in slug_ids:
+                doc["model_id"] = slug_ids[doc["model_slug"]]
+        else:
+            m = await models_col.find_one({"slug": doc["model_slug"]}, {"_id": 0, "id": 1})
+            if m:
+                doc["model_id"] = m["id"]
     try:
         from v1_tracking import enrich_event
         enrich_event(doc, request)
     except Exception:
         pass
+    return doc
+
+
+@public_router.post("/track")
+async def track_event(ev: TrackEventIn, request: Request):
+    doc = await _prepare_event(ev, request, datetime.now(timezone.utc), None)
     await events_col.insert_one(doc)
     return {"ok": True}
+
+
+@public_router.post("/track/batch")
+async def track_batch(batch: TrackBatchIn, request: Request):
+    """Batched ingestion used by frontend/src/lib/analytics.js (fetch keepalive / sendBeacon). Max 50 events."""
+    events = batch.events[:MAX_BATCH]
+    if not events:
+        return {"ok": True, "accepted": 0}
+    received = datetime.now(timezone.utc)
+    slugs = {ev.model_slug for ev in events if ev.model_slug and not ev.model_id}
+    slug_ids = {}
+    if slugs:
+        async for m in models_col.find({"slug": {"$in": list(slugs)}}, {"_id": 0, "id": 1, "slug": 1}):
+            slug_ids[m["slug"]] = m["id"]
+    docs = [await _prepare_event(ev, request, received, batch.sent_at, slug_ids) for ev in events]
+    await events_col.insert_many(docs, ordered=False)
+    return {"ok": True, "accepted": len(docs)}
 
 
 @public_router.get("/redirects/resolve")

@@ -329,5 +329,12 @@ Marquee v2: spostata in alto (Home: subito sotto header, prima dell'intro, `pt-3
   swipe, Secret, campagne/fonti, classifiche, dettaglio modella, confronto, log eventi paginato, CSV.
 - `TRACKING_AUDIT.md`: audit eventi esistenti vs specifica; NESSUN evento nuovo aggiunto (in attesa OK utente).
 
-## Phase: Tracking events implementation (Status: NOT STARTED — richiede approvazione dell'audit)
-- Ordine proposto: A (visit_id/mode/path centralizzati) → K (queue+beacon) → B, C → D, E → F, G, H, I, J
+## Phase: Tracking v2 implementation (Status: COMPLETED — agent-tested, user confirmation pending)
+- F1 `lib/analytics.js` (visitor_id/visit_id 30 min, schema comune, coda batch, beacon, dedup) + `POST /api/track/batch` + schema esteso + indici.
+- F2 entry_source (card/filmstrip/surprise/swipe/swipe_button/related/search/category/campaign/direct) propagato.
+- F3 cta_impression per tipo, cta_dismiss, marquee impression, mode/entry_source/platform su OF/social.
+- F4 profile_nav_*_click (pulsanti/tastiera) vs profile_swipe_* (gesto) con from/to/mode/pos; arrival events rimossi.
+- F5 home_view, card impression/click, search/filter/category, FilmStrip dedup per visita.
+- F6 video_* per slot/mode dedup per visita (`MediaMorph`). F7 `lib/engaged.js` scroll + engaged time.
+- Backend v2 riscritto (visite vs visitatori, funnel chiuso 6 step + drop-off, percorsi, device compare, video, CTA, engaged, entry). Dashboard aggiornata.
+- Test: pytest 89/89 (10 analytics), 3 percorsi E2E ricostruiti dal DB e via /visit/{id}, perf batch. Docs: `TRACKING_SCHEMA.md`.

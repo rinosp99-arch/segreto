@@ -45,20 +45,4 @@ export function setCarry(c) { carry = { ...c, at: Date.now() }; }
 export function peekCarry() { return carry && (Date.now() - carry.at) < 8000 ? carry : null; }
 export function consumeCarry() { const c = peekCarry(); carry = null; return c; }
 
-/* Session counters for attribution: how many profiles a visitor sees (and swipes) before the OnlyFans click. */
-function readJson(key, fallback) { try { return JSON.parse(sessionStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; } }
-function writeJson(key, v) { try { sessionStorage.setItem(key, JSON.stringify(v)); } catch (e) { debugLog('nav.storage', e); } }
-
-export function noteProfileSeen(slug) {
-  const seen = readJson('ls_profiles_seen', []);
-  if (!seen.includes(slug)) { seen.push(slug); writeJson('ls_profiles_seen', seen); }
-  return seen.length;
-}
-export function bumpSwipe() {
-  const n = (readJson('ls_swipe_count', 0) || 0) + 1;
-  writeJson('ls_swipe_count', n);
-  return n;
-}
-export function journeyMeta() {
-  return { profiles_seen: (readJson('ls_profiles_seen', []) || []).length, swipes: readJson('ls_swipe_count', 0) || 0 };
-}
+/* Journey counters (profiles seen / swipes) moved to lib/analytics.js (visit-scoped): journey(), noteNavigation(). */

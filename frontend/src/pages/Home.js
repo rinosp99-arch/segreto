@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { getModels, getPellicola } from '@/lib/api';
+import { getModels, getPellicola, track } from '@/lib/api';
+import { noteHomeSeen } from '@/lib/analytics';
 import { ModelCard } from '@/components/ModelCard';
 import FilmStrip from '@/components/FilmStrip';
 import { GlobalOfMarquee } from '@/components/GlobalOfMarquee';
@@ -15,6 +16,8 @@ const FILTERS = [
   { key: 'in-tendenza', label: 'In tendenza' },
 ];
 
+let lastHomeViewAt = 0;
+
 function CardSkeleton() {
   return <div className="rounded-2xl overflow-hidden border border-border/60 bg-card" style={{ aspectRatio: '3 / 4' }}>
     <div className="h-full w-full animate-pulse bg-muted/50" /></div>;
@@ -26,6 +29,15 @@ export default function Home() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pellicola, setPellicola] = useState(null);
+
+  // home_view: once per Home mount (mode of the Home at that moment); remounts within 15s (age gate, StrictMode, layout re-key) count once
+  useEffect(() => {
+    noteHomeSeen();
+    if (Date.now() - lastHomeViewAt < 15000) return;
+    lastHomeViewAt = Date.now();
+    track({ tipo: 'home_view', mode: homeMode === 'secret' ? 'secret' : 'public' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     setSeo({
@@ -100,7 +112,7 @@ export default function Home() {
       <div className="sticky top-14 z-30 -mx-4 px-4 py-3 mb-6 bg-background/80 backdrop-blur-md transition-theme">
         <div className="flex gap-2 overflow-x-auto no-scrollbar" data-testid="filters-toggle-group">
           {FILTERS.map((f) => (
-            <button key={f.key} onClick={() => setFiltro(f.key)}
+            <button key={f.key} onClick={() => { if (f.key !== filtro) track({ tipo: 'home_filter_use', meta: { filtro: f.key, da: filtro } }); setFiltro(f.key); }}
               data-testid={`filter-${f.key}`}
               className={`shrink-0 caps-label px-4 py-2 rounded-full border transition-colors ${filtro === f.key ? 'text-foreground' : 'text-muted-foreground'}`}
               style={filtro === f.key
@@ -126,7 +138,7 @@ export default function Home() {
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5" data-testid="models-grid">
-            {firstChunk.map((m, i) => <ModelCard key={m.slug} model={m} index={i} teaser={secret} />)}
+            {firstChunk.map((m, i) => <ModelCard key={m.slug} model={m} index={i} teaser={secret} placement="home" context={filtro} />)}
           </div>
 
           {showStrip && (
@@ -135,7 +147,7 @@ export default function Home() {
 
           {restChunk.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5 pb-10" data-testid="models-grid-rest">
-              {restChunk.map((m, i) => <ModelCard key={m.slug} model={m} index={insertAfter + i} teaser={secret} />)}
+              {restChunk.map((m, i) => <ModelCard key={m.slug} model={m} index={insertAfter + i} teaser={secret} placement="home" context={filtro} />)}
             </div>
           )}
           {!showStrip && <div className="pb-10" />}

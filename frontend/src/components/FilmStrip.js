@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } fr
 import { useNavigate } from 'react-router-dom';
 import { mediaUrl, track } from '@/lib/api';
 import { getSessionId } from '@/lib/session';
+import { once, setEntry } from '@/lib/analytics';
 
 /* Detect reduced motion (diagnostic only — it must NOT turn videos into posters
    nor stop the marquee; the rAF engine below runs regardless). */
@@ -346,6 +347,7 @@ export default function FilmStrip({ items, config, secret }) {
   useEffect(() => {
     if (sectionInView && !impressed.current) {
       impressed.current = true;
+      if (!once(`pellicola_impression:${secret ? 'secret' : 'public'}`)) return;     // once per visit per Home mode
       track({
         tipo: 'pellicola_impression',
         session_id: getSessionId(),
@@ -361,6 +363,7 @@ export default function FilmStrip({ items, config, secret }) {
   const onVideoView = useCallback((slug) => {
     if (viewed.current.has(slug)) return;
     viewed.current.add(slug);
+    if (!once(`pellicola_video_view:${slug}`)) return;                             // once per visit per creator (was: per mount)
     track({
       tipo: 'pellicola_video_view',
       model_slug: slug,
@@ -377,6 +380,7 @@ export default function FilmStrip({ items, config, secret }) {
       cta_source: secret ? 'segreto' : 'pubblico',
       meta: { creator: m.nome_artistico, posizione: idx, modalita: secret ? 'segreto' : 'pubblico' },
     });
+    setEntry('filmstrip', { position: idx });
     navigate(`/modelle/${m.slug}`);
   }, [navigate, secret]);
 

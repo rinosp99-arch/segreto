@@ -11,6 +11,7 @@ import { Footer } from '@/components/layout/Footer';
 import { getSessionId } from '@/lib/session';
 import { captureAttribution } from '@/lib/attribution';
 import { track } from '@/lib/api';
+import { startCampaignVisit, getVisit } from '@/lib/analytics';
 
 import Home from '@/pages/Home';
 import ProfileSwipe from '@/pages/ProfileSwipe';
@@ -54,9 +55,12 @@ export default function App() {
 
   useEffect(() => {
     getSessionId();
+    getVisit();                                   // visit_id: new tab or 30 min of inactivity -> new visit
     const attr = captureAttribution();
-    if (attr && attr.ref) {
-      track({ tipo: 'landing', model_slug: attr.ref, session_id: getSessionId() });
+    const fresh = new URLSearchParams(window.location.search).get('ref');
+    if (fresh && attr && attr.ref) {
+      startCampaignVisit(attr.ref);               // a campaign landing never mixes with the previous journey
+      track({ tipo: 'landing', model_slug: attr.ref, session_id: getSessionId(), entry_source: 'campaign' });
     }
   }, []);
 

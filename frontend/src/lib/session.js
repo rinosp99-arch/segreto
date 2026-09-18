@@ -9,12 +9,14 @@ function uuid() {
   });
 }
 
+// Anonymous visitor id (persistent). Same value as analytics.getVisitorId(); kept for the existing call sites.
 export function getSessionId() {
-  let sid = localStorage.getItem('ls_session_id');
+  let sid = localStorage.getItem('ls_visitor_id') || localStorage.getItem('ls_session_id');
   if (!sid) {
     sid = uuid();
-    localStorage.setItem('ls_session_id', sid);
   }
+  if (!localStorage.getItem('ls_session_id')) localStorage.setItem('ls_session_id', sid);
+  if (!localStorage.getItem('ls_visitor_id')) localStorage.setItem('ls_visitor_id', sid);
   return sid;
 }
 

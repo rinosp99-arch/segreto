@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Search, Shuffle, Menu, X } from 'lucide-react';
 import { useTheme } from '@/lib/themeContext';
 import { getSurprise, getCategories, track } from '@/lib/api';
+import { setEntry } from '@/lib/analytics';
 import { getSessionId } from '@/lib/session';
 import SearchOverlay from '@/components/layout/SearchOverlay';
 import { toast } from 'sonner';
@@ -57,6 +58,7 @@ export function Header() {
       if (m && m.slug && m.slug === lastSurprise.slug) { try { m = await getSurprise(); } catch (e) { /* keep */ } }
       lastSurprise.slug = m.slug;
       track({ tipo: 'home_surprise_profile_open', model_slug: m.slug, session_id: getSessionId(), meta: { source } });
+      setEntry('surprise', { source });
       navigate(`/modelle/${m.slug}`);
     } catch { toast.error('Nessuna modella disponibile'); }
   };
@@ -72,7 +74,7 @@ export function Header() {
 
             <nav className="hidden md:flex items-center gap-1 text-sm">
               {cats.slice(0, 5).map((c) => (
-                <Link key={c.slug} to={`/categorie/${c.slug}`}
+                <Link key={c.slug} to={`/categorie/${c.slug}`} onClick={() => track({ tipo: 'home_category_click', meta: { categoria: c.slug, source: 'desktop' } })}
                   className="px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors">
                   {c.nome}
                 </Link>
@@ -131,7 +133,7 @@ export function Header() {
             </div>
             <button onClick={() => { setMenuOpen(false); surprise(); }} className="btn-gold rounded-xl py-3 text-sm mb-3 flex items-center justify-center gap-2"><Shuffle className="h-4 w-4" />Sorprendimi</button>
             {cats.map((c) => (
-              <Link key={c.slug} to={`/categorie/${c.slug}`} onClick={() => setMenuOpen(false)}
+              <Link key={c.slug} to={`/categorie/${c.slug}`} onClick={() => { setMenuOpen(false); track({ tipo: 'home_category_click', meta: { categoria: c.slug, source: 'mobile_menu' } }); }}
                 className="px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40">{c.nome}</Link>
             ))}
             <Link to="/articoli" onClick={() => setMenuOpen(false)} className="px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40">Rivista</Link>

@@ -13,8 +13,19 @@ import {
   getSessionId, markDiscovered, messageShownFor, markMessageShown,
   ofClickedFor, markOfClicked,
 } from '@/lib/session';
-import { peekCarry, consumeCarry, noteProfileSeen, journeyMeta } from '@/lib/profileNav';
+import { peekCarry, consumeCarry } from '@/lib/profileNav';
+import { beginProfile, secondsSinceProfileOpen, journey, once, observeImpression } from '@/lib/analytics';
+import { startProfileEngagement } from '@/lib/engaged';
 import { GlobalOfMarquee } from '@/components/GlobalOfMarquee';
+
+/* cta_source (legacy, kept) -> normalised CTA descriptor used by the new tracking */
+const CTA_TYPES = {
+  of_click_gallery: { cta_type: 'gallery', cta_position: 'inline_after_grid' },
+  of_click_timed: { cta_type: 'timed', cta_position: 'bottom_bar' },
+  of_click_message: { cta_type: 'message', cta_position: 'envelope' },
+  of_click_sticky: { cta_type: 'sticky', cta_position: 'sticky' },
+};
+const ctaOf = (source) => CTA_TYPES[source] || { cta_type: source, cta_position: null };
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -53,9 +64,10 @@ export default function ModelProfile() {
   const ctaRef = useRef(null);
   const teaserFallback = useRef(null);
   const carriedSecret = useRef(null);   // swipe arrived in Lato Segreto: start timers/audio once secretData is in state
+  const engage = useRef(null);          // engaged time + scroll depth controller (lib/engaged.js)
 
   const goToCta = useCallback(() => {
-    track({ tipo: 'teaser_finale_click', model_slug: slug, session_id: getSessionId() });
+    track({ tipo: 'teaser_finale_click', model_slug: slug, session_id: getSessionId(), cta_type: 'teaser', cta_position: 'video_slot_6', valore: secondsSinceProfileOpen() });
     const el = ctaRef.current;
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [slug]);
@@ -68,23 +80,26 @@ export default function ModelProfile() {
     return () => { if (teaserFallback.current) clearTimeout(teaserFallback.current); };
   }, [secret, slug]);
 
-  // cta_view (funnel VISIT → MODEL VIEW → SECRET → CTA VIEW → OF CLICK): fired once per secret session when the CTA block is visible
+  // cta_impression (gallery CTA): only when the block is really visible (>=40% for 300ms), once per visit per model
   useEffect(() => {
-    if (!secret) return undefined;
-    const el = ctaRef.current;
-    if (!el || typeof IntersectionObserver === 'undefined') return undefined;
-    let fired = false;
-    const io = new IntersectionObserver((entries) => {
-      if (fired) return;
-      if (entries.some((e) => e.isIntersecting)) {
-        fired = true;
-        track({ tipo: 'cta_view', model_slug: slug, session_id: getSessionId(), cta_source: 'of_click_gallery' });
-        io.disconnect();
-      }
-    }, { threshold: 0.4 });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [secret, slug]);
+    if (!secret || !model) return undefined;
+    return observeImpression(ctaRef.current, () => {
+      track({ tipo: 'cta_impression', model_slug: slug, session_id: getSessionId(), cta_source: 'of_click_gallery', ...ctaOf('of_click_gallery'), valore: secondsSinceProfileOpen() });
+    }, { threshold: 0.4, key: `cta_imp:gallery:${slug}` });
+  }, [secret, slug, model]);
+
+  // cta_impression (timed bottom bar): when it appears, once per visit per model
+  useEffect(() => {
+    if (!secret || !ctaTimed) return;
+    if (once(`cta_imp:timed:${slug}`)) track({ tipo: 'cta_impression', model_slug: slug, session_id: getSessionId(), cta_source: 'of_click_timed', ...ctaOf('of_click_timed'), valore: secondsSinceProfileOpen() });
+  }, [secret, ctaTimed, slug]);
+
+  // engaged time + scroll depth: one controller per profile view (emits ONE profile_engaged event at the end)
+  useEffect(() => {
+    engage.current = startProfileEngagement(slug);
+    return () => { engage.current?.stop(); engage.current = null; };
+  }, [slug]);
+  useEffect(() => { engage.current?.setMode(secret ? 'secret' : 'public'); }, [secret]);
 
   const onTeaserTime = useCallback((cur, dur) => {
     if (dur > 0 && (dur - cur) <= Math.min(3, dur * 0.35)) setTeaserEnd(true);
@@ -109,8 +124,14 @@ export default function ModelProfile() {
       });
     };
     const afterModel = (m) => {
-      noteProfileSeen(slug);
-      track({ tipo: 'page_view', model_slug: slug, model_id: m.id, session_id: getSessionId(), meta: carry ? { via: carry.via, mode: openSecret ? 'secret' : 'public' } : {} });
+      // entry_source: how this profile was reached (card / filmstrip / surprise / swipe / search / category / campaign / direct)
+      const entry = beginProfile(slug);
+      track({
+        tipo: 'page_view', model_slug: slug, model_id: m.id, session_id: getSessionId(),
+        entry_source: entry.entry_source, profile_pos: entry.profile_pos, from_model: entry.from_model || undefined,
+        mode: openSecret ? 'secret' : 'public',
+        meta: { ...(carry ? { via: carry.via } : {}), mode: openSecret ? 'secret' : 'public', profiles_seen: entry.profiles_seen, profile_views: entry.profile_views, ...(entry.position !== undefined ? { position: entry.position } : {}) },
+      });
       setSeo({
         title: m.seo?.title || `${m.nome_artistico} | ${SITE.name}`,
         description: m.seo?.meta_description || m.bio,
@@ -130,7 +151,7 @@ export default function ModelProfile() {
         applyTheme(true);
         secretEnteredAt.current = Date.now();
         markDiscovered(slug);
-        track({ tipo: 'secret_activate', model_slug: slug, session_id: getSessionId(), valore: 0, meta: { via: 'swipe' } });
+        track({ tipo: 'secret_activate', model_slug: slug, session_id: getSessionId(), valore: 0, mode: 'secret', meta: { via: 'swipe' } });
         carriedSecret.current = { audio: sd?.regia?.audio || {} };
       }).catch(() => { if (alive) setNotFound(true); });
     } else {
@@ -147,7 +168,7 @@ export default function ModelProfile() {
       if (ctaTimer.current) clearTimeout(ctaTimer.current);
       if (secretEnteredAt.current) {
         const secs = Math.round((Date.now() - secretEnteredAt.current) / 1000);
-        track({ tipo: 'secret_time', model_slug: slug, session_id: getSessionId(), valore: secs, _beacon: true });
+        track({ tipo: 'secret_time', model_slug: slug, session_id: getSessionId(), valore: secs, mode: 'secret', _beacon: true });
         secretEnteredAt.current = null;
       }
       const next = peekCarry();
@@ -190,7 +211,7 @@ export default function ModelProfile() {
       if (ofClickedFor(slug)) return;
       setEnvelopeVisible(true);
       markMessageShown(slug);
-      track({ tipo: 'message_shown', model_slug: slug, session_id: getSessionId() });
+      track({ tipo: 'message_shown', model_slug: slug, session_id: getSessionId(), cta_source: 'of_click_message', ...ctaOf('of_click_message'), valore: secondsSinceProfileOpen() });
     }, timer);
   }, [secretData, slug, soundOn]);
 
@@ -229,7 +250,7 @@ export default function ModelProfile() {
       applyTheme(true); setSecret(true);
       secretEnteredAt.current = Date.now();
       startAmb();
-      track({ tipo: 'secret_activate', model_slug: slug, session_id: getSessionId(), valore: elapsed });
+      track({ tipo: 'secret_activate', model_slug: slug, session_id: getSessionId(), valore: elapsed, mode: 'secret' });
       markDiscovered(slug); startEnvelopeTimer(); setTransforming(false); return;
     }
 
@@ -245,7 +266,7 @@ export default function ModelProfile() {
     setPhase('idle');
     setTransforming(false);
     secretEnteredAt.current = Date.now();
-    track({ tipo: 'secret_activate', model_slug: slug, session_id: getSessionId(), valore: elapsed });
+    track({ tipo: 'secret_activate', model_slug: slug, session_id: getSessionId(), valore: elapsed, mode: 'secret' });
     markDiscovered(slug);
     startEnvelopeTimer();
   };
@@ -254,10 +275,10 @@ export default function ModelProfile() {
     if (transforming) return;
     if (secretEnteredAt.current) {
       const secs = Math.round((Date.now() - secretEnteredAt.current) / 1000);
-      track({ tipo: 'secret_time', model_slug: slug, session_id: getSessionId(), valore: secs });
+      track({ tipo: 'secret_time', model_slug: slug, session_id: getSessionId(), valore: secs, mode: 'secret' });
       secretEnteredAt.current = null;
     }
-    track({ tipo: 'secret_return', model_slug: slug, session_id: getSessionId() });
+    track({ tipo: 'secret_return', model_slug: slug, session_id: getSessionId(), mode: 'secret', valore: secondsSinceProfileOpen() });
     if (msgTimer.current) clearTimeout(msgTimer.current);
     if (ctaTimer.current) clearTimeout(ctaTimer.current);
     getAudio()?.stopImmediate();
@@ -292,9 +313,12 @@ export default function ModelProfile() {
   const openOnlyFans = (source) => {
     const url = secretData?.onlyfans_url || model?.onlyfans_url;
     if (!url) return;
-    const journey = journeyMeta();   // how many profiles were seen / swiped before this click (attribution)
-    track({ tipo: 'cta_click', model_slug: slug, session_id: getSessionId(), cta_source: source, meta: journey });
-    track({ tipo: 'of_click', model_slug: slug, session_id: getSessionId(), cta_source: source, meta: journey });
+    // attribution of the click: profiles seen / swipes / last navigation input (gesture vs button) before this click
+    const j = journey();
+    const secs = secondsSinceProfileOpen();
+    const common = { model_slug: slug, session_id: getSessionId(), cta_source: source, ...ctaOf(source), valore: secs, meta: { swipes: j.swipes, profiles_seen: j.profiles_seen, last_nav_input: j.last_nav_input, seconds_since_profile_open: secs } };
+    track({ tipo: 'cta_click', ...common });
+    track({ tipo: 'of_click', ...common });
     markOfClicked(slug); setEnvelopeVisible(false); setCtaTimed(false);
     const sep = url.includes('?') ? '&' : '?';
     window.open(`${url}${sep}utm_source=lato_segreto&utm_medium=profilo&utm_campaign=lato_segreto&creator=${slug}&cta=${source}`, '_blank', 'noopener');
@@ -302,7 +326,7 @@ export default function ModelProfile() {
 
   const openSocial = (key, url) => {
     if (!url) return;
-    track({ tipo: `social_click_${key}`, model_slug: slug, session_id: getSessionId(), cta_source: key });
+    track({ tipo: `social_click_${key}`, model_slug: slug, session_id: getSessionId(), cta_source: key, platform: key, valore: secondsSinceProfileOpen() });
     window.open(url, '_blank', 'noopener');
   };
 
@@ -426,6 +450,8 @@ export default function ModelProfile() {
             {slots.map((s, i) => (
               <MediaMorph
                 key={s.pair.id || i}
+                modelSlug={slug}
+                slot={i + 1}
                 pub={s.pair.pubblico}
                 sec={s.pair.segreto}
                 secret={secret}
@@ -490,7 +516,7 @@ export default function ModelProfile() {
         {related.length > 0 && (
           <section className="mt-16">
             <div className="caps-label gold-text mb-4">Potrebbero piacerti anche</div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{related.map((m, i) => <ModelCard key={m.slug} model={m} index={i} />)}</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{related.map((m, i) => <ModelCard key={m.slug} model={m} index={i} placement="related" />)}</div>
           </section>
         )}
       </div>
@@ -516,13 +542,13 @@ export default function ModelProfile() {
           <motion.div initial={{ opacity: 0, y: 30, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 30 }} className="fixed bottom-20 sm:bottom-5 right-3 sm:right-5 z-[60] w-[calc(100%-1.5rem)] sm:w-80" data-testid="envelope-message-card">
             <div className="glass rounded-2xl card-elev-2 overflow-hidden">
               {!envelopeOpen ? (
-                <button onClick={() => { setEnvelopeOpen(true); track({ tipo: 'message_open', model_slug: slug, session_id: getSessionId() }); }} data-testid="envelope-open-button" className="w-full flex items-center gap-3 p-4 text-left hover:bg-muted/30 transition-colors">
+                <button onClick={() => { setEnvelopeOpen(true); track({ tipo: 'message_open', model_slug: slug, session_id: getSessionId(), cta_source: 'of_click_message', ...ctaOf('of_click_message'), valore: secondsSinceProfileOpen() }); }} data-testid="envelope-open-button" className="w-full flex items-center gap-3 p-4 text-left hover:bg-muted/30 transition-colors">
                   <div className="h-10 w-10 rounded-full flex items-center justify-center shrink-0" style={{ background: 'hsl(var(--primary) / 0.16)', border: '1px solid hsl(var(--primary)/0.4)' }}><Mail className="h-5 w-5" style={{ color: 'hsl(var(--primary))' }} /></div>
                   <div className="flex-1"><div className="text-sm font-semibold">Ti ha lasciato qualcosa…</div><div className="text-xs text-muted-foreground">Tocca per aprire</div></div>
                 </button>
               ) : (
                 <div className="p-4">
-                  <div className="flex justify-between items-start mb-3"><span className="caps-label gold-text inline-flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> Messaggio</span><button onClick={() => setEnvelopeVisible(false)} className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-muted/50"><X className="h-4 w-4" /></button></div>
+                  <div className="flex justify-between items-start mb-3"><span className="caps-label gold-text inline-flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> Messaggio</span><button onClick={() => { setEnvelopeVisible(false); track({ tipo: 'cta_dismiss', model_slug: slug, session_id: getSessionId(), cta_source: 'of_click_message', ...ctaOf('of_click_message'), valore: secondsSinceProfileOpen() }); }} data-testid="envelope-dismiss-button" className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-muted/50"><X className="h-4 w-4" /></button></div>
                   {secretData?.messaggio_35s?.foto && <div className="rounded-xl overflow-hidden mb-3" style={{ aspectRatio: '16/10' }}><img src={mediaUrl(secretData.messaggio_35s.foto)} alt="" className="h-full w-full object-cover" style={{ filter: 'saturate(0.82) hue-rotate(-12deg)', objectPosition: 'center 20%' }} /></div>}
                   <p className="text-sm leading-relaxed mb-4">{secretData?.messaggio_35s?.testo}</p>
                   <button onClick={() => openOnlyFans('of_click_message')} data-testid="envelope-cta" className="btn-gold w-full rounded-xl py-3 text-sm inline-flex items-center justify-center gap-2">{secretData?.messaggio_35s?.cta_testo || ctaLabel} <ArrowRight className="h-4 w-4" /></button>

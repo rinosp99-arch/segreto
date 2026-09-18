@@ -6,9 +6,10 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import ModelProfile from '@/pages/ModelProfile';
-import { getRing, neighborsOf, preloadCard, setCarry, bumpSwipe, journeyMeta } from '@/lib/profileNav';
+import { getRing, neighborsOf, preloadCard, setCarry } from '@/lib/profileNav';
 import { track, mediaUrl } from '@/lib/api';
 import { getSessionId } from '@/lib/session';
+import { noteNavigation, setEntry, currentProfile, secondsSinceProfileOpen } from '@/lib/analytics';
 import { debugLog } from '@/lib/log';
 
 const THRESHOLD = 0.32;      // fraction of the viewport width
@@ -73,7 +74,8 @@ export default function ProfileSwipe() {
   const target = dir === 'next' ? next : dir === 'prev' ? prev : null;
   const progress = Math.min(1, Math.abs(x) / vw());
 
-  const go = useCallback((direction) => {
+  /* input: 'gesture' (finger / mouse drag) | 'button' (arrows, ‹ ⇆ SCORRI › pill) | 'keyboard' */
+  const go = useCallback((direction, input = 'gesture') => {
     const t = direction === 'next' ? next : prev;
     if (!t || busy.current) return;
     busy.current = true;
@@ -83,11 +85,15 @@ export default function ProfileSwipe() {
     setAnim('out');
     setX(direction === 'next' ? -vw() : vw());
     window.setTimeout(() => {
-      const swipes = bumpSwipe();
-      const sid = getSessionId();
-      track({ tipo: direction === 'next' ? 'profile_swipe_next' : 'profile_swipe_previous', model_slug: slug, session_id: sid, meta: { to: t.slug, mode: secret ? 'secret' : 'public', swipes } });
-      track({ tipo: secret ? 'profile_swipe_secret' : 'profile_swipe_public', model_slug: t.slug, session_id: sid, meta: { from: slug, ...journeyMeta(), swipes } });
-      setCarry({ secret, via: 'swipe', direction });
+      // GESTURE -> profile_swipe_next/previous · BUTTONS / keyboard -> profile_nav_next_click/prev_click
+      // (the arrival is the next profile's page_view with entry_source swipe | swipe_button — no duplicate arrival event)
+      const swipes = noteNavigation(input);
+      const cur = currentProfile();
+      const gesture = input === 'gesture';
+      const tipo = gesture ? (direction === 'next' ? 'profile_swipe_next' : 'profile_swipe_previous') : (direction === 'next' ? 'profile_nav_next_click' : 'profile_nav_prev_click');
+      track({ tipo, model_slug: slug, session_id: getSessionId(), from_model: slug, to_model: t.slug, input, mode: secret ? 'secret' : 'public', profile_pos: cur?.pos, valore: secondsSinceProfileOpen(), meta: { to: t.slug, from: slug, direction, mode: secret ? 'secret' : 'public', swipes, input } });
+      setEntry(gesture ? 'swipe' : 'swipe_button', { direction, input });
+      setCarry({ secret, via: gesture ? 'swipe' : 'swipe_button', direction });
       navigate(`/modelle/${t.slug}`);
       try { window.scrollTo({ top: 0, behavior: 'instant' }); } catch (err) { debugLog('swipe.scroll', err); window.scrollTo(0, 0); }
       // incoming: start slightly offset on the opposite side, then settle
@@ -142,8 +148,8 @@ export default function ProfileSwipe() {
   useEffect(() => {
     const onKey = (e) => {
       if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
-      if (e.key === 'ArrowRight') go('next');
-      if (e.key === 'ArrowLeft') go('prev');
+      if (e.key === 'ArrowRight') go('next', 'keyboard');
+      if (e.key === 'ArrowLeft') go('prev', 'keyboard');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -197,12 +203,12 @@ export default function ProfileSwipe() {
       {/* desktop: discreet arrows, only when useful (ring > 1), visible on hover / focus, never affecting the layout */}
       {(prev || next) && (
         <>
-          <button type="button" onClick={() => go('prev')} aria-label="Modella precedente" data-testid="profile-prev-arrow"
+          <button type="button" onClick={() => go('prev', 'button')} aria-label="Modella precedente" data-testid="profile-prev-arrow"
             className="hidden sm:flex fixed left-3 lg:left-6 top-1/2 -translate-y-1/2 z-30 h-11 w-11 items-center justify-center rounded-full glass border border-border/60 text-muted-foreground hover:text-foreground focus-visible:opacity-100"
             style={{ opacity: hoverArrows ? 0.72 : 0.18, transition: 'opacity 250ms ease, transform 160ms ease' }}>
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <button type="button" onClick={() => go('next')} aria-label="Prossima modella" data-testid="profile-next-arrow"
+          <button type="button" onClick={() => go('next', 'button')} aria-label="Prossima modella" data-testid="profile-next-arrow"
             className="hidden sm:flex fixed right-3 lg:right-6 top-1/2 -translate-y-1/2 z-30 h-11 w-11 items-center justify-center rounded-full glass border border-border/60 text-muted-foreground hover:text-foreground focus-visible:opacity-100"
             style={{ opacity: hoverArrows ? 0.72 : 0.18, transition: 'opacity 250ms ease, transform 160ms ease' }}>
             <ChevronRight className="h-5 w-5" />
@@ -235,7 +241,7 @@ export default function ProfileSwipe() {
                 transition: 'border-color 500ms ease, box-shadow 500ms ease',
               }}
             >
-              <button type="button" onClick={() => go('prev')} aria-label="Modella precedente" data-testid="profile-nav-prev"
+              <button type="button" onClick={() => go('prev', 'button')} aria-label="Modella precedente" data-testid="profile-nav-prev"
                 className="flex items-center gap-1 h-9 min-w-9 px-2.5 rounded-full text-base leading-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 active:scale-95"
                 style={arrowStyle('prev')}>
                 <span aria-hidden="true">{"\u2039"}</span>
@@ -244,7 +250,7 @@ export default function ProfileSwipe() {
               <span className="flex items-center gap-1.5 px-2 caps-label text-[10px] select-none" style={{ color: c.text, opacity: 0.8, letterSpacing: '0.24em' }} data-testid="profile-nav-hint">
                 <span aria-hidden="true" style={{ fontSize: '13px', letterSpacing: 0 }}>{"\u21c6"}</span> Scorri
               </span>
-              <button type="button" onClick={() => go('next')} aria-label="Prossima modella" data-testid="profile-nav-next"
+              <button type="button" onClick={() => go('next', 'button')} aria-label="Prossima modella" data-testid="profile-nav-next"
                 className="flex items-center gap-1 h-9 min-w-9 px-2.5 rounded-full text-base leading-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 active:scale-95"
                 style={arrowStyle('next')}>
                 <span className="hidden sm:inline caps-label text-[10px]">Prossima</span>

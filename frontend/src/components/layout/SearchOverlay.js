@@ -2,7 +2,8 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X } from 'lucide-react';
-import { getModels, mediaUrl } from '@/lib/api';
+import { getModels, mediaUrl, track } from '@/lib/api';
+import { setEntry } from '@/lib/analytics';
 
 export default function SearchOverlay({ open, onClose }) {
   const [q, setQ] = useState('');
@@ -24,13 +25,25 @@ export default function SearchOverlay({ open, onClose }) {
     return () => clearTimeout(t);
   }, [q, open]);
 
-  const go = (slug) => { onClose(); navigate(`/modelle/${slug}`); };
+  // home_search_use: on result selection, or when the overlay closes after a real query (abandon). Never the query text itself.
+  const used = useRef(false);
+  const go = (slug) => {
+    used.current = true;
+    track({ tipo: 'home_search_use', model_slug: slug, meta: { esito: 'selezione', q_len: q.trim().length, risultati: results.length, position: results.findIndex((m) => m.slug === slug) } });
+    setEntry('search', { q_len: q.trim().length });
+    onClose(); navigate(`/modelle/${slug}`);
+  };
+  const close = () => {
+    if (!used.current && q.trim().length >= 2) track({ tipo: 'home_search_use', meta: { esito: results.length ? 'abbandono' : 'nessun_risultato', q_len: q.trim().length, risultati: results.length } });
+    used.current = false;
+    onClose();
+  };
 
   return (
     <AnimatePresence>
       {open && (
         <motion.div className="fixed inset-0 z-[80] p-4 sm:p-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          style={{ background: 'rgba(0,0,0,0.8)' }} onClick={onClose}>
+          style={{ background: 'rgba(0,0,0,0.8)' }} onClick={close}>
           <motion.div onClick={(e) => e.stopPropagation()}
             initial={{ y: -16, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -16, opacity: 0 }}
             className="max-w-xl mx-auto glass rounded-2xl card-elev-2 overflow-hidden">
@@ -39,7 +52,7 @@ export default function SearchOverlay({ open, onClose }) {
               <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)}
                 data-testid="model-search-input" placeholder="Cerca una modella…"
                 className="flex-1 bg-transparent outline-none text-base placeholder:text-muted-foreground" />
-              <button onClick={onClose} className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted/50"><X className="h-4 w-4" /></button>
+              <button onClick={close} className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted/50"><X className="h-4 w-4" /></button>
             </div>
             <div className="max-h-[60vh] overflow-auto p-2">
               {loading && <div className="p-4 text-sm text-muted-foreground">Ricerca in corso…</div>}

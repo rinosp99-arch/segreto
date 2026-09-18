@@ -37,16 +37,6 @@ export const getPublicSettings = () => api.get('/settings').then((r) => r.data);
 export const getPellicola = () => api.get('/pellicola').then((r) => r.data);
 
 // ---- tracking ----
-export function track(evt) {
-  try {
-    let attr = null;
-    try { attr = JSON.parse(sessionStorage.getItem('ls_attr') || 'null'); } catch (e) { attr = null; }
-    const payload = attr ? { ref: attr.ref, fonte: attr.fonte, campagna: attr.campagna, ...evt } : evt;
-    const body = JSON.stringify(payload);
-    if (evt._beacon && navigator.sendBeacon) {
-      navigator.sendBeacon(`${API_BASE}/track`, new Blob([body], { type: 'application/json' }));
-      return;
-    }
-    api.post('/track', payload).catch(() => {});
-  } catch (e) { /* noop */ }
-}
+// Central client (ids, mode, path, entry_source, attribution, batching, beacon): see lib/analytics.js.
+// Every existing `track({...})` call keeps working and automatically receives the common schema.
+export { track } from '@/lib/analytics';

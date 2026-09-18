@@ -97,6 +97,10 @@ async def ensure_indexes():
     await events_col.create_index([('fonte', 1), ('timestamp', -1)], sparse=True)
     await events_col.create_index([('source', 1), ('timestamp', -1)], sparse=True)
     await events_col.create_index([('session_id', 1), ('timestamp', -1)])
+    # common analytics schema (visit / entry_source) — journeys, funnels, paths
+    await events_col.create_index([('visit_id', 1), ('timestamp', 1)], sparse=True)
+    await events_col.create_index([('entry_source', 1), ('timestamp', -1)], sparse=True)
+    await events_col.create_index([('tipo', 1), ('visit_id', 1)], sparse=True)
     # v1
     await api_keys_col.create_index('key_hash', unique=True)
     await versions_col.create_index([('entity', 1), ('entity_id', 1), ('timestamp', -1)])

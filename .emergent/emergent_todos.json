@@ -1,30 +1,18 @@
 [
   {
-    "content": "Audit form editor + schemas + v1_models + prepare_complete handler; write PREPARE_COMPLETE_MATRIX.md",
+    "content": "F1-F7 tracking implementation",
     "status": "completed"
   },
   {
-    "content": "Explicit parameters_schema.fields + example_parameters for models.prepare_complete",
+    "content": "Backend v2 + Dashboard aggiornati",
     "status": "completed"
   },
   {
-    "content": "Fix orchestrator: apply all non-media fields, SAFE/REVIEW split by path, SEO audit+safe fix, truthful readiness",
+    "content": "Test: pytest 89/89, E2E 3 percorsi verificati in DB, perf, testing agent",
     "status": "completed"
   },
   {
-    "content": "E2E controlled test on ZZTEST draft (session, rollback, no publish, cleanup)",
-    "status": "completed"
-  },
-  {
-    "content": "GPT-contract HTTP test with parameters.fields (update expectations)",
-    "status": "completed"
-  },
-  {
-    "content": "Regressions Phase 12 + contract + smoke; update plan.md",
-    "status": "completed"
-  },
-  {
-    "content": "deployment_agent check",
+    "content": "Report finale + docs",
     "status": "completed"
   }
 ]

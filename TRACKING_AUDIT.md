@@ -1,5 +1,13 @@
 # AUDIT TRACKING — LATO SEGRETO
 
+> **AGGIORNAMENTO 18/09 (sera): audit eseguito e tutte le voci A–K implementate.** Lo stato sotto descrive la situazione PRIMA
+> dell'implementazione; lo schema, le regole e l'elenco eventi attuali sono in `TRACKING_SCHEMA.md`.
+> Implementato: visit_id/visitor_id · metadati centralizzati (`lib/analytics.js`) · coda batch + sendBeacon · entry_source ·
+> home_view / card impression+click / ricerca / filtri / categorie · dedup FilmStrip per visita · marquee impression ·
+> cta_impression per tipo, cta_dismiss, secondi dal profilo · mode/entry_source/platform su OF e social ·
+> profile_nav_*_click vs profile_swipe_* (from/to/input/pos) · video_impression/start/25/50/75/complete/replay per slot e mode ·
+> profile_scroll_* · profile_engaged (visibilità + inattività 20s, split public/secret). Dashboard e backend v2 aggiornati.
+
 Stato reale del tracking (frontend pubblico → `POST /api/track` → `analytics_events`) confrontato con la specifica
 "tracking come parte fondamentale". Nessun evento è stato aggiunto in questo giro: **questo è solo l'audit**.
 
