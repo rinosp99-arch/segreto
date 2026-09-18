@@ -318,6 +318,12 @@ Confronto **INITIAL_HTML vs RENDERED_DOM vs GOOGLE_INSPECTION**:
 ---
 
 ## 3) Phase 14 — SEO AUTOPILOT READ_ONLY (Status: COMPLETED — PASS, PUBLIC_MUTATIONS=0)
+
+### Phase 14B — Technical SEO Foundation (Status: COMPLETED in preview — attende Re-publish utente)
+- [x] audit produzione sola lettura (HTTP + Chromium + URL Inspection 15 URL): **BASE SEO INDICIZZABILE**, 0 blocchi tecnici; Home INDEXED, 12 URL discovered-not-indexed, 2 orfane, /articoli fuori sitemap, soft-404
+- [x] fix minimi in preview: `/articoli` in sitemap (v1_seo.py) + link categorie nel Footer (Footer.js) — produzione NON modificata (verificato dopo: sitemap prod 30 URL, senza /articoli)
+- [x] `foundation.py` + endpoint `/foundation` + `run/foundation` + 2 test (26/26 PASS)
+- Da fare (utente): Re-publish; poi ri-eseguire foundation su produzione e richiedere indicizzazione delle URL 'Rilevata ma non indicizzata'
 Fatto (agent-tested):
 - [x] 14.0 mode OFF/READ_ONLY/FULL (FULL_LOCKED nel codice, `require_full` → WriteBlocked/423)
 - [x] store `seo_ap_*` + decision log + run log + **snapshot pubblico hash before/after** (PUBLIC_MUTATIONS)

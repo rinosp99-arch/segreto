@@ -377,3 +377,27 @@ def test_jobs_registered_in_scheduler():
     import seo_autopilot.jobs  # noqa: F401
     for name, interval in (("seo_ap_tech_health", 6 * 3600), ("seo_ap_gsc_sync", 12 * 3600), ("seo_ap_daily_analysis", 24 * 3600), ("seo_ap_weekly_learning", 7 * 24 * 3600)):
         assert name in JOBS and JOBS[name]["interval_s"] == interval
+
+
+# ============================================================================================ Phase 14B — technical foundation
+async def test_sitemap_includes_articles_index_when_articles_exist():
+    from v1_seo import sitemap_entries
+    from database import articles_col
+    entries = await sitemap_entries("https://x.test")
+    has_articles = await articles_col.count_documents({"stato": "pubblicato", "indicizzabile": True}) > 0
+    idx = [e for e in entries if e["path"] == "/articoli"]
+    assert (len(idx) == 1) == has_articles
+    if idx:
+        assert idx[0]["type"] == "articles_index" and idx[0]["loc"] == "https://x.test/articoli"
+    assert len({e["loc"] for e in entries}) == len(entries), "no duplicates"
+
+
+def test_foundation_route_rejects_unauthorised_host_and_returns_latest():
+    h = {"Authorization": f"Bearer {_token()}"}
+    r = requests.post(f"{BASE}/api/admin/seo-autopilot/run/foundation?base=https://evil.example.com", headers=h, timeout=15)
+    assert r.status_code == 400
+    r = requests.get(f"{BASE}/api/admin/seo-autopilot/foundation", headers=h, timeout=30)
+    assert r.status_code == 200
+    d = r.json()
+    if "rows" in d:
+        assert d["verdict"]["BASE_SEO"] in ("INDICIZZABILE", "NON_INDICIZZABILE") and all("INDEXABLE" in row and "GOOGLE_INDEX_STATUS" in row and "orphan_status" in row and "sitemap_status" in row for row in d["rows"])

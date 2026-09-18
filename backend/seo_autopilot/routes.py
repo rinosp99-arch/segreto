@@ -22,8 +22,10 @@ async def status(admin=Depends(get_current_admin)):
 
 
 @router.post("/run/{kind}")
-async def run_now(kind: str, admin=Depends(get_current_admin), render: bool = True, llm: bool = True):
-    """Starts a run in background (never blocks the request). kinds: tech_health | gsc_sync | daily_analysis | weekly_learning | full"""
+async def run_now(kind: str, admin=Depends(get_current_admin), render: bool = True, llm: bool = True, base: Optional[str] = None, inspect_limit: int = Query(15, le=40)):
+    """Starts a run in background (never blocks the request). kinds: tech_health | gsc_sync | daily_analysis | weekly_learning | full | foundation"""
+    if kind == "foundation":
+        return await foundation_run(base=base, inspect_limit=inspect_limit)
     fns = {"tech_health": lambda: engine.run_tech_health("admin", render=render), "gsc_sync": lambda: engine.run_gsc_sync("admin"), "daily_analysis": lambda: engine.run_daily("admin", use_llm=llm),
            "weekly_learning": lambda: engine.run_weekly("admin"), "full": lambda: engine.run_full("admin", use_llm=llm, render=render)}
     if kind not in fns:
@@ -148,3 +150,29 @@ async def execute_proposal(proposal_slug: str, admin=Depends(get_current_admin))
         await store.log_decision(None, "WRITE_BLOCKED", proposal_slug, str(e), result="BLOCKED", kind="guard")
         raise HTTPException(423, str(e))
     raise HTTPException(501, "Esecuzione non implementata in questa fase")   # unreachable while FULL_LOCKED
+
+
+# ------------------------------------------------------------------------------------------------ Phase 14B: technical SEO foundation
+@router.get("/foundation")
+async def foundation_latest(base: Optional[str] = None, admin=Depends(get_current_admin)):
+    q = {"kind": "foundation"}
+    if base:
+        q["base"] = base.rstrip("/")
+    doc = await store.audits_col.find_one(q, {"_id": 0}, sort=[("at", -1)])
+    return doc or {"note": "nessun audit foundation eseguito"}
+
+
+async def foundation_run(base: Optional[str] = None, inspect_limit: int = 15):
+    """Read-only technical foundation audit. Allowed targets: the configured crawl base or the Search Console property host (explicitly authorised)."""
+    from urllib.parse import urlsplit
+    from google_search.config import cfg as gcfg
+    target = (base or store.crawl_base_url()).rstrip("/")
+    allowed = {urlsplit(store.crawl_base_url()).netloc.lower(), urlsplit(gcfg.property_url).netloc.lower()}
+    if urlsplit(target).netloc.lower() not in allowed:
+        raise HTTPException(400, "host non autorizzato per l'audit")
+    if _bg["task"] and not _bg["task"].done():
+        return {"started": False, "status": "already_running", "kind": _bg["kind"]}
+    from . import foundation
+    _bg["task"] = asyncio.create_task(foundation.run(target, inspect_limit=inspect_limit))
+    _bg["kind"] = "foundation"
+    return {"started": True, "kind": "foundation", "base": target, "mode": mode.current_mode()}

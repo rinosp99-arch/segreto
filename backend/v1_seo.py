@@ -392,8 +392,13 @@ async def sitemap_entries(base: Optional[str] = None) -> List[dict]:
         entries.append({"path": f"/modelle/{m['slug']}", "priority": "0.9", "changefreq": "weekly", "type": "model", "lastmod": lm or None})
     async for c in categories_col.find({"stato": "pubblicata", "indicizzabile": True, "is_deleted": {"$ne": True}}, {"_id": 0, "slug": 1, "updated_at": 1}):
         entries.append({"path": f"/categorie/{c['slug']}", "priority": "0.7", "changefreq": "weekly", "type": "category", "lastmod": (c.get("updated_at") or "")[:10] or None})
+    n_articles = 0
     async for a in articles_col.find({"stato": "pubblicato", "indicizzabile": True}, {"_id": 0, "slug": 1, "data_aggiornamento": 1, "data_pubblicazione": 1}):
         entries.append({"path": f"/articoli/{a['slug']}", "priority": "0.6", "changefreq": "monthly", "type": "article", "lastmod": (a.get("data_aggiornamento") or a.get("data_pubblicazione") or "")[:10] or None})
+        n_articles += 1
+    if n_articles:
+        # Phase 14B: the public, indexable, internally-linked "Rivista" index (/articoli) was missing from the sitemap (Google: "URL sconosciuto")
+        entries.append({"path": "/articoli", "priority": "0.5", "changefreq": "weekly", "type": "articles_index", "lastmod": max((e.get("lastmod") or "") for e in entries if e.get("type") == "article") or None})
     cfg = await config_col.find_one({"id": "global"}, {"_id": 0, "flags": 1}) or {}
     if (cfg.get("flags") or {}).get("public_landing_routes"):
         async for l in landings_col.find({"stato": "pubblicata", "is_deleted": {"$ne": True}}, {"_id": 0, "slug": 1, "seo": 1, "updated_at": 1}):

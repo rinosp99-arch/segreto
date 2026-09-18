@@ -68,3 +68,18 @@ SEO_AUTOPILOT_INSPECT_PER_RUN=5
 
 ## Test
 `tests/test_seo_autopilot.py` — guard FULL, GSC assente/connesso(mock)/zero dati/errore temporaneo, idempotenza snapshot, regole opportunità, cannibalizzazione, planner + quality gate (doorway), parser crawler + link rotti, LLM fail-soft + strip metriche, snapshot pubblico, run completo idempotente con `PUBLIC_MUTATIONS=0`, API admin protette, `execute` → 423, integrità sitemap/robots/models prima/dopo un run, job registrati.
+
+---
+
+## Fase 14B — Technical SEO Foundation (produzione, sola lettura) — 2026-09-18
+
+Modulo `seo_autopilot/foundation.py` · `GET /api/admin/seo-autopilot/foundation` · `POST /api/admin/seo-autopilot/run/foundation?base=…` (host ammessi: base di crawl o proprietà GSC).
+Per ogni URL: status/redirect, `X-Robots-Tag`, meta robots (iniziale e renderizzata), canonical (iniziale/renderizzata/Google), JSON-LD, H1, link interni REALI (grafo dal DOM renderizzato di 25 pagine), sitemap status, orphan status, URL Inspection (verdict, indexingState, coverageState, robotsTxtState, pageFetchState, lastCrawlTime, userCanonical, googleCanonical, referringUrls), sonda soft-404.
+
+**Verdetto produzione: BASE SEO ✅ INDICIZZABILE** (nessun header/meta noindex, robots.txt `Allow: /`, sitemap 30 URL stesso host e dichiarata, tutte le URL 200 senza redirect, canonical renderizzata = URL su 25/25, Home `INDEXED · PASS · canonical Google = canonical utente · crawl 2026-09-13 MOBILE`).
+Non blocchi ma da sistemare: 12 URL "Rilevata, ma attualmente non indicizzata" (Google non le ha ancora scansionate: `pageFetchState` non tentato), `/categorie/more` e `/articoli` sconosciute a Google, 2 categorie orfane (`/categorie/cosplay`, `/categorie/latine` — l'header desktop mostra solo le prime 5), `/articoli` assente dalla sitemap, soft-404 su profili/categorie inesistenti (200 senza noindex), H1 = brand ovunque.
+
+**Correzioni minime applicate SOLO in preview** (nessun deploy):
+1. `backend/v1_seo.py::sitemap_entries` — aggiunta `/articoli` (type `articles_index`, priority 0.5) quando esiste almeno un articolo pubblicato indicizzabile.
+2. `frontend/src/components/layout/Footer.js` — riga discreta "Categorie" con link a tutte le categorie pubblicate (`data-testid=footer-categories`): elimina le pagine orfane su qualsiasi viewport.
+Non toccati: H1, title, description, contenuti, canonical, structured data, robots, SSR/prerender, profili, Home, CTA, media.
