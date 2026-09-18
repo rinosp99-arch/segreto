@@ -1,30 +1,27 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { mediaUrl } from '@/lib/api';
+import { tryPlayVideo, pauseVideo, primeVideo, useVisibilityRetry } from '@/lib/videoAutoplay';
 
 function Layer({ item, active, reduced, grade, visible, extraFilter, fit = 'cover', objPos = 'center 20%', onNatural, onTime }) {
   const videoRef = useRef(null);
+  const [ready, setReady] = useState(false);   // first decoded frame available -> video shown above its poster
+  const isVideo = item?.tipo === 'video';
+  const wantPlay = isVideo && active && visible;
 
-  const tryPlay = useCallback(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    const p = v.play?.();
-    if (p && p.catch) p.catch(() => {});
-  }, []);
+  // Same strategy as the Home FilmStrip (proven on iPhone): prime muted/inline as PROPERTIES, then play(); never throw.
+  const tryPlay = useCallback(() => { tryPlayVideo(videoRef.current); }, []);
+
+  // Prime the element as soon as it exists (before iOS evaluates the autoplay attribute).
+  useEffect(() => { if (isVideo) primeVideo(videoRef.current); }, [isVideo]);
 
   useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return undefined;
-    if (active && visible) { tryPlay(); } else { try { v.pause?.(); } catch { /* noop */ } }
+    if (!isVideo) return undefined;
+    if (wantPlay) tryPlay(); else pauseVideo(videoRef.current);
     return undefined;
-  }, [active, visible, tryPlay]);
+  }, [isVideo, wantPlay, tryPlay]);
 
-  // iOS Safari may suspend autoplay -> retry when tab becomes visible again
-  useEffect(() => {
-    if (item?.tipo !== 'video') return undefined;
-    const onVis = () => { if (document.visibilityState === 'visible' && active && visible) tryPlay(); };
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
-  }, [item, active, visible, tryPlay]);
+  // Safari suspends autoplay in background / on pageshow -> retry
+  useVisibilityRetry(wantPlay, tryPlay);
 
   // For videos, derive the native ratio from the poster image right away
   // (video metadata can be slow / blocked, but the poster reflects the frame ratio)
@@ -52,21 +49,45 @@ function Layer({ item, active, reduced, grade, visible, extraFilter, fit = 'cove
     },
   };
   if (item.tipo === 'video') {
+    const poster = mediaUrl(item.poster);
     return (
-      <video
-        ref={videoRef}
-        src={src}
-        poster={mediaUrl(item.poster)}
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="metadata"
-        onLoadedMetadata={(e) => { onNatural?.(e.target.videoWidth, e.target.videoHeight); if (active && visible) tryPlay(); }}
-        onCanPlay={() => { if (active && visible) tryPlay(); }}
-        onTimeUpdate={(e) => { if (active) onTime?.(e.target.currentTime, e.target.duration); }}
-        {...common}
-      />
+      <>
+        {/* poster behind the video: visible while loading / if playback is refused -> never a black tile (FilmStrip pattern) */}
+        {poster ? (
+          <img
+            src={poster}
+            alt={item.alt || ''}
+            loading={active ? 'eager' : 'lazy'}
+            decoding="async"
+            draggable="false"
+            data-testid="tile-video-poster"
+            {...common}
+          />
+        ) : null}
+        <video
+          ref={videoRef}
+          poster={poster || undefined}
+          autoPlay={active}
+          muted
+          loop
+          playsInline
+          preload={active ? 'auto' : 'none'}   /* only the ACTIVE side loads: iOS has a small budget of concurrent decoders */
+          draggable="false"
+          data-testid="tile-video"
+          data-state={ready ? 'ready' : 'loading'}
+          onLoadedMetadata={(e) => { onNatural?.(e.target.videoWidth, e.target.videoHeight); if (wantPlay) tryPlay(); }}
+          onLoadedData={() => { setReady(true); if (wantPlay) tryPlay(); }}
+          onCanPlay={() => { setReady(true); if (wantPlay) tryPlay(); }}
+          onPlaying={() => setReady(true)}
+          onError={() => setReady(false)}
+          onTimeUpdate={(e) => { if (active) onTime?.(e.target.currentTime, e.target.duration); }}
+          {...common}
+          style={{ ...common.style, opacity: active && ready ? 1 : 0 }}
+        >
+          {/* MP4 (H.264) only: guaranteed playable on Safari/iOS; currentSrc is always the .mp4 */}
+          <source src={src} type="video/mp4" />
+        </video>
+      </>
     );
   }
   return (
