@@ -142,10 +142,13 @@ export function MediaMorph({ pub, sec, secret, reduced, effect = 'flash', delay 
     transition: 'transform 120ms ease, filter 120ms ease, box-shadow 600ms ease, aspect-ratio 400ms ease',
   };
   if (containerFit) {
+    // Uniform tile: the CONTAINER always takes the full grid cell (same width/height/ratio as the photo tiles);
+    // only the media inside uses object-fit: contain (no crop, no zoom, dark bands on the tile background).
+    // NOTE: no `margin: auto` here — on a grid item it becomes shrink-to-fit and, with only absolutely
+    // positioned children, the tile collapsed to ~2×3px (row 3 video tiles invisible).
     wrapStyle.background = '#050206';
+    wrapStyle.width = '100%';
     if (maxVh) wrapStyle.maxHeight = `${maxVh}vh`;
-    wrapStyle.marginLeft = 'auto';
-    wrapStyle.marginRight = 'auto';
   }
 
   return (
