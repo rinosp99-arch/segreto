@@ -77,6 +77,10 @@ export default function Home() {
           background: 'radial-gradient(90% 60% at 50% -10%, hsl(340 55% 20% / 0.5), transparent 60%), radial-gradient(70% 50% at 100% 20%, hsl(280 45% 22% / 0.35), transparent 60%), linear-gradient(180deg, hsl(350 45% 6% / 0.55), transparent 40%)',
         }} />
       <div className="relative z-[1]">
+      {/* canale OnlyFans globale del brand: subito sotto l'header, prima del contenuto (flusso normale, spazio proprio) */}
+      <div className="pt-3 sm:pt-4">
+        <GlobalOfMarquee placement="home" secret={secret} />
+      </div>
       {/* intro */}
       <section className="pt-8 pb-6 sm:pt-12">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
@@ -128,11 +132,6 @@ export default function Home() {
           {showStrip && (
             <FilmStrip items={pellicola.items} config={pellicola.config} secret={secret} />
           )}
-
-          {/* canale OnlyFans globale del brand: subito dopo IN MOVIMENTO, occupa il suo spazio */}
-          <div className="my-8 sm:my-10">
-            <GlobalOfMarquee placement="home" secret={secret} />
-          </div>
 
           {restChunk.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5 pb-10" data-testid="models-grid-rest">

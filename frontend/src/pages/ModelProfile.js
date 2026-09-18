@@ -371,6 +371,10 @@ export default function ModelProfile() {
       </AnimatePresence>
 
       <div className="relative z-10 max-w-5xl mx-auto px-4 lg:px-8 pt-4 pb-16">
+        {/* canale OnlyFans globale: subito sotto l'header, prima del contenuto della modella (flusso normale) */}
+        <div className="mb-4">
+          <GlobalOfMarquee placement="profile" modelSlug={slug} secret={secret} />
+        </div>
         <div className="flex items-center justify-between mb-4">
           <Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"><ArrowLeft className="h-4 w-4" /> Tutte le modelle</Link>
           <button onClick={toggleSound} data-testid="sound-toggle" className="h-9 w-9 flex items-center justify-center rounded-full border border-border text-muted-foreground hover:text-foreground transition-colors" aria-label="Audio">
@@ -481,11 +485,6 @@ export default function ModelProfile() {
 
         {/* SOCIAL — lato segreto in fondo, dopo la CTA OnlyFans */}
         {secret && <SocialLinks social={socialData} secret onOpen={openSocial} />}
-
-        {/* CANALE GLOBALE (secondario): sempre DOPO la CTA OnlyFans personale della creator */}
-        <div className="mt-10">
-          <GlobalOfMarquee placement="profile" modelSlug={slug} secret={secret} />
-        </div>
 
         {/* RELATED */}
         {related.length > 0 && (

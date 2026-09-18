@@ -282,40 +282,56 @@
   .ls-switch, .ls-switch::after { animation: none !important; }   /* resta il glow statico, nessun movimento */
 }
 
-/* ===== GLOBAL ONLYFANS MARQUEE — fascia editoriale premium (Home dopo IN MOVIMENTO, profilo dopo la CTA personale) =====
-   Movimento continuo SINISTRA -> DESTRA via translate3d (GPU), loop seamless con due gruppi identici. */
+/* ===== GLOBAL ONLYFANS MARQUEE — fascia editoriale premium, chiaramente cliccabile (Home + profilo, subito sotto l'header) =====
+   Movimento continuo SINISTRA -> DESTRA via translate3d (GPU), loop seamless con due gruppi identici.
+   Inviti al click: gerarchia testo (CTA più luminosa/bold), arrow pulse, breathing glow, light sweep, hover/tap. */
 .ls-marquee {
-  --mq-line: hsl(var(--gold) / 0.45);
-  --mq-glow: hsl(var(--champagne) / 0.10);
-  --mq-text: hsl(var(--champagne));
+  --mq-line: hsl(var(--gold) / 0.55);
+  --mq-glow: hsl(var(--champagne) / 0.14);
+  --mq-glow-peak: hsl(var(--gold) / 0.34);
+  --mq-text: hsl(var(--champagne) / 0.82);
+  --mq-cta: hsl(42 60% 76%);
+  --mq-cta-hover: hsl(42 70% 86%);
+  --mq-sweep: hsl(var(--champagne) / 0.35);
   position: relative;
   display: block;
   width: 100%;
   height: 46px;
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(8, 5, 9, 0.92), rgba(4, 2, 6, 0.96));
+  cursor: pointer;
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(12, 8, 12, 0.96), rgba(5, 3, 7, 0.98));
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   border-top: 1px solid var(--mq-line);
   border-bottom: 1px solid var(--mq-line);
-  box-shadow: 0 0 18px var(--mq-glow), inset 0 0 24px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 0 1px hsl(var(--gold) / 0.10), 0 0 22px var(--mq-glow), inset 0 0 24px rgba(0, 0, 0, 0.35);
   color: var(--mq-text);
   text-decoration: none;
   -webkit-tap-highlight-color: transparent;
-  transition: box-shadow 350ms ease, color 350ms ease, border-color 350ms ease, transform 120ms ease;
+  animation: ls-marquee-breathe 5s ease-in-out infinite;      /* breathing glow: ~1.8s di respiro ogni 5s */
+  transition: box-shadow 350ms ease, color 350ms ease, border-color 350ms ease, transform 140ms ease;
   will-change: transform;
 }
 @media (min-width: 640px) { .ls-marquee { height: 50px; } }
-.ls-marquee:hover { --mq-glow: hsl(var(--champagne) / 0.22); color: hsl(38 45% 94%); --mq-line: hsl(var(--gold) / 0.7); }
-.ls-marquee:active { transform: scale(0.995); color: hsl(38 45% 96%); }
+.ls-marquee:hover {
+  --mq-glow: hsl(var(--champagne) / 0.30);
+  --mq-line: hsl(var(--gold) / 0.85);
+  --mq-cta: var(--mq-cta-hover);
+  transform: scale(1.005);
+}
+.ls-marquee:active { transform: scale(0.99); }
 .ls-marquee:focus-visible { outline: 2px solid hsl(var(--primary)); outline-offset: 2px; }
 /* Lato Segreto: stesso testo champagne/oro, bordo + glow con componente bordeaux/viola */
 .theme-secret .ls-marquee {
-  --mq-line: hsl(350 50% 45% / 0.55);
-  --mq-glow: hsl(285 45% 40% / 0.28);
-  background: linear-gradient(180deg, rgba(14, 5, 12, 0.94), rgba(6, 2, 8, 0.97));
+  --mq-line: hsl(350 50% 48% / 0.65);
+  --mq-glow: hsl(285 45% 42% / 0.30);
+  --mq-glow-peak: hsl(350 55% 55% / 0.42);
+  --mq-sweep: hsl(340 50% 85% / 0.32);
+  background: linear-gradient(180deg, rgba(20, 7, 16, 0.96), rgba(7, 3, 9, 0.98));
+  box-shadow: 0 0 0 1px hsl(350 50% 45% / 0.18), 0 0 22px var(--mq-glow), inset 0 0 24px rgba(0, 0, 0, 0.35);
 }
-.theme-secret .ls-marquee:hover { --mq-glow: hsl(285 50% 45% / 0.42); --mq-line: hsl(350 55% 55% / 0.8); }
+.theme-secret .ls-marquee:hover { --mq-glow: hsl(285 50% 48% / 0.46); --mq-line: hsl(350 55% 58% / 0.9); }
 
 .ls-marquee__track {
   position: absolute;
@@ -334,24 +350,64 @@
   font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; font-weight: 500;
 }
 @media (min-width: 640px) { .ls-marquee__item { font-size: 12px; letter-spacing: 0.26em; } }
+.ls-marquee__soft { color: var(--mq-text); }
+.ls-marquee__cta {
+  display: inline-flex; align-items: center; gap: 0.45em;
+  color: var(--mq-cta); font-weight: 700; letter-spacing: 0.26em;
+  text-shadow: 0 0 10px hsl(var(--gold) / 0.35);
+  transition: color 300ms ease, text-shadow 300ms ease;
+}
+.ls-marquee:hover .ls-marquee__cta { text-shadow: 0 0 14px hsl(var(--gold) / 0.55); }
+.ls-marquee__ext { font-size: 0.85em; opacity: 0.75; margin-left: 0.15em; }
 .ls-marquee__sep, .ls-marquee__gap { color: hsl(var(--gold)); font-size: 0.9em; opacity: 0.9; }
 .ls-marquee__gap { margin: 0 1.6em; opacity: 0.55; }
-.ls-marquee__arrow { display: inline-block; animation: ls-marquee-arrow 6.5s ease-in-out infinite; }
+.ls-marquee__arrow { display: inline-block; font-weight: 700; animation: ls-marquee-arrow 5s ease-in-out infinite; }   /* "vai/entra": 0 -> 5px -> 0 ogni 5s */
 .ls-marquee__probe { position: absolute; visibility: hidden; pointer-events: none; white-space: nowrap; left: 0; top: 0; }
 .ls-marquee__static { display: flex; height: 100%; align-items: center; justify-content: center; }
 .ls-marquee__static .ls-marquee__gap { display: none; }
+/* riflesso su vetro: sottile lama chiara che attraversa la fascia ogni ~9s (viaggio ~0.8s), sopra lo sfondo ma non copre il testo */
+.ls-marquee__sweep {
+  position: absolute; top: -30%; bottom: -30%; left: 0; width: 22%;
+  background: linear-gradient(100deg, transparent 0%, var(--mq-sweep) 50%, transparent 100%);
+  transform: translateX(-140%) skewX(-16deg);
+  opacity: 0.45;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  animation: ls-marquee-sweep 9s linear infinite;
+  z-index: 0;
+}
+.ls-marquee__track, .ls-marquee__static { z-index: 1; }
+/* tap feedback: soft glow che nasce nel punto toccato */
+.ls-marquee__flash {
+  position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
+  background: radial-gradient(circle, hsl(var(--champagne) / 0.35) 0%, transparent 70%);
+  pointer-events: none; z-index: 2;
+  animation: ls-marquee-flash 500ms ease-out forwards;
+}
 
 /* due gruppi identici: da -50% a 0 = un gruppo intero, il secondo copre sempre lo spazio -> nessun vuoto */
 @keyframes ls-marquee-ltr {
   from { transform: translate3d(-50%, 0, 0); }
   to   { transform: translate3d(0, 0, 0); }
 }
-/* micro-spinta della freccia ogni ~6.5s (2-3px), il resto della frase non si muove oltre al marquee */
 @keyframes ls-marquee-arrow {
-  0%, 88%, 100% { transform: translateX(0); }
-  92% { transform: translateX(3px); }
-  96% { transform: translateX(0); }
+  0%, 70%, 100% { transform: translateX(0); }
+  82% { transform: translateX(5px); }
+  94% { transform: translateX(0); }
+}
+@keyframes ls-marquee-breathe {
+  0%, 64%, 100% { box-shadow: 0 0 0 1px hsl(var(--gold) / 0.10), 0 0 22px var(--mq-glow), inset 0 0 24px rgba(0, 0, 0, 0.35); }
+  82%           { box-shadow: 0 0 0 1px hsl(var(--gold) / 0.18), 0 0 30px var(--mq-glow-peak), inset 0 0 24px rgba(0, 0, 0, 0.35); }
+}
+@keyframes ls-marquee-sweep {
+  0%   { transform: translateX(-140%) skewX(-16deg); }
+  9%   { transform: translateX(600%) skewX(-16deg); }
+  100% { transform: translateX(600%) skewX(-16deg); }
+}
+@keyframes ls-marquee-flash {
+  from { transform: scale(0.4); opacity: 1; }
+  to   { transform: scale(1.6); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ls-marquee__track, .ls-marquee__arrow { animation: none !important; }
+  .ls-marquee, .ls-marquee__track, .ls-marquee__arrow, .ls-marquee__sweep { animation: none !important; }
 }

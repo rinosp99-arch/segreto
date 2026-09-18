@@ -10,14 +10,19 @@ export const GLOBAL_OF_URL = 'https://onlyfans.com/latosegreto/c28';
 const PHRASE_A = 'TUTTE LE MODELLE. UN SOLO LATO SEGRETO.';
 const PHRASE_B = 'SCOPRILE SU ONLYFANS';
 const SPEED_MOBILE = 50;   // px/s  -> ~23-26s per group on a 390px phone
-const SPEED_DESKTOP = 85;  // px/s  -> ~20-22s per group on desktop (3 copies ~1830px)
+const SPEED_DESKTOP = 100;  // px/s  -> ~20-22s per group on desktop (3 copies ~1830px)
 
 function Phrase() {
   return (
     <span className="ls-marquee__item">
-      <span>{PHRASE_A}</span>
+      <span className="ls-marquee__soft">{PHRASE_A}</span>
       <span className="ls-marquee__sep" aria-hidden="true">{'\u2726'}</span>
-      <span>{PHRASE_B} <span className="ls-marquee__arrow" aria-hidden="true">{'\u2192'}</span></span>
+      {/* the actionable part: brighter, bolder, with a discreet external-link mark and the "go" arrow */}
+      <span className="ls-marquee__cta">
+        {PHRASE_B}
+        <span className="ls-marquee__ext" aria-hidden="true">{'\u2197'}</span>
+        <span className="ls-marquee__arrow" aria-hidden="true">{'\u2192'}</span>
+      </span>
       <span className="ls-marquee__gap" aria-hidden="true">{'\u2726'}</span>
     </span>
   );
@@ -56,6 +61,15 @@ export function GlobalOfMarquee({ placement = 'home', modelSlug = null, secret =
     return () => ro.disconnect();
   }, []);
 
+  const [flash, setFlash] = useState(null);   // {x, y, id}: soft glow where the strip was touched
+  const onPointerDown = (e) => {
+    if (e.pointerType === 'mouse') return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const id = Date.now();
+    setFlash({ x: e.clientX - r.left, y: e.clientY - r.top, id });
+    window.setTimeout(() => setFlash((f) => (f && f.id === id ? null : f)), 520);
+  };
+
   const onClick = () => {
     const attr = getAttribution() || {};
     const base = { session_id: getSessionId(), cta_source: `of_global_marquee_${placement}` };
@@ -74,6 +88,7 @@ export function GlobalOfMarquee({ placement = 'home', modelSlug = null, secret =
       target="_blank"
       rel="noopener noreferrer"
       onClick={onClick}
+      onPointerDown={onPointerDown}
       className={`ls-marquee ${reduced ? 'ls-marquee--static' : ''} ${className}`}
       aria-label={`${PHRASE_A} ${PHRASE_B}`}
       data-testid={`of-global-marquee-${placement}`}
@@ -81,6 +96,9 @@ export function GlobalOfMarquee({ placement = 'home', modelSlug = null, secret =
     >
       {/* invisible probe: real width of one phrase */}
       <span ref={probeRef} className="ls-marquee__probe" aria-hidden="true"><Phrase /></span>
+      {/* glass light sweep (every ~9s) + touch flash */}
+      <span className="ls-marquee__sweep" aria-hidden="true" />
+      {flash && <span className="ls-marquee__flash" aria-hidden="true" style={{ left: flash.x, top: flash.y }} />}
       {reduced ? (
         <span className="ls-marquee__static"><Phrase /></span>
       ) : (
