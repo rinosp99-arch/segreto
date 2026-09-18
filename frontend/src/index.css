@@ -212,3 +212,72 @@
     radial-gradient(140% 120% at 50% 50%, transparent 55%, rgba(0,0,0,0.55) 100%);
 }
 
+
+/* ===== HEADER — switch Lato Pubblico / Lato Segreto: premium, curioso, invitante (mai arcade) =====
+   Solo luce / bordo / animazione / contrasto: dimensioni, padding e posizione restano quelle del design approvato. */
+.ls-switch {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  --sw-glow: hsl(var(--gold) / 0.55);
+  --sw-glow-soft: hsl(var(--champagne) / 0.28);
+  --sw-line: hsl(var(--champagne) / 0.9);
+  border-color: hsl(var(--gold) / 0.7) !important;
+  color: hsl(var(--champagne)) !important;
+  background: linear-gradient(180deg, hsl(var(--gold) / 0.14), hsl(var(--gold) / 0.04));
+  box-shadow: 0 0 0 1px hsl(var(--gold) / 0.25), 0 0 14px var(--sw-glow-soft), 0 0 26px var(--sw-glow-soft);
+  animation: ls-switch-pulse 2.8s ease-in-out infinite;
+  transition: box-shadow 500ms ease, border-color 500ms ease, color 300ms ease, background 500ms ease, transform 160ms ease;
+  will-change: transform;
+}
+.ls-switch::after {                    /* lama di luce: attraversa il bottone ogni ~6.5s (viaggio ~0.8s) */
+  content: "";
+  position: absolute;
+  top: -40%; bottom: -40%; left: 0; width: 38%;
+  background: linear-gradient(100deg, transparent 0%, var(--sw-line) 50%, transparent 100%);
+  opacity: 0.55;
+  transform: translateX(-160%) skewX(-18deg);
+  animation: ls-switch-shimmer 6.5s linear infinite;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+.ls-switch--secret {
+  --sw-glow: hsl(var(--wine) / 0.8);
+  --sw-glow-soft: hsl(350 55% 40% / 0.42);
+  --sw-line: hsl(340 60% 80% / 0.85);
+  border-color: hsl(350 55% 55% / 0.85) !important;
+  color: hsl(38 40% 90%) !important;
+  background: linear-gradient(180deg, hsl(350 50% 34% / 0.55), hsl(280 35% 22% / 0.45));
+  box-shadow: 0 0 0 1px hsl(350 55% 50% / 0.35), 0 0 16px var(--sw-glow-soft), 0 0 30px hsl(285 45% 40% / 0.35);
+}
+.ls-switch--intro {                    /* primo accesso della sessione: un solo richiamo più evidente, poi normale */
+  animation: ls-switch-intro 1.6s cubic-bezier(0.2, 0.8, 0.2, 1) 1, ls-switch-pulse 2.8s ease-in-out 1.6s infinite;
+}
+.ls-switch--tap {                      /* risposta immediata al click */
+  animation: ls-switch-tap 420ms cubic-bezier(0.2, 0.8, 0.2, 1) 1, ls-switch-pulse 2.8s ease-in-out 420ms infinite;
+}
+.ls-switch:hover { filter: brightness(1.08); }
+.ls-switch:active { transform: scale(0.97); }
+.ls-switch:focus-visible { outline: 2px solid hsl(var(--primary)); outline-offset: 2px; }
+
+@keyframes ls-switch-pulse {           /* micro-pulse molto discreto */
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.03); }
+}
+@keyframes ls-switch-shimmer {         /* 0→12% = passaggio (~0.8s su 6.5s), poi fermo fuori dal bottone */
+  0%   { transform: translateX(-160%) skewX(-18deg); }
+  12%  { transform: translateX(420%) skewX(-18deg); }
+  100% { transform: translateX(420%) skewX(-18deg); }
+}
+@keyframes ls-switch-intro {
+  0%   { transform: scale(1);    box-shadow: 0 0 0 1px hsl(var(--gold) / 0.25), 0 0 14px var(--sw-glow-soft), 0 0 26px var(--sw-glow-soft); }
+  45%  { transform: scale(1.07); box-shadow: 0 0 0 1px var(--sw-glow), 0 0 22px var(--sw-glow), 0 0 48px var(--sw-glow-soft); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 1px hsl(var(--gold) / 0.25), 0 0 14px var(--sw-glow-soft), 0 0 26px var(--sw-glow-soft); }
+}
+@keyframes ls-switch-tap {
+  0%   { transform: scale(0.96); box-shadow: 0 0 0 1px var(--sw-glow), 0 0 22px var(--sw-glow), 0 0 40px var(--sw-glow-soft); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ls-switch, .ls-switch::after { animation: none !important; }   /* resta il glow statico, nessun movimento */
+}

@@ -304,3 +304,6 @@ Fix: `frontend/src/lib/videoAutoplay.js` (helper condiviso estratto dalla strate
 Limite sandbox: nessun WebKit/iOS e Chromium headless senza H.264 (err=4) → T1/T2 currentTime NON misurabile qui; verifica reale su iPhone dopo deploy.
 Bug separato PRE-ESISTENTE trovato (prod + preview): la riga 3 della griglia (tile video da solo o video|video, `fit=contain` con margin auto) collassa a 2×3 px → il 2° video di Vanessa è invisibile su PC e mobile. Non toccato (fuori perimetro), da decidere con l'utente.
 Riga 3: corretto in `MediaMorph` (containerFit: `width:100%`, rimosso `margin:auto`) → 6 tile uniformi 173×231 (390) / 472×629 (1920), pubblico+segreto, nessun collasso; video interno resta `object-fit: contain`. Bio demo Francesca (preview) ripristinata dal residuo "Idempotency test" via versione. In attesa di Re-publish + verifica iPhone reale.
+
+## Header switch Lato Pubblico/Segreto — richiamo visivo (Status: DONE in preview)
+Solo luce/bordo/animazione (`index.css` classi `.ls-switch*`, `Header.js` classi + stato intro/tap): glow oro/champagne (pubblico) o bordeaux/viola (segreto), micro-pulse scale 1→1.03 2.8s, shimmer ogni 6.5s (~0.8s), intro una volta per sessione dopo 1.5s (sessionStorage), flash al click, reduced-motion → glow statico senza animazioni. Dimensioni/posizione/testi/header invariati (mobile 87×29 → identico a riposo; header 64).

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Search, Shuffle, Menu, X } from 'lucide-react';
 import { useTheme } from '@/lib/themeContext';
@@ -9,8 +9,26 @@ import { toast } from 'sonner';
 
 export function Header() {
   const { homeMode, setHomeMode } = useTheme();
+  // Switch attention cues (light/border/animation only): one stronger recall on the first view of the session, then a
+  // discreet infinite micro-pulse + shimmer; a short flash on tap. Sizes/positions untouched.
+  const [swIntro, setSwIntro] = useState(false);
+  const [swTap, setSwTap] = useState(false);
+  useEffect(() => {
+    let seen = false;
+    try { seen = sessionStorage.getItem('ls_switch_intro') === '1'; } catch { /* noop */ }
+    if (seen) return undefined;
+    const t = setTimeout(() => {
+      setSwIntro(true);
+      try { sessionStorage.setItem('ls_switch_intro', '1'); } catch { /* noop */ }
+      setTimeout(() => setSwIntro(false), 1700);
+    }, 1500);
+    return () => clearTimeout(t);
+  }, []);
+  const flashTap = useCallback(() => { setSwTap(false); requestAnimationFrame(() => setSwTap(true)); setTimeout(() => setSwTap(false), 500); }, []);
+  const swClass = `ls-switch ${homeMode === 'secret' ? 'ls-switch--secret' : 'ls-switch--public'} ${swIntro ? 'ls-switch--intro' : ''} ${swTap ? 'ls-switch--tap' : ''}`;
   const toggleHomeMode = (source = 'desktop') => {
     const next = homeMode === 'public' ? 'secret' : 'public';
+    flashTap();
     setHomeMode(next);
     track({ tipo: next === 'secret' ? 'home_toggle_secret_on' : 'home_toggle_secret_off', session_id: getSessionId() });
     if (source === 'mobile') track({ tipo: next === 'secret' ? 'home_mobile_toggle_secret' : 'home_mobile_toggle_public', session_id: getSessionId() });
@@ -67,10 +85,9 @@ export function Header() {
                 <>
                   {/* MOBILE compact pills (top-right) */}
                   <button onClick={() => toggleHomeMode('mobile')} data-testid="header-mode-switch-mobile"
-                    className="sm:hidden flex items-center gap-1 text-[10px] caps-label px-2 py-1.5 rounded-full border transition-colors whitespace-nowrap"
-                    style={{ borderColor: homeMode === 'secret' ? 'hsl(var(--primary) / 0.55)' : 'hsl(var(--border))', color: homeMode === 'secret' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))', boxShadow: homeMode === 'secret' ? '0 0 10px hsl(var(--primary) / 0.25)' : 'none' }}
+                    className={`sm:hidden flex items-center gap-1 text-[10px] caps-label px-2 py-1.5 rounded-full border whitespace-nowrap ${swClass}`}
                     aria-label="Cambia lato Home">
-                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: homeMode === 'secret' ? 'hsl(var(--primary))' : 'currentColor', opacity: homeMode === 'secret' ? 1 : 0.5 }} />
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'currentColor', boxShadow: '0 0 6px currentColor' }} />
                     {homeMode === 'secret' ? 'Pubblico' : 'Segreto'}
                   </button>
                   <button onClick={() => surprise('mobile')} data-testid="header-surprise-mobile"
@@ -83,9 +100,8 @@ export function Header() {
               {isHome && (
                 <button onClick={() => toggleHomeMode('desktop')}
                   data-testid="header-mode-switch"
-                  className="hidden sm:flex items-center gap-2 text-[11px] caps-label px-3 py-2 rounded-full border transition-colors"
-                  style={{ borderColor: homeMode === 'secret' ? 'hsl(var(--primary) / 0.5)' : 'hsl(var(--border))', color: homeMode === 'secret' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))' }}>
-                  <span className={`h-2 w-2 rounded-full ${homeMode === 'secret' ? '' : 'opacity-40'}`} style={{ background: homeMode === 'secret' ? 'hsl(var(--primary))' : 'currentColor' }} />
+                  className={`hidden sm:flex items-center gap-2 text-[11px] caps-label px-3 py-2 rounded-full border ${swClass}`}>
+                  <span className="h-2 w-2 rounded-full" style={{ background: 'currentColor', boxShadow: '0 0 8px currentColor' }} />
                   {homeMode === 'secret' ? 'Lato Segreto' : 'Lato Pubblico'}
                 </button>
               )}
