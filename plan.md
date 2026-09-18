@@ -320,3 +320,14 @@ Aggiunta in `ProfileSwipe.js` (solo layer UI, nessun cambio a layout/swipe): pil
 ## Marquee OnlyFans globale (Status: DONE in preview)
 `components/GlobalOfMarquee.js` + CSS `.ls-marquee*`: fascia 46/50px, vetro nero, bordi sottili, glow delicato, testo champagne/oro (Segreto: bordo/glow bordeaux/viola via `.theme-secret`), loop seamless sinistra→destra con translate3d (2 gruppi identici, copie calcolate sulla larghezza reale, durata = larghezza/velocità: mobile ~24.5s, desktop ~21.6s, clamp 18–30), freccia con micro-spinta ogni 6.5s, reduced-motion → fascia ferma centrata, tutta cliccabile (`_blank noopener noreferrer`, https://onlyfans.com/latosegreto/c28). Posizioni: Home subito dopo IN MOVIMENTO (`my-8/10`), profilo dopo CTA personale + social e prima di "Potrebbero piacerti anche" (`mt-10`). Analytics: `of_global_marquee_home_click`, `of_global_marquee_profile_click` (slug, mode, ref/fonte/campagna). Test 390×844 + desktop: nessun overflow, ordine CTA→marquee, popup OF, swipe e pill intatti.
 Marquee v2: spostata in alto (Home: subito sotto header, prima dell'intro, `pt-3/4`; profilo: prima di "Tutte le modelle", `mb-4`), rimosse le istanze in fondo (1 per pagina). Gerarchia: prima parte champagne 0.82, "SCOPRILE SU ONLYFANS ↗ →" oro chiaro bold 700 + text-shadow; arrow pulse 0→5px ogni 5s; breathing glow 5s; light sweep ogni 9s (~0.8s); hover: bordo/glow +, CTA più chiara, scale 1.005, marquee non si ferma; tap: scale 0.99 + flash radiale nel punto toccato. Velocità: mobile 50px/s (~25.7s), desktop 100px/s (~21.6s).
+
+## Phase: Admin Analytics v2 + Tracking Audit (Status: COMPLETED — agent-tested, user confirmation pending)
+- Root cause black screen: `AdminAnalytics.js` (vecchio) passava `data={funnel}` con `funnel=null` a Recharts 3.6
+  → `combineDisplayedData` esegue `chartData.slice` → TypeError → React smonta il root (nessun Error Boundary).
+- Nuovo backend `routes_analytics_v2.py` (/api/admin/analytics/v2/*), indici in database.py, test `tests/test_analytics_v2.py` (8/8; suite 87/87).
+- Nuova dashboard `AdminAnalytics.js`: Error Boundary per widget, loading/empty/error+retry, filtri, funnel, OF personale vs globale,
+  swipe, Secret, campagne/fonti, classifiche, dettaglio modella, confronto, log eventi paginato, CSV.
+- `TRACKING_AUDIT.md`: audit eventi esistenti vs specifica; NESSUN evento nuovo aggiunto (in attesa OK utente).
+
+## Phase: Tracking events implementation (Status: NOT STARTED — richiede approvazione dell'audit)
+- Ordine proposto: A (visit_id/mode/path centralizzati) → K (queue+beacon) → B, C → D, E → F, G, H, I, J

@@ -82,3 +82,17 @@ export const v1KeyEnable = (id) => api.post(`/v1/auth/keys/${id}/enable`).then((
 export const aiCapabilitiesAdmin = () => api.get('/v2/ai/admin/capabilities').then((r) => r.data);
 export const aiCapabilityToggle = (capability_id, disabled) => api.post('/v2/ai/admin/capabilities/toggle', { capability_id, disabled }).then((r) => r.data);
 export const v1KeyCapabilities = (id, capability_allow, capability_deny) => api.patch(`/v1/auth/keys/${id}/capabilities`, { capability_allow, capability_deny }).then((r) => r.data);
+
+// analytics v2 (control center) — backend aggregations, filters as query params
+const v2 = (path, params) => api.get(`/admin/analytics/v2/${path}`, { params }).then((r) => r.data);
+export const an2Summary = (filters) => v2('summary', filters);
+export const an2Models = (filters) => v2('models', filters);
+export const an2Model = (slug, filters) => v2(`model/${encodeURIComponent(slug)}`, filters);
+export const an2Timeseries = (filters, granularity) => v2('timeseries', { ...filters, granularity });
+export const an2Compare = (filters, slugs) => v2('compare', { ...filters, slugs: slugs.join(',') });
+export const an2Events = (filters, limit = 50, skip = 0, tipo) => v2('events', { ...filters, limit, skip, tipo: tipo || undefined });
+export const an2Filters = (filters) => v2('filters', filters);
+export const an2ExportUrl = (kind, filters, slug) => {
+  const q = new URLSearchParams({ kind, ...Object.fromEntries(Object.entries({ ...filters, slug }).filter(([, v]) => v !== undefined && v !== null && v !== '')) });
+  return `${process.env.REACT_APP_BACKEND_URL}/api/admin/analytics/v2/export.csv?${q.toString()}`;
+};

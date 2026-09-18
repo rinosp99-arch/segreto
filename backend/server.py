@@ -13,6 +13,7 @@ from database import ensure_indexes, idempotency_col, now_dt, now_iso
 from routes_public import public_router
 from routes_admin import admin_router
 from routes_analytics import analytics_router
+from routes_analytics_v2 import analytics_v2_router
 from routes_seo import seo_router
 from routes_integrations import integrations_router
 from seed_data import seed_all
@@ -82,6 +83,7 @@ async def v1_root():
 app.include_router(public_router)
 app.include_router(admin_router)
 app.include_router(analytics_router)
+app.include_router(analytics_v2_router)
 app.include_router(seo_router)
 app.include_router(integrations_router)
 # SUPER API v1

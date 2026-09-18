@@ -89,6 +89,14 @@ async def ensure_indexes():
     await events_col.create_index([('event', 1), ('timestamp', -1)])
     await events_col.create_index('geo.country')
     await events_col.create_index('session_id')
+    # analytics v2 aggregations: period + event / model / attribution filters
+    await events_col.create_index([('timestamp', -1), ('tipo', 1)])
+    await events_col.create_index([('model_slug', 1), ('timestamp', -1)])
+    await events_col.create_index([('tipo', 1), ('model_slug', 1), ('timestamp', -1)])
+    await events_col.create_index([('campagna', 1), ('timestamp', -1)], sparse=True)
+    await events_col.create_index([('fonte', 1), ('timestamp', -1)], sparse=True)
+    await events_col.create_index([('source', 1), ('timestamp', -1)], sparse=True)
+    await events_col.create_index([('session_id', 1), ('timestamp', -1)])
     # v1
     await api_keys_col.create_index('key_hash', unique=True)
     await versions_col.create_index([('entity', 1), ('entity_id', 1), ('timestamp', -1)])
