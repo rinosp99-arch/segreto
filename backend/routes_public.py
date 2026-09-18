@@ -1,5 +1,5 @@
 import uuid
-import random
+import secrets
 from fastapi import APIRouter, HTTPException, Request, Response
 from typing import Optional
 
@@ -156,7 +156,7 @@ async def surprise():
     docs = await models_col.find({"stato": "pubblicata"}, {"_id": 0, "slug": 1, "nome": 1, "foto_card": 1}).to_list(200)
     if not docs:
         raise HTTPException(status_code=404, detail="Nessuna modella disponibile")
-    return random.choice(docs)
+    return secrets.choice(docs)
 
 
 @public_router.get("/categories")

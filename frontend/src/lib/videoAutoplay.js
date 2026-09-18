@@ -6,6 +6,7 @@
      on loadedmetadata / loadeddata / canplay / visibilitychange.
    - MP4 (H.264) must stay the priority source on Safari/iOS: WebM only where the browser really supports it. */
 import { useEffect } from 'react';
+import { debugLog } from '@/lib/log';
 
 export function primeVideo(v) {
   if (!v) return;
@@ -16,7 +17,7 @@ export function primeVideo(v) {
     if (!v.hasAttribute('muted')) v.setAttribute('muted', '');
     if (!v.hasAttribute('playsinline')) v.setAttribute('playsinline', '');
     if (!v.hasAttribute('webkit-playsinline')) v.setAttribute('webkit-playsinline', '');
-  } catch { /* noop */ }
+  } catch (e) { debugLog('video.prime', e); }
 }
 
 export function tryPlayVideo(v) {
@@ -24,13 +25,13 @@ export function tryPlayVideo(v) {
   primeVideo(v);
   try {
     const p = v.play?.();
-    if (p && p.catch) p.catch(() => {});
-  } catch { /* noop */ }
+    if (p && p.catch) p.catch((e) => debugLog('video.play', e));   // autoplay refused: expected on some devices, poster stays
+  } catch (e) { debugLog('video.play', e); }
 }
 
 export function pauseVideo(v) {
   if (!v) return;
-  try { v.pause?.(); } catch { /* noop */ }
+  try { v.pause?.(); } catch (e) { debugLog('video.pause', e); }
 }
 
 /* Safari suspends media when the tab/app goes to background: retry when it comes back. */
@@ -52,5 +53,5 @@ export const SUPPORTS_WEBM = (() => {
   try {
     const v = document.createElement('video');
     return v.canPlayType('video/webm; codecs="vp8, vp9"') !== '';
-  } catch { return false; }
+  } catch (e) { debugLog('video.canPlayType', e); return false; }
 })();

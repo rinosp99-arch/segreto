@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getArticle, track, mediaUrl } from '@/lib/api';
@@ -38,7 +39,7 @@ export default function ArticlePage() {
       <div className="text-sm text-muted-foreground mb-6">{a.autore} · {(a.data_pubblicazione || '').slice(0, 10)}</div>
       {a.immagine_principale && <div className="rounded-2xl overflow-hidden mb-8 aspect-[16/9]"><img src={mediaUrl(a.immagine_principale)} alt={a.alt_text || a.titolo} className="h-full w-full object-cover" /></div>}
       <div className="prose-invert max-w-none text-foreground/90 leading-relaxed space-y-4"
-        style={{ fontSize: '1.05rem' }} dangerouslySetInnerHTML={{ __html: a.contenuto }} />
+        style={{ fontSize: '1.05rem' }} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(a.contenuto || '', { USE_PROFILES: { html: true }, FORBID_TAGS: ['style', 'iframe', 'object', 'embed', 'form'], FORBID_ATTR: ['onerror', 'onload'] }) }} />
       {a.modelle_correlate_dettaglio?.length > 0 && (
         <section className="mt-14">
           <div className="caps-label gold-text mb-4">Creator dell'articolo</div>

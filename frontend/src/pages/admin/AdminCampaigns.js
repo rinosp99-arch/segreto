@@ -26,8 +26,8 @@ export default function AdminCampaigns() {
           <table className="w-full text-sm" data-testid="campaigns-table">
             <thead><tr className="text-left text-muted-foreground caps-label text-[10px]"><th className="py-2">Modella</th><th>Fonte</th><th>Campagna</th><th>Visite</th><th>Aperture profilo</th><th>Lato Segreto</th><th>Click OF</th><th>CTR OF</th></tr></thead>
             <tbody>
-              {rows.map((r, i) => (
-                <tr key={i} className="border-t border-border/50">
+              {rows.map((r) => (
+                <tr key={`${r.modella}-${r.fonte}`} className="border-t border-border/50">
                   <td className="py-2.5 font-serif text-base">{r.modella}</td>
                   <td className="capitalize">{r.fonte}</td>
                   <td className="text-muted-foreground">{r.campagna}</td>

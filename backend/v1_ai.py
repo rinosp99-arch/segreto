@@ -1,3 +1,4 @@
+import json
 """SUPER API v1 - AI / CHATGPT CONTROL LAYER (Phase 10).
 
 Contract (every response):
@@ -1599,7 +1600,7 @@ async def ai_control_patch(body: ControlPatch, request: Request, principal=Depen
     from v1_config import get_config
     from v1_versioning import record_version, audit_log
     cfg = await get_config()
-    new_cfg = __import__("json").loads(__import__("json").dumps(cfg))
+    new_cfg = json.loads(json.dumps(cfg))
     flags = new_cfg.setdefault("flags", {})
     for k in ("ai_api_enabled", "ai_write_enabled", "ai_batch_enabled", "ai_approval_flow_enabled"):
         v = getattr(body, k)

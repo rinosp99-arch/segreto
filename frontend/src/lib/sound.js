@@ -1,3 +1,4 @@
+import { debugLog } from '@/lib/log';
 // Secret Side audio — plays a selectable ambient track (default "Velluto Nero").
 // Web Audio API for a truly GAPLESS loop + reliable iOS/Safari unlock inside the user gesture.
 // Falls back to HTMLAudioElement if Web Audio/decode is unavailable.
@@ -51,11 +52,11 @@ class AudioController {
     const ctx = this._ensureCtx();
     if (!ctx) return;
     try {
-      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      if (ctx.state === 'suspended') ctx.resume().catch((e) => debugLog('audio.resume', e));
       const b = ctx.createBuffer(1, 1, ctx.sampleRate);
       const s = ctx.createBufferSource();
       s.buffer = b; s.connect(ctx.destination); s.start(0);
-    } catch (e) { /* noop */ }
+    } catch (e) { debugLog('audio', e); }
   }
 
   // Extremely discreet micro-click at the press (optional).
@@ -64,7 +65,7 @@ class AudioController {
     const ctx = this._ensureCtx();
     if (!ctx) return;
     try {
-      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      if (ctx.state === 'suspended') ctx.resume().catch((e) => debugLog('audio.resume', e));
       const t = ctx.currentTime;
       const o = ctx.createOscillator();
       const g = ctx.createGain();
@@ -77,7 +78,7 @@ class AudioController {
       g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
       o.connect(lp).connect(g).connect(ctx.destination);
       o.start(t); o.stop(t + 0.16);
-    } catch (e) { /* noop */ }
+    } catch (e) { debugLog('audio', e); }
   }
 
   _rampGainOn(gainNode, ctx, target, ms) {
@@ -87,7 +88,7 @@ class AudioController {
       gainNode.gain.cancelScheduledValues(now);
       gainNode.gain.setValueAtTime(Math.max(0.0001, gainNode.gain.value), now);
       gainNode.gain.linearRampToValueAtTime(Math.max(0.0001, target), now + Math.max(0.02, ms / 1000));
-    } catch (e) { /* noop */ }
+    } catch (e) { debugLog('audio', e); }
   }
 
   async startAmbient(urls, volume = 0.22, fadeMs = 2000) {
@@ -96,7 +97,7 @@ class AudioController {
     this.currentUrls = urls;
     const ctx = this._ensureCtx();
     if (!ctx || this.useFallback) return this._fallbackStart(urls, this.vol, fadeMs);
-    if (ctx.state === 'suspended') { try { await ctx.resume(); } catch (e) { /* noop */ } }
+    if (ctx.state === 'suspended') { try { await ctx.resume(); } catch (e) { debugLog('audio', e); } }
     const token = ++this._token;
     const buf = await this._loadBuffer(urls);
     if (token !== this._token) return undefined;
@@ -144,8 +145,8 @@ class AudioController {
     this.source = null; this.gain = null;
     this._rampGainOn(g, ctx, 0, fadeMs);
     const stopAt = ctx.currentTime + Math.max(0.05, fadeMs / 1000) + 0.05;
-    try { src.stop(stopAt); } catch (e) { /* noop */ }
-    setTimeout(() => { try { src.disconnect(); g.disconnect(); } catch (e) { /* noop */ } }, fadeMs + 120);
+    try { src.stop(stopAt); } catch (e) { debugLog('audio', e); }
+    setTimeout(() => { try { src.disconnect(); g.disconnect(); } catch (e) { debugLog('audio', e); } }, fadeMs + 120);
   }
 
   setMuted(m) { this.muted = !!m; if (this.muted) this.stopAmbient(500); }
@@ -153,17 +154,17 @@ class AudioController {
   // Immediate hard stop (no fade): return to public / model change / leave page.
   stopImmediate() {
     this._token++;
-    try { if (this.source) this.source.stop(0); } catch (e) { /* noop */ }
-    try { if (this.source) this.source.disconnect(); if (this.gain) this.gain.disconnect(); } catch (e) { /* noop */ }
+    try { if (this.source) this.source.stop(0); } catch (e) { debugLog('audio', e); }
+    try { if (this.source) this.source.disconnect(); if (this.gain) this.gain.disconnect(); } catch (e) { debugLog('audio', e); }
     this.source = null; this.gain = null;
     const a = this.fallbackEl;
-    if (a) { try { a.pause(); a.currentTime = 0; } catch (e) { /* noop */ } }
+    if (a) { try { a.pause(); a.currentTime = 0; } catch (e) { debugLog('audio', e); } }
   }
 
   cleanup() {
     this._token++;
-    try { if (this.source) this.source.stop(); } catch (e) { /* noop */ }
-    try { if (this.source) this.source.disconnect(); if (this.gain) this.gain.disconnect(); } catch (e) { /* noop */ }
+    try { if (this.source) this.source.stop(); } catch (e) { debugLog('audio', e); }
+    try { if (this.source) this.source.disconnect(); if (this.gain) this.gain.disconnect(); } catch (e) { debugLog('audio', e); }
     this.source = null; this.gain = null;
     this._fallbackStop(0);
     this.unlocked = false;
@@ -175,25 +176,25 @@ class AudioController {
         const a = new Audio();
         a.src = urls.m4a || urls.mp3; a.loop = true; a.preload = 'auto';
         a.setAttribute('playsinline', ''); a.playsInline = true;
-        a.onerror = () => { if (urls.mp3 && a.src.indexOf(urls.mp3) === -1) { a.src = urls.mp3; a.play().catch(() => {}); } };
+        a.onerror = () => { if (urls.mp3 && a.src.indexOf(urls.mp3) === -1) { a.src = urls.mp3; a.play().catch((e) => debugLog('audio.resume', e)); } };
         document.body.appendChild(a); a.style.display = 'none';
         this.fallbackEl = a;
       }
       const a = this.fallbackEl;
       a.volume = 0.0001;
-      const p = a.play(); if (p && p.catch) p.catch(() => {});
+      const p = a.play(); if (p && p.catch) p.catch((e) => debugLog('audio.resume', e));
       const t0 = performance.now(); const target = Math.max(0, Math.min(1, volume));
       const step = (now) => { const k = Math.min(1, (now - t0) / Math.max(1, fadeMs)); a.volume = Math.max(0, Math.min(1, target * k)); if (k < 1) requestAnimationFrame(step); };
       requestAnimationFrame(step);
-    } catch (e) { /* noop */ }
+    } catch (e) { debugLog('audio', e); }
     return undefined;
   }
 
   _fallbackStop(fadeMs) {
     const a = this.fallbackEl; if (!a) return;
     const t0 = performance.now(); const sv = a.volume;
-    const step = (now) => { const k = Math.min(1, (now - t0) / Math.max(1, fadeMs)); a.volume = Math.max(0, sv * (1 - k)); if (k < 1) requestAnimationFrame(step); else { try { a.pause(); a.currentTime = 0; } catch (e) { /* noop */ } } };
-    if (fadeMs <= 0) { try { a.pause(); a.currentTime = 0; a.removeAttribute('src'); a.remove && a.remove(); } catch (e) { /* noop */ } this.fallbackEl = null; return; }
+    const step = (now) => { const k = Math.min(1, (now - t0) / Math.max(1, fadeMs)); a.volume = Math.max(0, sv * (1 - k)); if (k < 1) requestAnimationFrame(step); else { try { a.pause(); a.currentTime = 0; } catch (e) { debugLog('audio', e); } } };
+    if (fadeMs <= 0) { try { a.pause(); a.currentTime = 0; a.removeAttribute('src'); a.remove && a.remove(); } catch (e) { debugLog('audio', e); } this.fallbackEl = null; return; }
     requestAnimationFrame(step);
   }
 
@@ -201,15 +202,15 @@ class AudioController {
   preview(urls, volume = 0.5, seconds = 10) {
     const a = new Audio();
     a.src = urls.m4a || urls.mp3; a.loop = true; a.preload = 'auto';
-    a.onerror = () => { if (urls.mp3 && a.src.indexOf(urls.mp3) === -1) { a.src = urls.mp3; a.play().catch(() => {}); } };
+    a.onerror = () => { if (urls.mp3 && a.src.indexOf(urls.mp3) === -1) { a.src = urls.mp3; a.play().catch((e) => debugLog('audio.resume', e)); } };
     a.volume = 0.0001;
-    const p = a.play(); if (p && p.catch) p.catch(() => {});
+    const p = a.play(); if (p && p.catch) p.catch((e) => debugLog('audio.resume', e));
     const t0 = performance.now();
     const fin = (now) => { const k = Math.min(1, (now - t0) / 800); a.volume = Math.min(volume, volume * k); if (k < 1) requestAnimationFrame(fin); };
     requestAnimationFrame(fin);
     const stop = () => {
       const s0 = performance.now(); const sv = a.volume;
-      const fo = (now) => { const k = Math.min(1, (now - s0) / 800); a.volume = Math.max(0, sv * (1 - k)); if (k < 1) requestAnimationFrame(fo); else { try { a.pause(); a.removeAttribute('src'); } catch (e) { /* noop */ } } };
+      const fo = (now) => { const k = Math.min(1, (now - s0) / 800); a.volume = Math.max(0, sv * (1 - k)); if (k < 1) requestAnimationFrame(fo); else { try { a.pause(); a.removeAttribute('src'); } catch (e) { debugLog('audio', e); } } };
       requestAnimationFrame(fo);
     };
     const to = setTimeout(stop, seconds * 1000);

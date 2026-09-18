@@ -1,6 +1,7 @@
 /* Profile-to-profile navigation (swipe / arrows): published-only ring in the Home default order, circular.
    Keeps only what the gesture needs (slug, name, card image) — never the full profiles. */
 import { getModels, mediaUrl } from '@/lib/api';
+import { debugLog } from '@/lib/log';
 
 let ringCache = null;          // [{ slug, nome_artistico, foto_card }]
 let ringPromise = null;
@@ -34,7 +35,7 @@ export function neighborsOf(ring, slug) {
 
 export function preloadCard(m) {
   if (!m || !m.foto_card) return;
-  try { const im = new Image(); im.decoding = 'async'; im.src = mediaUrl(m.foto_card); } catch { /* noop */ }
+  try { const im = new Image(); im.decoding = 'async'; im.src = mediaUrl(m.foto_card); } catch (e) { debugLog('nav.preload', e); }
 }
 
 /* Mode carry-over between profiles: set right before navigate(), consumed once by the next ModelProfile mount.
@@ -46,7 +47,7 @@ export function consumeCarry() { const c = peekCarry(); carry = null; return c; 
 
 /* Session counters for attribution: how many profiles a visitor sees (and swipes) before the OnlyFans click. */
 function readJson(key, fallback) { try { return JSON.parse(sessionStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; } }
-function writeJson(key, v) { try { sessionStorage.setItem(key, JSON.stringify(v)); } catch { /* noop */ } }
+function writeJson(key, v) { try { sessionStorage.setItem(key, JSON.stringify(v)); } catch (e) { debugLog('nav.storage', e); } }
 
 export function noteProfileSeen(slug) {
   const seen = readJson('ls_profiles_seen', []);

@@ -94,13 +94,7 @@ async def _state_counts() -> dict:
 
 
 # ================================================================== SITEMAP SYNC (debounced)
-async def mark_sitemap_dirty(reason: str):
-    """Called by publish/unpublish/slug/canonical changes: the sitemap itself is always live (computed on request);
-    this only schedules a (debounced) Search Console re-submit."""
-    try:
-        await google_search_state_col.update_one({"id": "global"}, {"$set": {"sitemap_dirty": True, "sitemap_dirty_reason": reason[:120], "sitemap_dirty_at": now_iso()}}, upsert=True)
-    except Exception:
-        pass
+from .state import mark_sitemap_dirty  # noqa: E402,F401  (leaf module: keeps mutation paths free of this service layer)
 
 
 async def _sitemap_hash() -> str:

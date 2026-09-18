@@ -3,6 +3,8 @@
 import json
 import gzip
 import uuid
+import secrets
+from datetime import datetime, timedelta, timezone
 import asyncio
 import logging
 from typing import Optional, Dict, Any, List
@@ -180,7 +182,7 @@ async def list_webhooks(principal=Depends(require("webhooks:manage"))):
 async def create_webhook(body: WebhookIn, request: Request, principal=Depends(require("webhooks:manage"))):
     if not body.url.startswith("https://") and not body.url.startswith("http://localhost"):
         raise HTTPException(status_code=400, detail="URL webhook deve essere https")
-    secret = "whsec_" + uuid.uuid4().hex + uuid.uuid4().hex[:16]
+    secret = "whsec_" + secrets.token_hex(24)
     doc = {"id": str(uuid.uuid4()), **body.model_dump(), "secret": secret, "created_by": actor_of(principal), "created_at": now_iso(), "deliveries": 0, "failures": 0}
     await webhooks_col.insert_one(doc)
     await audit_log(actor_of(principal), "create", "webhook", doc["id"], {"url": body.url}, request_id_of(request))
@@ -455,7 +457,7 @@ async def key_usage(key_id: str, principal=Depends(require("keys:manage"))):
     from v1_security import bucket_usage
     from v1_ai_policy import ai_config
     cfg = await ai_config()
-    since = (__import__("datetime").datetime.now(__import__("datetime").timezone.utc) - __import__("datetime").timedelta(hours=24)).isoformat()
+    since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
     from database import ai_actions_col
     acts = await ai_actions_col.count_documents({"key_id": key_id, "timestamp": {"$gte": since}})
     return {**rec, "requests_last_minute": bucket_usage(f"ai:{key_id}") or bucket_usage(f"key:{key_id}"), "requests_last_hour": bucket_usage(f"key:{key_id}", 3600), "ai_actions_24h": acts,

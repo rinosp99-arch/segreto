@@ -9,6 +9,7 @@ import ModelProfile from '@/pages/ModelProfile';
 import { getRing, neighborsOf, preloadCard, setCarry, bumpSwipe, journeyMeta } from '@/lib/profileNav';
 import { track, mediaUrl } from '@/lib/api';
 import { getSessionId } from '@/lib/session';
+import { debugLog } from '@/lib/log';
 
 const THRESHOLD = 0.32;      // fraction of the viewport width
 const LOCK_PX = 12;          // movement before deciding horizontal vs vertical
@@ -54,7 +55,7 @@ export default function ProfileSwipe() {
       track({ tipo: secret ? 'profile_swipe_secret' : 'profile_swipe_public', model_slug: t.slug, session_id: sid, meta: { from: slug, ...journeyMeta(), swipes } });
       setCarry({ secret, via: 'swipe', direction });
       navigate(`/modelle/${t.slug}`);
-      try { window.scrollTo({ top: 0, behavior: 'instant' }); } catch { window.scrollTo(0, 0); }
+      try { window.scrollTo({ top: 0, behavior: 'instant' }); } catch (err) { debugLog('swipe.scroll', err); window.scrollTo(0, 0); }
       // incoming: start slightly offset on the opposite side, then settle
       setAnim('in');
       setX(direction === 'next' ? vw() * 0.35 : -vw() * 0.35);
@@ -81,7 +82,7 @@ export default function ProfileSwipe() {
       s.lock = Math.abs(dx) > Math.abs(dy) * 1.25 ? 'h' : 'v';   // horizontal must clearly dominate
       if (s.lock === 'h') {
         setDragging(true);
-        try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch { /* noop */ }
+        try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch (err) { debugLog('swipe.capture', err); }
       }
     }
     if (s.lock !== 'h') return;
