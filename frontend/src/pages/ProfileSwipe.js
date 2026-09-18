@@ -18,6 +18,38 @@ const IN_MS = 320;
 
 const isSecretNow = () => document.documentElement.classList.contains('theme-secret');
 
+/* Public / Secret follows the <html class="theme-secret"> toggled by the profile page (no coupling with its state). */
+function useSecretMode() {
+  const [secret, setSecret] = useState(isSecretNow());
+  useEffect(() => {
+    const mo = new MutationObserver(() => setSecret(isSecretNow()));
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => mo.disconnect();
+  }, []);
+  return secret;
+}
+
+/* Keeps the navigator above other fixed bottom layers (timed CTA bar, cookie banner) without touching them. */
+function useBottomOffset() {
+  const [offset, setOffset] = useState(0);
+  useEffect(() => {
+    const measure = () => {
+      let h = 0;
+      document.querySelectorAll('[data-testid="cta-timed"], [data-testid="cookie-banner"]').forEach((el) => {
+        const r = el.getBoundingClientRect();
+        if (r.height > 0 && r.bottom > window.innerHeight - 48) h = Math.max(h, window.innerHeight - r.top);   // any layer anchored to the bottom edge
+      });
+      setOffset(h);
+    };
+    measure();
+    const mo = new MutationObserver(() => window.requestAnimationFrame(measure));
+    mo.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener('resize', measure);
+    return () => { mo.disconnect(); window.removeEventListener('resize', measure); };
+  }, []);
+  return offset;
+}
+
 export default function ProfileSwipe() {
   const { slug } = useParams();
   const navigate = useNavigate();
@@ -30,6 +62,8 @@ export default function ProfileSwipe() {
   const g = useRef(null);                        // gesture state
   const swiped = useRef(false);
   const busy = useRef(false);
+  const secretMode = useSecretMode();
+  const bottomOffset = useBottomOffset();
 
   useEffect(() => { let alive = true; getRing().then((r) => { if (alive) setRing(r); }); return () => { alive = false; }; }, []);
   const { prev, next } = neighborsOf(ring, slug);
@@ -175,6 +209,51 @@ export default function ProfileSwipe() {
           </button>
         </>
       )}
+
+      {/* Fixed floating navigator: tells the visitor profiles can be browsed (tap arrows or swipe). Pure UI layer:
+          no layout change. Champagne/gold in Lato Pubblico, bordeaux/violet in Lato Segreto; the arrow of the
+          swipe direction lights up softly while dragging. Sits above the timed CTA / cookie banner when present. */}
+      {(prev || next) && (() => {
+        const gold = { border: 'hsl(var(--gold) / 0.55)', glow: 'hsl(var(--champagne) / 0.22)', text: 'hsl(var(--champagne))' };
+        const wine = { border: 'hsl(350 55% 55% / 0.7)', glow: 'hsl(285 45% 40% / 0.35)', text: 'hsl(38 40% 90%)' };
+        const c = secretMode ? wine : gold;
+        const lit = (side) => (dragging || anim === 'out') && dir === side;
+        const arrowStyle = (side) => ({ color: c.text, opacity: lit(side) ? 1 : 0.7, textShadow: lit(side) ? `0 0 12px ${c.text}` : 'none', transform: lit(side) ? 'scale(1.18)' : 'scale(1)', transition: 'opacity 180ms ease, transform 180ms ease, text-shadow 180ms ease' });
+        return (
+          <div
+            className="fixed left-1/2 -translate-x-1/2 z-[50] pointer-events-none"
+            style={{ bottom: `calc(env(safe-area-inset-bottom, 0px) + ${12 + bottomOffset}px)`, transition: 'bottom 240ms ease' }}
+            data-testid="profile-nav-pill"
+          >
+            <div
+              className="pointer-events-auto flex items-center gap-1 rounded-full glass"
+              style={{
+                padding: '4px 6px',
+                background: 'rgba(5, 2, 6, 0.62)',
+                border: `1px solid ${c.border}`,
+                boxShadow: `0 0 0 1px rgba(255,255,255,0.03) inset, 0 0 18px ${c.glow}, 0 8px 24px rgba(0,0,0,0.35)`,
+                transition: 'border-color 500ms ease, box-shadow 500ms ease',
+              }}
+            >
+              <button type="button" onClick={() => go('prev')} aria-label="Modella precedente" data-testid="profile-nav-prev"
+                className="flex items-center gap-1 h-9 min-w-9 px-2.5 rounded-full text-base leading-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 active:scale-95"
+                style={arrowStyle('prev')}>
+                <span aria-hidden="true">{"\u2039"}</span>
+                <span className="hidden sm:inline caps-label text-[10px]">Precedente</span>
+              </button>
+              <span className="flex items-center gap-1.5 px-2 caps-label text-[10px] select-none" style={{ color: c.text, opacity: 0.8, letterSpacing: '0.24em' }} data-testid="profile-nav-hint">
+                <span aria-hidden="true" style={{ fontSize: '13px', letterSpacing: 0 }}>{"\u21c6"}</span> Scorri
+              </span>
+              <button type="button" onClick={() => go('next')} aria-label="Prossima modella" data-testid="profile-nav-next"
+                className="flex items-center gap-1 h-9 min-w-9 px-2.5 rounded-full text-base leading-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 active:scale-95"
+                style={arrowStyle('next')}>
+                <span className="hidden sm:inline caps-label text-[10px]">Prossima</span>
+                <span aria-hidden="true">{"\u203a"}</span>
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
