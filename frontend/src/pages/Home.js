@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { getModels, getPellicola } from '@/lib/api';
 import { ModelCard } from '@/components/ModelCard';
 import FilmStrip from '@/components/FilmStrip';
+import { GlobalOfMarquee } from '@/components/GlobalOfMarquee';
 import { useTheme } from '@/lib/themeContext';
 import { setSeo, SITE } from '@/lib/seo';
 import { SearchX } from 'lucide-react';
@@ -127,6 +128,11 @@ export default function Home() {
           {showStrip && (
             <FilmStrip items={pellicola.items} config={pellicola.config} secret={secret} />
           )}
+
+          {/* canale OnlyFans globale del brand: subito dopo IN MOVIMENTO, occupa il suo spazio */}
+          <div className="my-8 sm:my-10">
+            <GlobalOfMarquee placement="home" secret={secret} />
+          </div>
 
           {restChunk.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5 pb-10" data-testid="models-grid-rest">

@@ -14,6 +14,7 @@ import {
   ofClickedFor, markOfClicked,
 } from '@/lib/session';
 import { peekCarry, consumeCarry, noteProfileSeen, journeyMeta } from '@/lib/profileNav';
+import { GlobalOfMarquee } from '@/components/GlobalOfMarquee';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -480,6 +481,11 @@ export default function ModelProfile() {
 
         {/* SOCIAL — lato segreto in fondo, dopo la CTA OnlyFans */}
         {secret && <SocialLinks social={socialData} secret onOpen={openSocial} />}
+
+        {/* CANALE GLOBALE (secondario): sempre DOPO la CTA OnlyFans personale della creator */}
+        <div className="mt-10">
+          <GlobalOfMarquee placement="profile" modelSlug={slug} secret={secret} />
+        </div>
 
         {/* RELATED */}
         {related.length > 0 && (
