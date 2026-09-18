@@ -1,0 +1,170 @@
+{
+  "summary": "Phase 14 SEO Autopilot READ_ONLY mode testing completed successfully. All backend APIs, frontend UI, and zero-mutation guarantees verified. Engine correctly operates in READ_ONLY mode with FULL locked, GSC connected (0 impressions expected), and all public resources unchanged after analysis runs.",
+  "backend_issues": {
+    "critical_bugs": [],
+    "flaky_endpoints": [],
+    "notes": [
+      "GSC connected to production property with 0 impressions - this is expected honest behavior, not a bug",
+      "Opportunities in HOLD status due to no GSC data - correct behavior per requirements",
+      "Preview environment serves X-Robots-Tag: noindex - expected at platform level, not a bug"
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "notes": [
+      "Home page timeout on networkidle wait strategy - resolved by using domcontentloaded, page loads correctly"
+    ]
+  },
+  "passed_tests": [
+    "Backend: Admin authentication (401 without token, 200 with admin JWT)",
+    "Backend: Status endpoint returns mode=READ_ONLY, full_locked=true, can_write_public=false",
+    "Backend: GSC_STATUS=CONNECTED, llm.source_label=LLM_SUGGESTION, render_budget.daily=30",
+    "Backend: All 15 read endpoints return 200 (/opportunities, /clusters, /keywords, /page-map, /proposals, /cannibalization, /backlog, /tech, /render, /adult, /log, /runs, /matrix, /gsc/compare, /snapshot)",
+    "Backend: Write guard active - POST /execute/* returns 423 with FULL lock message",
+    "Backend: POST /run/inesistente returns 404",
+    "Backend: POST /run/daily_analysis starts run successfully, completes in ~5s",
+    "Backend: Latest run has status=ok, public_mutations=0, PUBLIC_MUTATIONS_CHECK=PASS",
+    "Backend: Run includes all expected steps (gsc_sync, models_matrix, keyword_universe, clustering, opportunities, page_map, cannibalization, landing_planner, backlog)",
+    "Backend: Zero-mutation verification - sitemap, robots.txt, models, categories, articles unchanged before/after run",
+    "Backend: Keywords have search_volume=DATA_SOURCE_UNAVAILABLE, metrics.source=UNKNOWN (correct)",
+    "Backend: Clusters have cluster_id, intent, primary_keyword, metrics",
+    "Backend: Proposals have status=SEO_DRAFT_PROPOSAL, public=false, executable=false, quality_gate checks",
+    "Backend: Proposed slugs not in sitemap (verified)",
+    "Backend: Log contains PUBLIC_MUTATION_CHECK entries with result=PASS",
+    "Backend: Public endpoints still work (GET /api/models, /api/sitemap.xml, /api/categories all return 200)",
+    "Frontend: Admin login successful at /admin",
+    "Frontend: SEO Autopilot page loads at /admin/seo-autopilot with data-testid=seo-autopilot-page",
+    "Frontend: Mode pills show correct values (READ_ONLY, FULL bloccato, GSC CONNECTED, mutations=0)",
+    "Frontend: All 8 KPI cards present and visible",
+    "Frontend: All 9 tabs load successfully (Opportunità, Backlog, Cluster, Landing proposte, Cannibalizzazione, Audit tecnico, Rendering, Audit adult, Log decisioni)",
+    "Frontend: Opportunità tab shows 1 item with HOLD status",
+    "Frontend: Backlog tab shows 6 items",
+    "Frontend: Cluster tab shows 23 clusters",
+    "Frontend: Landing proposte tab shows 1 proposal",
+    "Frontend: Cannibalizzazione tab shows empty state (no cannibalization detected)",
+    "Frontend: Audit tecnico tab shows 1 finding",
+    "Frontend: Rendering tab shows 1 page audited",
+    "Frontend: Audit adult tab shows 7 findings",
+    "Frontend: Log decisioni tab shows 83 log entries",
+    "Frontend: 'Verifica guard FULL' button works - shows toast 'Guard attivo: azione bloccata (423)'",
+    "Frontend: WRITE_BLOCKED log entry created after guard test",
+    "Frontend: Daily analysis button present and functional",
+    "Frontend: No console errors in any tab",
+    "Public regression: Home page loads successfully with title, heading, and model cards",
+    "Public regression: No visual or functional changes detected"
+  ],
+  "test_report_links": [
+    "/app/test_seo_autopilot_api.py",
+    "/tmp/seo_autopilot_test_output.txt",
+    "/app/tests/test_seo_autopilot.py"
+  ],
+  "success_percentage": {
+    "backend": "100% (29/29 tests passed)",
+    "frontend": "100% (all UI elements and interactions working)",
+    "integration": "100% (zero-mutation guarantee verified)",
+    "public_regression": "100% (no changes detected)"
+  },
+  "action_item_for_main_agent": "",
+  "updated_files": [
+    "/app/test_seo_autopilot_api.py"
+  ],
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_test_itself": false,
+  "test_details": {
+    "backend_api_tests": {
+      "total": 29,
+      "passed": 29,
+      "failed": 0,
+      "test_file": "/app/test_seo_autopilot_api.py",
+      "execution_time": "11 seconds",
+      "key_verifications": [
+        "Authentication and authorization",
+        "Mode configuration (READ_ONLY enforced)",
+        "All read endpoints accessible",
+        "Write guard blocking (423 responses)",
+        "Daily analysis run execution",
+        "Zero-mutation guarantee (before/after comparison)",
+        "Data structure validation",
+        "Public endpoint regression"
+      ]
+    },
+    "frontend_ui_tests": {
+      "pages_tested": [
+        "/admin/seo-autopilot",
+        "/ (home)",
+        "/modelle/{slug} (profile)"
+      ],
+      "tabs_tested": 9,
+      "all_tabs_passed": true,
+      "interactions_tested": [
+        "Login flow",
+        "Navigation to SEO Autopilot",
+        "Tab switching",
+        "Guard verification button",
+        "Toast notifications",
+        "Log entry creation"
+      ],
+      "screenshots": [
+        ".screenshots/seo-autopilot-loaded.png",
+        ".screenshots/seo-autopilot-complete.png",
+        ".screenshots/public-home-final.png"
+      ]
+    },
+    "zero_mutation_verification": {
+      "resources_checked": [
+        "sitemap.xml (with lastmod stripped)",
+        "robots.txt",
+        "/api/models",
+        "/api/categories",
+        "/api/articles"
+      ],
+      "mutations_detected": 0,
+      "verification_method": "SHA-256 hash comparison before/after daily_analysis run"
+    },
+    "gsc_status": {
+      "status": "CONNECTED",
+      "property": "https://secret-side.emergent.host/",
+      "impressions": 0,
+      "note": "0 impressions expected for new property - engine correctly reports UNKNOWN metrics and HOLD opportunities instead of inventing data"
+    },
+    "mode_verification": {
+      "configured_mode": "READ_ONLY",
+      "effective_mode": "READ_ONLY",
+      "full_locked": true,
+      "can_write_public": false,
+      "downgraded": false,
+      "write_guard_active": true
+    },
+    "llm_configuration": {
+      "enabled": true,
+      "model": "gpt-5.4-mini",
+      "source_label": "LLM_SUGGESTION",
+      "daily_budget": 40,
+      "calls_today": "3/40",
+      "note": "LLM used only for semantic suggestions, never for metrics or decisions"
+    },
+    "render_audit": {
+      "daily_budget": 30,
+      "used_today": "20/30",
+      "pages_per_run": 10,
+      "note": "Headless browser budget respected"
+    }
+  },
+  "environment": {
+    "backend_url": "https://secret-side.preview.emergentagent.com",
+    "frontend_url": "https://secret-side.preview.emergentagent.com",
+    "crawl_base_url": "https://secret-side.preview.emergentagent.com",
+    "gsc_property": "https://secret-side.emergent.host/",
+    "mode": "READ_ONLY",
+    "full_locked": true
+  },
+  "test_execution": {
+    "date": "2026-09-18",
+    "time": "23:11-23:15 UTC",
+    "duration": "~4 minutes",
+    "tester": "T1 Testing Agent",
+    "phase": "Phase 14 - SEO Autopilot READ_ONLY"
+  }
+}

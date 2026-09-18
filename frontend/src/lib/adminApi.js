@@ -97,3 +97,20 @@ export const an2ExportUrl = (kind, filters, slug) => {
   const q = new URLSearchParams({ kind, ...Object.fromEntries(Object.entries({ ...filters, slug }).filter(([, v]) => v !== undefined && v !== null && v !== '')) });
   return `${process.env.REACT_APP_BACKEND_URL}/api/admin/analytics/v2/export.csv?${q.toString()}`;
 };
+
+// ---------------- SEO AUTOPILOT (fase 14, READ_ONLY) ----------------
+const seoAp = (path, params) => api.get(`/admin/seo-autopilot/${path}`, { params }).then((r) => r.data);
+export const seoApStatus = () => seoAp('status');
+export const seoApRun = (kind, params) => api.post(`/admin/seo-autopilot/run/${kind}`, null, { params }).then((r) => r.data);
+export const seoApRuns = (limit = 10) => seoAp('runs', { limit });
+export const seoApLog = (params) => seoAp('log', params);
+export const seoApOpportunities = (params) => seoAp('opportunities', params);
+export const seoApClusters = (params) => seoAp('clusters', params);
+export const seoApPageMap = () => seoAp('page-map');
+export const seoApProposals = (params) => seoAp('proposals', params);
+export const seoApCannibalization = () => seoAp('cannibalization');
+export const seoApBacklog = (limit = 50) => seoAp('backlog', { limit });
+export const seoApTech = () => seoAp('tech');
+export const seoApRender = () => seoAp('render');
+export const seoApAdult = () => seoAp('adult');
+export const seoApExecute = (slug) => api.post(`/admin/seo-autopilot/execute/${slug}`).then((r) => r.data);

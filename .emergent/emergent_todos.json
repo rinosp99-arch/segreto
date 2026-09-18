@@ -1,18 +1,6 @@
 [
   {
-    "content": "F1-F7 tracking implementation",
-    "status": "completed"
-  },
-  {
-    "content": "Backend v2 + Dashboard aggiornati",
-    "status": "completed"
-  },
-  {
-    "content": "Test: pytest 89/89, E2E 3 percorsi verificati in DB, perf, testing agent",
-    "status": "completed"
-  },
-  {
-    "content": "Report finale + docs",
+    "content": "Phase 14 SEO Autopilot READ_ONLY — all tasks completed, tested, documented",
     "status": "completed"
   }
 ]

@@ -8,12 +8,14 @@
 - Performance mobile-first: lazy media, nessun jank, rispetto autoplay policy (muted/playsInline), fallback robusti.
 - **UX Home:** sezione “**IN MOVIMENTO**” come **pellicola cinematografica** seamless/infinita (non carosello), che si trasforma insieme allo switch Pubblico/Segreto.
 - **Obiettivo operativo (admin + GPT):** tramite API v2 + Capability Registry + Universal Dispatcher, permettere a ChatGPT di gestire in modo sicuro operazioni business (testi/SEO/landing/categorie/internal linking/rollback/approvals) senza mai diventare un backdoor (no DB raw, no shell, no secrets).
-- **Nuovo obiettivo SEO (Phase 13 — GOOGLE SEO CORE):** rendere LATO SEGRETO tecnicamente “perfetto per Google” (scopribilità, indicizzabilità, sitemap corretta, landing pubbliche controllate) + integrazione Search Console (Sitemap sync, URL Inspection, Search Analytics) **minimizzando lo scope** e riusando Phase 9–12.
+- **Nuovo obiettivo SEO (Phase 14 — SEO AUTOPILOT / ORGANIC GROWTH ENGINE):** costruire un “cervello SEO” autonomo **READ_ONLY** che usa Search Console + audit tecnici + clustering + intent + opportunity engine + planning future landing (non pubblicate) e backlog auditabile; nessuna modifica al sito pubblico.
 
 **Stato attuale (snapshot)**
 - Phase 1–8: completate (agent-tested). Pubblico + Admin stabili.
 - Phase 9–11: SUPER API + ChatGPT control layer v1: completate e verificate in produzione.
-- Phase 12A: Total Site Control API v2: completata, deployata in produzione, contratto GPT v2 robusto (parameters/parameters_json/request_example), FULL business mode abilitato (`ai_write_enabled=true`) con chiave READ_ONLY di fallback.
+- Phase 12A: Total Site Control API v2: completata, deployata in produzione, contratto GPT v2 robusto.
+- Phase 13: GOOGLE SEO CORE: modulo `backend/google_search/` presente (status/sitemap sync/inspection/analytics) e pronto a essere riusato.
+- Phase 4 + Tracking: Admin Analytics v2 e Tracking v2 completati (agent-tested), funnel chiuso 6 step, percorsi, device compare, video/scroll/engaged.
 - Stato produzione: `https://secret-side.emergent.host`
 
 ---
@@ -64,7 +66,7 @@
 4. Come owner, distinguo sorgenti click OnlyFans.
 5. Come owner, so quali articoli generano click verso modelle e OF.
 
-**Stato:** completata (agent-tested).
+**Stato:** completata (agent-tested) — **v2**.
 
 ---
 
@@ -124,142 +126,211 @@ Sezione in Home con fascia orizzontale di teaser video verticali che scorre lent
 
 ### Phase 12A — TOTAL SITE CONTROL API v2 + FULL BUSINESS ACCESS — Status: COMPLETATA E VERIFICATA IN PRODUZIONE
 **Stato:**
-- v2 `/api/v2/ai/*` (12 primitive universali) + registry 97 capability.
+- v2 `/api/v2/ai/*` (12 primitive universali) + registry capability.
 - Preview/execute policy corretta (preview scopes deterministici + conditional scopes).
-- Contratto GPT Action v2 robusto: `parameters` required, descrizioni esplicite, `parameters_json` fallback, `getCapability` include `required_parameters`, `example_parameters`, `request_example`, `execute_access`, `preview_access`.
-- Produzione: `ai_write_enabled=true` (FULL), chiave `ChatGPT Production READ_ONLY` ancora attiva; bozza `test-v2-giulia` presente, non pubblica.
+- Contratto GPT Action v2 robusto.
 
 ---
 
-### Phase 13 — GOOGLE SEO CORE — Status: IMPLEMENTATA IN PREVIEW (agent-tested; richiede deploy + env Google dell'utente) (reduced scope, user-approved) — Status: PLANNED
-**Obiettivo:** rendere il sito tecnicamente indicizzabile, scopribile e monitorabile con dati reali Google (Search Console: sitemap sync, URL inspection, analytics) senza costruire un “mega growth autopilot”.
+### Phase 13 — GOOGLE SEO CORE — Status: PRESENTE (riusabile)
+**Obiettivo:** Search Console come fonte dati ufficiale (sitemap sync, URL inspection, search analytics) con modulo backend modulare.
 
-#### 13.0 Google SEO CORE — Audit (prima di modifiche)
-**Fatti osservati / rischi attuali (produzione)**
-- SEO head è **client-side** (SPA): `frontend/src/lib/seo.js`.
-- Canonical attuale di default = `window.location.href` (include query): rischio canonical non stabile.
-- Age gate: overlay `fixed` ma contenuto sotto esiste; va verificato se Google indicizza contenuto o vede ostacoli (non “cloaking”, ma può impattare rendering).
-- Sitemap: esistono **due implementazioni divergenti**:
-  - `/api/sitemap.xml` (routes_seo.py) senza `lastmod`, senza landing, e logica separata.
-  - `v1_seo.sitemap_entries()` ha `lastmod` e include landing ma usa **flag/config diverso** (oggi controlla `(cfg.get('landings') or {}).get('public_routes')`, mentre il gating reale è `flags.public_landing_routes`).
-- Root `/sitemap.xml` restituisce HTML SPA (non sitemap) → ok se robots punta a `/api/sitemap.xml`, ma è un footgun.
-- Robots: `frontend/public/robots.txt` punta correttamente a `https://secret-side.emergent.host/api/sitemap.xml`.
-- Landing: backend espone `GET /api/landings/{slug}` (pubblico) dietro flag `flags.public_landing_routes` (oggi OFF di default).
-- Frontend: **manca route `/l/:slug`** → anche se API pubblica fosse attiva, la pagina landing non sarebbe renderizzata come route SPA.
-- Google credentials: nessuna configurazione attiva lato env; Google libs presenti (google-auth, google-api-python-client) ma integrazione strutturata assente.
-
-**Deliverable audit:** `GOOGLE SEO CORE AUDIT` (doc) con:
-- sitemap/robots/canonical/noindex status
-- landing route status
-- readiness per GSC (property, service account)
-- elenco gap che blocca indicizzazione/monitoraggio
-
-#### 13.1 Sitemap Engine — consolidamento (core)
-**Obiettivo:** un’unica sorgente di verità sitemap, con lastmod e inclusione corretta delle landing.
-- Unificare `/api/sitemap.xml` per usare `v1_seo.sitemap_entries()` (o spostare la logica in un unico modulo) e includere:
-  - home
-  - modelle pubblicate e indexable (noindex/robots)
-  - landing pubblicate e indexable **solo se** `flags.public_landing_routes=true`
-  - categorie indicizzabili (se appropriato)
-- lastmod reale (almeno `updated_at` per modelle, `data_aggiornamento` per articoli, `updated_at` per landing se presente).
-- Escludere: draft, archived/is_deleted, noindex.
-- Validazione XML + deduplicazione.
-- Opzionale: sitemap index se URL crescono.
-
-#### 13.2 Landing pubbliche `/l/{slug}` (core)
-**Obiettivo:** render pubblico coerente + indexability controllata.
-- Frontend: aggiungere route SPA `/l/:slug` con pagina `LandingPage` che:
-  - chiama `/api/landings/{slug}`
-  - usa `setSeo()` con canonical pulito (senza query) e JSON-LD coerente con `LandingIn.seo`.
-- Backend: mantenere gating con `flags.public_landing_routes`.
-- Attivazione `flags.public_landing_routes=true` **solo dopo test**.
-
-#### 13.3 Google Search Console integration layer (core)
-**Struttura:** `backend/google_search/` (modulare, niente chiamate sparse)
-- `config.py`: flag e property url (solo admin umano modifica; AI non può gestire segreti)
-- `auth.py`: service account (ADC / JSON via env)
-- `client.py`: httpx + retry/backoff, timeout, user-agent, error mapping
-- `sitemap.py`: list/submit sitemap, debounce, sync log
-- `inspection.py`: URL Inspection (cache + quota guard)
-- `analytics.py`: Search Analytics (summary + queries)
-- `schemas.py`: dataclass/pydantic per risultati normalizzati
-- `mock.py`: adapter mock per test senza credenziali
-
-**Config (solo env, mai esposta):**
-- `GOOGLE_SEARCH_ENABLED`
-- `GOOGLE_SEARCH_PROPERTY` = `https://secret-side.emergent.host/`
-- `GOOGLE_APPLICATION_CREDENTIALS_JSON` (o path gestito dalla piattaforma)
-- `GOOGLE_SEARCH_SITEMAP_SYNC_ENABLED`
-- `GOOGLE_SEARCH_ANALYTICS_ENABLED`
-- `GOOGLE_SEARCH_INSPECTION_ENABLED`
-
-#### 13.4 Persistenza stato Google per URL (core minimal)
-Nuove collections (minime):
-- `google_search_status`: per URL (entity_type, entity_id/slug, indexability snapshot, google inspection snapshot, timestamps)
-- `google_search_sync_log`: submit/list sitemap + errori + last submit
-- `google_search_analytics_cache`: aggregati (28d) + top queries per pagina
-
-Retention e indici:
-- index su `url`, `entity_type+entity_id`, `last_inspection_at`, `last_sync_at`.
-
-#### 13.5 Capability v2 (solo indispensabili)
-Aggiungere capability al registry (no nuovi GPT endpoints, solo Universal Dispatcher):
-- `google.status` (connessione + property + quote status + ultimo sync)
-- `google.sitemap.sync` (submit/debounce; SAFE o REVIEW in base all’impatto)
-- `google.url.inspect` (inspect 1 url; cache-aware)
-- `google.analytics.summary` (clicks/impressions/ctr/position range)
-- `google.analytics.queries` (top queries for page)
-- `seo.indexability.audit` (HTTP 200, robots/noindex, canonical, title/meta/H1, JSON-LD validate, internal links count)
-- `growth.prepare_model` (workflow orchestrato: SEO fields + safe fixes + readiness + sitemap include + optional submit)
-
-Risk policy:
-- read/inspect/analytics: SAFE
-- sitemap submit: REVIEW_REQUIRED o SAFE con rate guard (da definire in audit)
-
-#### 13.6 Workflow “Completa e prepara per Google” (core)
-Nuovo workflow orchestrato (capability `growth.prepare_model`) che:
-1) find model
-2) audit readiness (mancanze real data segnate `MISSING_REAL_DATA`)
-3) aggiorna testi/SEO SAFE
-4) `seo.audit` + `seo.safe_fix` (solo SAFE)
-5) verifica indexability tecnica
-6) prepara landing solo se pubblicamente attivabile e utile (minimo: non creare spam)
-7) valida
-8) aggiorna sitemap
-9) se Google enabled: submit sitemap (debounced) + opzionale inspect (manual/limit)
-
-Invarianti:
-- Mai inventare OnlyFans/Instagram/TikTok/età (richiedere input).
-- Media upload non obbligatorio (utente carica manualmente).
-
-#### 13.7 Test (minimi indispensabili)
-- `tests/test_phase13_google_core.py`:
-  - sitemap unificata: no draft/archived/noindex, lastmod presente, landing incluse solo se flag ON
-  - landing route `/l/:slug` (frontend route + backend gating)
-  - google adapter mock: status/sitemap sync/inspection/analytics
-  - capabilities v2: parsing parameters/parameters_json, scopes, READ_ONLY/FULL invariati, no secrets
-  - regressioni Phase 12: `verify_production_v2.py`, `gpt_action_contract_v2.py`
-- Estendere `verify_production_v2.py` con check sitemap/robots/canonical/landing.
-
-#### 13.8 Deliverables
-- `PHASE13_GOOGLE_SEO_CORE_REPORT.md`:
-  - audit iniziale
-  - cosa riusato vs nuovo
-  - file modificati
-  - nuove collections + indici
-  - capabilities aggiunte + scopes + risk
-  - stato landing route
-  - istruzioni passo-passo per Service Account (azioni utente su Google)
-  - output test (PASS/FAIL) + regressioni
+**Stato:** `backend/google_search/` presente con:
+- `status()` (connessione + property + quote)
+- `analytics()` (Search Analytics con cache)
+- `inspect()` (URL Inspection con cache+budget)
+- `indexability()` (audit tecnico read-only)
+- adapter `mock` per test senza credenziali
 
 ---
 
-## 3) Next Actions
-1. Phase 13.0: produrre audit (no code changes) + checklist azioni utente per Service Account e proprietà GSC.
-2. Implementare Phase 13.1–13.3 (sitemap unificata + landing route SPA + layer google_search con mock).
-3. Aggiungere capabilities core Phase 13.5 e workflow Phase 13.6.
-4. Test minimi Phase 13.7 + regressioni Phase 12.
-5. Deploy controllato e verifica produzione (nessun segreto nei log; nessuna API pericolosa).
+## Phase: Admin Analytics v2 + Tracking Audit (Status: COMPLETED — agent-tested)
+- Root cause black screen (storico): Recharts riceveva `data=null` → TypeError → unmount root.
+- Dashboard v2 + backend v2 + CSV + log tecnico + widget isolation.
+
+## Phase: Tracking v2 implementation (Status: COMPLETED — agent-tested)
+- `visitor_id` persistente + `visit_id` per visita (timeout 30 min / nuova scheda / campagna).
+- Schema comune centralizzato + queue + batch + beacon.
+- entry_source propagato (home_card/filmstrip/surprise/swipe/swipe_button/related/search/category/campaign/direct).
+- CTA/OF/social/swipe/video/scroll/engaged completati.
+- Backend analytics v2 aggiornato: funnel chiuso 6 step + drop-off, percorsi, device compare, video per slot, engaged/scroll.
+- Test: pytest 89/89 + 3 percorsi E2E ricostruiti in DB.
+
+---
+
+### Phase 14 — SEO AUTOPILOT / ORGANIC GROWTH ENGINE — READ_ONLY “BRAIN” (NUOVA FASE)
+**Regola assoluta (questa fase):** nessun cambiamento al sito pubblico. Nessuna landing pubblica. Nessuna modifica a URL/title/meta/H1/testi/media/sitemap/robots/canonical/structured data/internal linking/blog/CTA/Analytics.
+
+#### 14.0 Modalità e safety rails
+- Implementare `SEO_AUTOPILOT_MODE` con tre stati: `OFF`, `READ_ONLY`, `FULL`.
+- **Stato attuale forzato:** `SEO_AUTOPILOT_MODE=READ_ONLY`.
+- `FULL` deve restare **bloccato** in questa fase: non attivabile per errore.
+- Ogni azione di write deve fallire esplicitamente se `SEO_AUTOPILOT_MODE != FULL`.
+
+#### 14.1 Dato primario: Google Search Console (riuso integrazione esistente)
+- Riutilizzare `backend/google_search/` (nessuna integrazione duplicata).
+- Preview: `GSC_STATUS=NOT_CONNECTED` (non bloccare il motore).
+- Produzione: `GSC_STATUS=CONNECTED` quando credenziali/env presenti.
+- Importare Search Analytics (quando disponibile): query/page/date/clicks/impressions/CTR/position/country/device.
+- Nessun scraping SERP.
+
+#### 14.2 Storage SEO storico (snapshots non sovrascritti)
+- Nuove collezioni dedicate (read-only):
+  - `seo_gsc_snapshots` (giornaliero): rows normalizzate per dimensioni; retention 400 giorni.
+  - `seo_keyword_universe` (keyword candidate + fonte + stato).
+  - `seo_clusters` (cluster_id, intent, primary/secondary keywords, query associate, metriche GSC, trend, pagina associata, cannibalizzazione).
+  - `seo_opportunities` (daily findings + score HIGH/MEDIUM/LOW/HOLD + motivazione).
+  - `seo_page_map` (cluster → current_page → action: KEEP/UPDATE/EXPAND/CREATE/MERGE/REVIEW/HOLD).
+  - `seo_landing_drafts` (SEO_DRAFT_PROPOSAL: slug proposto, struttura, link suggeriti, creator pertinenti, quality gate).
+  - `seo_audits` (tech/render/adult audit, snapshot, findings).
+  - `seo_decision_log` (audit completo di ogni decisione: metriche usate, motivi, confidence, esito quality gate).
+
+#### 14.3 Keyword discovery engine (seed + espansione controllata)
+- Seed iniziali (OnlyFans/creator italiane) + espansione tramite:
+  - query reali GSC
+  - database modelle (nome, categorie, tag, descrizioni)
+  - sinonimi e varianti linguistiche italiane
+  - long-tail pertinenti (no keyword stuffing)
+- **Regola:** nessun search volume inventato. Metriche solo da GSC; altrimenti `UNKNOWN`.
+
+#### 14.4 Semantica: deterministico + LLM (decisione 1b)
+- Base deterministica auditabile (normalizzazioni, tokenizzazione IT, stopwords, stemming leggero, n-gram, regole merge/split).
+- LLM come supporto per:
+  - sinonimi/varianti
+  - intent
+  - proposte cluster/merge
+- Ogni output LLM marcato `source=LLM_SUGGESTION`.
+- LLM **non** può inventare metriche: impressions/clicks/ctr/position restano `UNKNOWN` finché non arrivano da GSC.
+- La decisione finale (CREATE/UPDATE/MERGE/HOLD) deve essere deterministica e auditabile.
+- Modello: `gpt-5.4-mini` via `emergentintegrations` (cost-conscious), fallback automatico se key/budget non disponibile.
+
+#### 14.5 Intent classification
+- Classi indicative: DISCOVERY, CATEGORY, CREATOR, INFORMATIONAL, BRANDED, COMMERCIAL/NAV.
+- Estendibili se emergono categorie utili.
+
+#### 14.6 Clustering + Cannibalization engine
+- Raggruppare query semanticamente equivalenti.
+- Rilevare:
+  - più URL sullo stesso intent
+  - title/H1 simili
+  - cluster sovrapposti
+- Output: rischio LOW/MEDIUM/HIGH, URL coinvolti e motivo (solo report).
+
+#### 14.7 Opportunity engine + score
+- Ogni giorno:
+  - A) impression alte + pos 5–20
+  - B) impression alte + CTR basso
+  - C) query nuove in crescita
+  - D) intent pertinente + nessuna pagina adeguata (future CREATE)
+  - E) cannibalizzazione
+  - F) pagina in declino
+- Score interno HIGH/MEDIUM/LOW/HOLD con motivazione leggibile.
+
+#### 14.8 Keyword → Page map (solo raccomandazioni)
+- Mappa: CLUSTER → PAGINA ATTUALE → AZIONE FUTURA.
+- Azioni consentite in READ_ONLY: KEEP/UPDATE/EXPAND/CREATE/MERGE/REVIEW/HOLD.
+- Nessuna esecuzione.
+
+#### 14.9 Landing page planner + Quality Gate (solo draft)
+- Generare proposte `SEO_DRAFT_PROPOSAL` (non pubbliche): slug, intent, title/H1 proposti, outline, link suggeriti, creator/categorie pertinenti.
+- Quality gate: evita doorway/keyword stuffing/duplicazione/cannibalizzazione grave.
+- Se fallisce: `REJECTED_BY_QUALITY_GATE`.
+
+#### 14.10 Model database analysis
+- Analizzare solo dati reali modelle pubblicate: nome/slug/categorie/tag/bio/descrizioni.
+- Costruire matrice: keyword/category ↔ creator pertinenti.
+
+#### 14.11 Technical SEO auditor (crawler) — READ ONLY
+- Crawler interno controllato:
+  - status code
+  - title/meta/H1
+  - canonical
+  - robots directives
+  - indexability
+  - structured data presence
+  - internal links/orphan/broken links
+  - duplicate title/desc/H1
+  - immagini senza alt
+- **Base URL configurabile:** `SEO_CRAWL_BASE_URL` (decisione 3a: preview→preview, prod→prod).
+
+#### 14.12 React / Google render audit (decisione 4a)
+Confronto **INITIAL_HTML vs RENDERED_DOM vs GOOGLE_INSPECTION**:
+- Headless Chromium (Playwright): campione limitato **≤30 pagine/giorno**, background.
+- URL Inspection API (quando GSC connessa): usata con priorità su anomalie/pagine ad alto valore, non indiscriminata.
+
+#### 14.13 Adult / OnlyFans SEO audit — READ ONLY
+- Audit specifico rischio SafeSearch/explicit:
+  - crawling bloccato o meno
+  - fetch media/video
+  - impatto age gate (solo audit)
+  - differenza contenuto pubblico vs Secret
+- Nessuna modifica.
+
+#### 14.14 Daily Autopilot + Weekly learning
+- Jobs schedulati (no impatto request utente):
+  - `seo_ap_gsc_sync` (12h)
+  - `seo_ap_tech` (8h)
+  - `seo_ap_deep` (24h)
+  - `seo_ap_render` (24h)
+  - `seo_ap_weekly` (7d)
+- GSC 1–2 volte/giorno (rispetto delay dati e quota).
+
+#### 14.15 Admin UI semplice: “SEO Autopilot”
+- In admin aggiungere sezione: **SEO AUTOPILOT** (nessun grafico complesso):
+  - STATO (READ_ONLY)
+  - GSC (CONNECTED / NOT_CONNECTED)
+  - ultima analisi
+  - oggi: query analizzate, cluster, opportunità, problemi tecnici, proposte CREATE/UPDATE/MERGE, reject quality gate
+  - top opportunità
+  - ultime azioni del motore
+  - errori
+
+#### 14.16 Log completo + auditabilità
+- Ogni decisione salvata con: timestamp, azione proposta, pagina/cluster, motivo, metriche, confidence, quality check.
+
+#### 14.17 Zero mutation test (fondamentale)
+- Prima e dopo ogni run READ_ONLY: snapshot/hash delle risorse pubbliche principali:
+  - models/categorie/articoli/landings/redirects
+  - config “pubblica”
+  - `robots.txt`, `/api/sitemap.xml`
+  - (opzionale) campione di pagine HTML initial
+- Risultato: `PUBLIC_MUTATIONS = 0` obbligatorio, altrimenti FAIL.
+
+#### 14.18 Test
+- GSC non collegata / collegata
+- zero data
+- query nuove
+- cluster duplicati/sovrapposti
+- cannibalizzazione
+- modelle senza tag / con molti tag
+- broken link
+- API Google down / retry
+- job idempotente
+- FULL non attivabile
+- **PUBLIC_MUTATIONS=0**
+
+#### 14.19 Deliverables
+- `SEO_AUTOPILOT.md` (architettura, mode, collezioni, jobs, audit log, quality gate, regole privacy)
+- Endpoint admin read-only `/api/admin/seo-autopilot/*`
+- Pagina admin “SEO Autopilot”
+- Report finale: fonti dati, stato GSC, keyword/clusters/opportunità/draft landing/cannibalizzazioni/tech+render+adult findings, job creati, `PUBLIC_MUTATIONS=0`, PASS/FAIL.
+
+---
+
+## 3) Phase 14 — SEO AUTOPILOT READ_ONLY (Status: COMPLETED — PASS, PUBLIC_MUTATIONS=0)
+Fatto (agent-tested):
+- [x] 14.0 mode OFF/READ_ONLY/FULL (FULL_LOCKED nel codice, `require_full` → WriteBlocked/423)
+- [x] store `seo_ap_*` + decision log + run log + **snapshot pubblico hash before/after** (PUBLIC_MUTATIONS)
+- [x] GSC sync riusando `google_search` (adapter raw, paginato, snapshot giornalieri non sovrascritti, 7v7/28v28/90)
+- [x] matrice creator, keyword universe (seed+GSC+DB+LLM_SUGGESTION), intent a regole, clustering deterministico + merge LLM guardati
+- [x] opportunity engine A–F, page map, cannibalizzazione, weekly learning, backlog
+- [x] landing planner + quality gate (SEO_DRAFT_PROPOSAL / REJECTED_BY_QUALITY_GATE, hold senza GSC)
+- [x] crawler tecnico + audit adult + render audit (Playwright ≤30/g) + URL Inspection selettiva (solo host = proprietà)
+- [x] 4 job nello scheduler `v1_jobs` + `/api/admin/seo-autopilot/*` + pagina Admin “SEO Autopilot”
+- [x] `tests/test_seo_autopilot.py` 24 PASS · suite completa 119 PASS (1 failure pre-esistente `test_telemetry_phase12b::password_scrubbing`, event-loop del harness, riproducibile anche senza i nuovi test)
+- [x] `SEO_AUTOPILOT.md`
+- [x] testing agent: 36/36 PASS (backend + frontend + regressione pubblica) — `test_reports/iteration_phase14_seo_autopilot.json`
+- Nota: in preview la piattaforma serve `X-Robots-Tag: noindex` (atteso, riportato come INFO); GSC proprietà produzione con 0 impression → metriche UNKNOWN/HOLD (onesto).
 
 ---
 
@@ -269,72 +340,14 @@ Invarianti:
 - Conversion: CTA OnlyFans tracciate.
 - Admin: workflow publish robusto.
 - SEO best-possible (senza SSR): meta dinamici, canonical, OG, structured data, sitemap/robots.
-- ChatGPT control: universal dispatcher + registry + scopes + SAFE/REVIEW + audit/session + rollback; GPT contract v2 robusto.
-- **Phase 13 (GOOGLE SEO CORE) è completata solo se:**
-  1) sitemap corretta e automatica (modelle+landing pubblicate; no draft/archived/noindex; lastmod reale)
-  2) `robots.txt` coerente e punta alla sitemap corretta
-  3) landing `/l/{slug}` realmente raggiungibili **solo** per landing pubblicate e con flag ON
-  4) integrazione GSC pronta con service account (zero secrets via API)
-  5) GPT può chiedere URL Inspection/Analytics e ricevere dati reali (o `UNKNOWN` se non disponibile)
-  6) regressioni Phase 12 e API v1/v2 PASS
-
-**Chiusura 13 (11/09, preview):** modulo `backend/google_search/` (config env-only, auth SA, client retry/log, mock, service), 4 collection + indici, sitemap unificata con lastmod/landing-flag/dedupe + `sitemap_dirty` (publish/unpublish/slug/canonical) + job `google_sitemap_sync` (debounce 6h), 7 capability (`google.status`, `google.sitemap.sync`, `google.url.inspect`, `google.analytics.summary`, `google.analytics.queries`, `seo.indexability`, `growth.prepare_model`) → registry 104/104 bound, frontend `LandingPage` `/l/:slug` + canonical pulito. Test `test_phase13_google_core.py` 7/7 + regressioni tutte verdi; harness produzione esteso (sezione p13). Audit: produzione senza X-Robots noindex, robots ok, sitemap ok; preview è noindex per piattaforma (atteso). Google NON ancora configurato: servono service account + variabili env (vedi CHATGPT_API.md §B) e aggiunta del SA alla proprietà GSC. Flag `public_landing_routes` OFF in produzione fino a decisione utente.
-
----
-
-## Phase 12B — FIX DEFINITIVO `models.prepare_complete` compila TUTTO il formulario (Status: COMPLETED in preview, 13/09)
-Bug reale (FLAVIA RUSSO): applicati solo badge/categorie/tag/CTA; SEO/bio/timing non compilati. Cause trovate:
-1. split SAFE/REVIEW per **root** (`seo` intero in REVIEW perché `seo.title` è REVIEW → keywords/topics/alt/og mai applicati);
-2. `seo.safe_fix` applicava solo issue già presenti in `seo_issues` → su bozza nuova (mai auditata) 0 fix;
-3. `parameters_schema.fields` opaco + `MODEL_FIELDS_DOC` con nomi errati (`ritardo_secondi`, `audio.volume`…) → GPT non sapeva cosa inviare / inviava chiavi sbagliate accettate nei dict liberi (`regia`, `cta_temporizzata`);
-4. readiness indistinta (media vs dati reali vs review).
-Fix (solo questa capability, nessuna feature nuova):
-- `backend/v1_prepare_fields.py` (nuovo): schema esplicito `PREPARE_FIELDS_SCHEMA` (FORM→DB, tipi, enum, range, esempi), filtro deterministico (media/stato/conferma_maggiorenne/chiavi sconosciute → `fields_dropped` con motivo), split per **path**, `readiness_breakdown` (MISSING_MEDIA / MISSING_REAL_DATA / PENDING_REVIEW / missing_text_not_provided), `EXAMPLE_FIELDS_FULL`.
-- `backend/v1_capabilities.py`: workflow riscritto — 1 chiamata = 1 session: create → tutti i SAFE path in 1 patch → tutti i REVIEW path in **una** approval (con meta/og description derivate dalla bio proposta) → media → `run_audit(entity)` + `apply_issue_fix` per ogni SAFE issue (esclusi i campi già in approval) → readiness veritiera. `example_parameters` completo. `MODEL_FIELDS_DOC` corretto. Bindings estesi.
-- Matrice formale: `/app/PREPARE_COMPLETE_MATRIX.md`.
-- Test: `tests/test_prepare_complete_full_form.py` 3/3 (fixture `ZZTEST PREPARE …`, 37 path SAFE applicati, 8+2 REVIEW in 1 approval, approve senza perdita SAFE, altri modelli intatti, no publish, rollback.session → soft-delete, cleanup); `gpt_action_contract_v2.py` 35/35 (aggiornato per example_parameters completo); Phase 12 + 13 pytest 32/32; smoke 35/35; bindings 30/30; coverage 157/157. FLAVIA RUSSO non toccata (3 approval pendenti intatte).
-- Da fare dall'utente: deploy in produzione, poi rilanciare `models.prepare_complete` su FLAVIA RUSSO (riuso bozza esistente per nome esatto: applica SAFE + 1 approval REVIEW).
-
-**Verifica produzione 13/09 (post-deploy fix 12B):** `models.prepare_complete` BOUND v1.0 SAFE; `parameters_schema.fields` identico allo schema (20 proprietà, nested esplicite); `example_parameters` completo (17 campi + seo_safe_fix) = `request_example.parameters`; registry 104/104 bound / 0 unbound / 0 CRITICAL; GPT contract 35/35 in prod (READ_ONLY key, zero mutation); `verify_production_v2.py` 98/98 PASS; preview full-fields in prod: 37 SAFE + 9 REVIEW path, 0 dropped, nulla scritto. Mode produzione: FULL.
-**Incidente e rimedio (13/09):** il primo run di `verify_production_v2.py` (harness scritto per READ_ONLY) ha usato una chiave operator con scope di scrittura su produzione FULL → 2 mutazioni reali: VANESSA BELLA badge `IN TENDENZA`→`prodcheck`→`x` e bozza `PRODCHECK NO` creata. Ripristino immediato via API versionata: rollback delle 2 versioni (badge di nuovo `IN TENDENZA`, analytics/seo come prima), `PRODCHECK NO` soft-deleted; nessun file caricato; chiavi temporanee revocate. Harness reso production-safe: chiave operator SOLO scope read-only + guardia ZERO MUTATION (snapshot prima/dopo) + codici blocco INSUFFICIENT_SCOPE/READ_ONLY_MODE. Le 3 approval REVIEW di FLAVIA RUSSO risultavano già scadute per TTL (30 min) prima di questa sessione: nessuna azione su Flavia.
-
-## Fix iPhone — video profilo nero (Status: IMPLEMENTED in preview, awaiting device verification)
-Confronto codice slot video profilo (`MediaMorph.Layer`) vs FilmStrip (funziona su iPhone): differenze = (1) muted/defaultMuted/playsInline NON impostati come proprietà prima di play() (React rende `muted` solo come proprietà: attributo assente in DOM, confermato in prod `mutedAttr=false`); (2) 6 `<video>` con src+autoplay+preload=metadata montati insieme (iOS: budget decoder limitato) vs FilmStrip che monta/carica solo i visibili; (3) nessun poster `<img>` dietro il video → se iOS rifiuta/ritarda la riproduzione il tile è nero (wrapper #050206); (4) opacity 1 immediata invece di `.ready`. Nessuna logica isMobile/isIOS/reduced→poster trovata nel profilo. Codec prod: MP4 H.264 High L3.1 yuv420p (ok iOS), Range OK, moov non faststart (funziona con Range).
-Fix: `frontend/src/lib/videoAutoplay.js` (helper condiviso estratto dalla strategia FilmStrip: primeVideo/tryPlayVideo/pauseVideo/useVisibilityRetry/SUPPORTS_WEBM) + `MediaMorph.Layer` video: poster img dietro, `<source type=video/mp4>` unico, autoplay/preload=auto solo sul lato attivo (inattivo preload=none), retry su loadedmetadata/loadeddata/canplay/visibilitychange/pageshow, opacity video = active&&ready. Home/FilmStrip/ModelProfile/CSS non toccati.
-Limite sandbox: nessun WebKit/iOS e Chromium headless senza H.264 (err=4) → T1/T2 currentTime NON misurabile qui; verifica reale su iPhone dopo deploy.
-Bug separato PRE-ESISTENTE trovato (prod + preview): la riga 3 della griglia (tile video da solo o video|video, `fit=contain` con margin auto) collassa a 2×3 px → il 2° video di Vanessa è invisibile su PC e mobile. Non toccato (fuori perimetro), da decidere con l'utente.
-Riga 3: corretto in `MediaMorph` (containerFit: `width:100%`, rimosso `margin:auto`) → 6 tile uniformi 173×231 (390) / 472×629 (1920), pubblico+segreto, nessun collasso; video interno resta `object-fit: contain`. Bio demo Francesca (preview) ripristinata dal residuo "Idempotency test" via versione. In attesa di Re-publish + verifica iPhone reale.
-
-## Header switch Lato Pubblico/Segreto — richiamo visivo (Status: DONE in preview)
-Solo luce/bordo/animazione (`index.css` classi `.ls-switch*`, `Header.js` classi + stato intro/tap): glow oro/champagne (pubblico) o bordeaux/viola (segreto), micro-pulse scale 1→1.03 2.8s, shimmer ogni 6.5s (~0.8s), intro una volta per sessione dopo 1.5s (sessionStorage), flash al click, reduced-motion → glow statico senza animazioni. Dimensioni/posizione/testi/header invariati (mobile 87×29 → identico a riposo; header 64).
-
-## Swipe orizzontale tra profili (Status: DONE in preview, agent-tested 390×844 + desktop)
-Nuovi: `pages/ProfileSwipe.js` (wrapper trasparente della route `/modelle/:slug`: pointer gesture con directional lock + `touch-action: pan-y`, soglia 32% vw, underlay con card sfocata + "PROSSIMA →/← PRECEDENTE", slide-out/in, frecce desktop ‹ › discrete, tasti freccia, click soppressi solo dopo drag, `onDragStart` preventDefault), `lib/profileNav.js` (ring circolare solo pubblicate in ordine Home, cache 5 min; carry modalità pubblico/segreto consumato una volta; contatori sessione profiles_seen/swipes). Modifiche: `ModelProfile.js` (carry: apertura diretta nel Lato Segreto della nuova modella con fetch model+secret in parallelo, theme/audio non interrotti nel cleanup se il carry è secret, `switchAmbient` stessa traccia→continua / diversa→crossfade 700ms, `secret_activate meta.via=swipe`, of_click/cta_click con meta {profiles_seen, swipes}), `lib/sound.js` (`isPlayingUrls`, `switchAmbient`), `App.js` (route element). Eventi: profile_swipe_next/previous/public/secret. Test: next/prev/short/verticale/segreto-carry/URL/back tutti PASS; nessun errore pagina.
-
-## Code review follow-up (Status: DONE in preview)
-Applicati: DOMPurify su `ArticlePage` (XSS), `google_search/state.py` leaf module per `mark_sitemap_dirty` (nessun import cycle service↔models), `__import__` dinamici → import normali (v1_config, v1_ai), webhook secret `secrets.token_hex`, `surprise` con `secrets.choice`, key stabile tabella campagne, `lib/log.js` debugLog dev-only al posto dei catch vuoti (videoAutoplay, sound, profileNav, ProfileSwipe). Falsi positivi verificati (ruff F821/F632 puliti: nessuna variabile indefinita, nessun `is` su literal; "hardcoded secrets" erano token generati a runtime; hook deps citati sono effetti mount-only corretti; key su skeleton/KPI statici). Non applicati per scelta: refactor FilmStrip/MediaMorph/ModelProfile/indexability (rischio regressioni su design approvato), JWT admin in httpOnly cookie (cambio architettura auth, da pianificare).
-
-## Navigatore fisso profili (pill) — Status: DONE in preview
-Aggiunta in `ProfileSwipe.js` (solo layer UI, nessun cambio a layout/swipe): pill `fixed` centrata in basso (`env(safe-area-inset-bottom)` + 12px), vetro scuro + blur + bordo sottile + glow delicato; oro/champagne in Pubblico, bordeaux/viola in Segreto (osserva `html.theme-secret`); mobile `‹ ⇆ SCORRI ›` (180×46), desktop `‹ PRECEDENTE ⇆ SCORRI PROSSIMA ›` (327×46); frecce → `go('prev'/'next')` esistente; durante il drag si illumina la freccia della direzione; si alza automaticamente sopra CTA temporizzata / cookie banner (MutationObserver + misura). Test 390×844 e 1920 PASS.
-
-## Marquee OnlyFans globale (Status: DONE in preview)
-`components/GlobalOfMarquee.js` + CSS `.ls-marquee*`: fascia 46/50px, vetro nero, bordi sottili, glow delicato, testo champagne/oro (Segreto: bordo/glow bordeaux/viola via `.theme-secret`), loop seamless sinistra→destra con translate3d (2 gruppi identici, copie calcolate sulla larghezza reale, durata = larghezza/velocità: mobile ~24.5s, desktop ~21.6s, clamp 18–30), freccia con micro-spinta ogni 6.5s, reduced-motion → fascia ferma centrata, tutta cliccabile (`_blank noopener noreferrer`, https://onlyfans.com/latosegreto/c28). Posizioni: Home subito dopo IN MOVIMENTO (`my-8/10`), profilo dopo CTA personale + social e prima di "Potrebbero piacerti anche" (`mt-10`). Analytics: `of_global_marquee_home_click`, `of_global_marquee_profile_click` (slug, mode, ref/fonte/campagna). Test 390×844 + desktop: nessun overflow, ordine CTA→marquee, popup OF, swipe e pill intatti.
-Marquee v2: spostata in alto (Home: subito sotto header, prima dell'intro, `pt-3/4`; profilo: prima di "Tutte le modelle", `mb-4`), rimosse le istanze in fondo (1 per pagina). Gerarchia: prima parte champagne 0.82, "SCOPRILE SU ONLYFANS ↗ →" oro chiaro bold 700 + text-shadow; arrow pulse 0→5px ogni 5s; breathing glow 5s; light sweep ogni 9s (~0.8s); hover: bordo/glow +, CTA più chiara, scale 1.005, marquee non si ferma; tap: scale 0.99 + flash radiale nel punto toccato. Velocità: mobile 50px/s (~25.7s), desktop 100px/s (~21.6s).
-
-## Phase: Admin Analytics v2 + Tracking Audit (Status: COMPLETED — agent-tested, user confirmation pending)
-- Root cause black screen: `AdminAnalytics.js` (vecchio) passava `data={funnel}` con `funnel=null` a Recharts 3.6
-  → `combineDisplayedData` esegue `chartData.slice` → TypeError → React smonta il root (nessun Error Boundary).
-- Nuovo backend `routes_analytics_v2.py` (/api/admin/analytics/v2/*), indici in database.py, test `tests/test_analytics_v2.py` (8/8; suite 87/87).
-- Nuova dashboard `AdminAnalytics.js`: Error Boundary per widget, loading/empty/error+retry, filtri, funnel, OF personale vs globale,
-  swipe, Secret, campagne/fonti, classifiche, dettaglio modella, confronto, log eventi paginato, CSV.
-- `TRACKING_AUDIT.md`: audit eventi esistenti vs specifica; NESSUN evento nuovo aggiunto (in attesa OK utente).
-
-## Phase: Tracking v2 implementation (Status: COMPLETED — agent-tested, user confirmation pending)
-- F1 `lib/analytics.js` (visitor_id/visit_id 30 min, schema comune, coda batch, beacon, dedup) + `POST /api/track/batch` + schema esteso + indici.
-- F2 entry_source (card/filmstrip/surprise/swipe/swipe_button/related/search/category/campaign/direct) propagato.
-- F3 cta_impression per tipo, cta_dismiss, marquee impression, mode/entry_source/platform su OF/social.
-- F4 profile_nav_*_click (pulsanti/tastiera) vs profile_swipe_* (gesto) con from/to/mode/pos; arrival events rimossi.
-- F5 home_view, card impression/click, search/filter/category, FilmStrip dedup per visita.
-- F6 video_* per slot/mode dedup per visita (`MediaMorph`). F7 `lib/engaged.js` scroll + engaged time.
-- Backend v2 riscritto (visite vs visitatori, funnel chiuso 6 step + drop-off, percorsi, device compare, video, CTA, engaged, entry). Dashboard aggiornata.
-- Test: pytest 89/89 (10 analytics), 3 percorsi E2E ricostruiti dal DB e via /visit/{id}, perf batch. Docs: `TRACKING_SCHEMA.md`.
+- ChatGPT control: universal dispatcher + registry + scopes + SAFE/REVIEW + audit/session + rollback.
+- **Phase 14 (SEO AUTOPILOT READ_ONLY) è completata solo se:**
+  1) `SEO_AUTOPILOT_MODE=READ_ONLY` con `FULL` bloccato (nessuna write accidentale)
+  2) integrazione GSC riusata e funziona quando connessa, oppure degrada a `NOT_CONNECTED` senza blocchi
+  3) snapshot storico giornaliero non sovrascritto (confronti 7/28/90gg)
+  4) keyword universe + clustering + intent + opportunity engine producono risultati auditabili
+  5) landing planner genera solo draft (non pubblici) e quality gate blocca doorway/keyword spam
+  6) crawler tecnico + render audit (initial vs rendered vs Google inspection) produce report
+  7) admin “SEO Autopilot” mostra stato + KPI semplici + backlog + log
+  8) test PASS, idempotenza PASS
+  9) **PUBLIC_MUTATIONS = 0** (hash prima/dopo) — altrimenti FAIL

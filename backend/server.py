@@ -33,6 +33,9 @@ from v1_config import config_router, webhooks_router, backup_router, auth_router
 from v1_ai import ai_router
 from v1_capabilities import caps_router, verify_bindings   # Phase 12A: universal engine v2 (/api/v2/ai), Phase 10/11 routes untouched
 from v1_ai_policy import error_body, record_metric
+# Phase 14: SEO AUTOPILOT (READ_ONLY brain). Importing .jobs registers the background jobs in the existing scheduler.
+from seo_autopilot import jobs as seo_autopilot_jobs  # noqa: F401
+from seo_autopilot.routes import router as seo_autopilot_router
 from v1_dashboard import dashboard_router
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -86,6 +89,7 @@ app.include_router(analytics_router)
 app.include_router(analytics_v2_router)
 app.include_router(seo_router)
 app.include_router(integrations_router)
+app.include_router(seo_autopilot_router)   # /api/admin/seo-autopilot/* (admin JWT, READ_ONLY)
 # SUPER API v1
 for r in (ai_router, models_router, media_router, model_media_router, seo_v1_router, tracking_router, landings_router, public_landings_router,
           experiments_router, public_experiments_router, health_router, alerts_router, jobs_router, config_router, webhooks_router,

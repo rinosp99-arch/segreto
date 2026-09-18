@@ -32,6 +32,7 @@ import ArticleEditor from '@/pages/admin/ArticleEditor';
 import AdminAnalytics from '@/pages/admin/AdminAnalytics';
 import AdminCampaigns from '@/pages/admin/AdminCampaigns';
 import AdminMotore from '@/pages/admin/AdminMotore';
+import AdminSeoAutopilot from '@/pages/admin/AdminSeoAutopilot';
 import AdminSettings from '@/pages/admin/AdminSettings';
 
 function PublicLayout() {
@@ -98,6 +99,7 @@ export default function App() {
             <Route path="analytics" element={<AdminAnalytics />} />
             <Route path="campagne" element={<AdminCampaigns />} />
             <Route path="motore" element={<AdminMotore />} />
+            <Route path="seo-autopilot" element={<AdminSeoAutopilot />} />
             <Route path="impostazioni" element={<AdminSettings />} />
           </Route>
         </Routes>
