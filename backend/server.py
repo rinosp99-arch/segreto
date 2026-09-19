@@ -36,6 +36,9 @@ from v1_ai_policy import error_body, record_metric
 # Phase 14: SEO AUTOPILOT (READ_ONLY brain). Importing .jobs registers the background jobs in the existing scheduler.
 from seo_autopilot import jobs as seo_autopilot_jobs  # noqa: F401
 from seo_autopilot.routes import router as seo_autopilot_router
+# Telegram Autopilot (backend + admin only; token from env only)
+from telegram_autopilot import jobs as telegram_autopilot_jobs  # noqa: F401
+from telegram_autopilot.routes import router as telegram_autopilot_router
 from v1_dashboard import dashboard_router
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -90,6 +93,7 @@ app.include_router(analytics_v2_router)
 app.include_router(seo_router)
 app.include_router(integrations_router)
 app.include_router(seo_autopilot_router)   # /api/admin/seo-autopilot/* (admin JWT, READ_ONLY)
+app.include_router(telegram_autopilot_router)   # /api/admin/telegram-autopilot/* (admin JWT)
 # SUPER API v1
 for r in (ai_router, models_router, media_router, model_media_router, seo_v1_router, tracking_router, landings_router, public_landings_router,
           experiments_router, public_experiments_router, health_router, alerts_router, jobs_router, config_router, webhooks_router,

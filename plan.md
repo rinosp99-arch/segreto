@@ -319,6 +319,11 @@ Confronto **INITIAL_HTML vs RENDERED_DOM vs GOOGLE_INSPECTION**:
 
 ## 3) Phase 14 — SEO AUTOPILOT READ_ONLY (Status: COMPLETED — PASS, PUBLIC_MUTATIONS=0)
 
+### Phase 15 — TELEGRAM AUTOPILOT (Status: COMPLETED in preview, mock — READY; scheduler OFF; nessun post reale)
+- [x] modulo `telegram_autopilot/` (client+mock, eligibility, copy LLM/template, engine, jobs, routes) + Admin page + 16 test + testing agent 30/30
+- [x] token solo in backend/.env, filtro redazione log httpx, nessuna esposizione
+- Prossimi passi utente: Re-publish, env produzione (MOCK=false, AUTO_SCHEDULER false), test reale con 1 modella via PUBBLICA ORA, poi autorizzazione scheduler
+
 ### Phase 14C — Technical SEO Cleanup finale (Status: COMPLETED in preview — attende Re-publish utente)
 - [x] soft-404 SPA (noindex,follow + no canonical/JSON-LD/og + 404 UI) su profili/categorie/articoli/landing/generica
 - [x] Age Gate h1 → div (VISUAL_DIFF = NONE, 0 px diff vs produzione)

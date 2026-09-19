@@ -114,3 +114,14 @@ export const seoApTech = () => seoAp('tech');
 export const seoApRender = () => seoAp('render');
 export const seoApAdult = () => seoAp('adult');
 export const seoApExecute = (slug) => api.post(`/admin/seo-autopilot/execute/${slug}`).then((r) => r.data);
+
+// ---------------- TELEGRAM AUTOPILOT ----------------
+const tgAp = (path, params) => api.get(`/admin/telegram-autopilot/${path}`, { params }).then((r) => r.data);
+export const tgApStatus = () => tgAp('status');
+export const tgApLogs = (limit = 40) => tgAp('logs', { limit });
+export const tgApTestConnection = (real = false) => api.post('/admin/telegram-autopilot/test-connection', null, { params: { real } }).then((r) => r.data);
+export const tgApStart = () => api.post('/admin/telegram-autopilot/start').then((r) => r.data);
+export const tgApPause = () => api.post('/admin/telegram-autopilot/pause').then((r) => r.data);
+export const tgApPublishNow = (dryRun = false) => api.post('/admin/telegram-autopilot/publish-now', null, { params: { dry_run: dryRun } }).then((r) => r.data);
+export const tgApSkip = () => api.post('/admin/telegram-autopilot/skip').then((r) => r.data);
+export const tgApSettings = (body) => api.patch('/admin/telegram-autopilot/settings', body).then((r) => r.data);

@@ -1,0 +1,59 @@
+{
+  "summary": "Completed comprehensive testing of Telegram Autopilot feature (Phase 15). All backend APIs, frontend UI, and integration tests passed. Telegram is correctly MOCKED (no real messages sent). Security verified: bot token never exposed in any response.",
+  "backend_issues": {
+    "critical_bugs": [],
+    "flaky_endpoints": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "BACKEND pytest: All 15 tests passed (connection states, auth, eligibility, rotation, media fallback, LLM fallback, persistence, concurrency, settings validation, token security)",
+    "BACKEND API auth: All endpoints require admin JWT (401/403 without token)",
+    "BACKEND API status: Returns correct structure with enabled=false, AUTO_SCHEDULER_ENABLED=false, mock=true, channel=@latosegreto, TELEGRAM_CONNECTION_STATUS=CONNECTED, queue.total=10, queue.position=1-10, settings.schedule_times=[10:00,14:00,18:00,22:00], timezone=Europe/Rome, today_slots=4",
+    "BACKEND API test-connection?real=true: Returns CONNECTED with bot.username, chat.username=latosegreto, bot_is_admin=true, can_post=true, NO token fragment in response",
+    "BACKEND API publish-now?dry_run=true: Returns DRY_RUN status with caption containing onlyfans.com and <b> HTML, copy_source=LLM/TEMPLATE, media list with photo/video, queue does NOT advance",
+    "BACKEND API publish-now (mock): Returns PUBLISHED status with model_slug, message_id (integer), media_type photo/video, queue advances by 1, last_published updated, logs show PUBLISHED with mock=true",
+    "BACKEND API skip: Returns MANUAL_SKIP status with skipped slug, queue advances, logs show MANUAL_SKIP",
+    "BACKEND API start: Returns enabled=true with note about master switch, status shows enabled=true but active=false (AUTO_SCHEDULER_ENABLED=false)",
+    "BACKEND API pause: Returns enabled=false, status shows enabled=false",
+    "BACKEND API settings validation: Invalid schedule_times (25:00) returns 422, invalid timezone (Mars/X) returns 422, invalid posts_per_day (9 with only 4 times) returns 422",
+    "BACKEND API settings update: Valid settings update (schedule_times=[09:00,13:00,19:00,21:30], posts_per_day=4) returns 200 and status reflects changes",
+    "BACKEND API logs: Returns items array with log entries containing status, timestamp, model info",
+    "BACKEND security: NO response from any endpoint contains token fragment '<REDACTED>' or '<REDACTED>:'",
+    "FRONTEND page load: /admin/telegram-autopilot renders with data-testid=telegram-autopilot-page",
+    "FRONTEND status pills: tg-state shows 'IN PAUSA' or 'ATTIVO', tg-scheduler shows 'DISABILITATO', tg-connection shows 'CONNECTED', tg-channel shows '@latosegreto', tg-mock visible",
+    "FRONTEND KPIs: tg-kpi-current shows 'N / 10', tg-kpi-cycle shows '#N', tg-kpi-today shows 'N / 4'",
+    "FRONTEND rotation: tg-rotation shows 10 items with 'PROSSIMA' pill on current model",
+    "FRONTEND button test-connection: Clickable, shows success toast 'Telegram: CONNECTED'",
+    "FRONTEND button dry-run: Clickable, shows toast 'Anteprima pronta'",
+    "FRONTEND button skip: Clickable, shows toast 'Saltata ...' and rotation updates",
+    "FRONTEND button start/pause: Toggle works, state pill changes between 'ATTIVO' and 'IN PAUSA', button changes between 'Attiva' and 'Pausa'",
+    "FRONTEND button publish-now: Shows window.confirm, on accept shows toast 'Pubblicata ...' and log list shows PUBLISHED with 'mock'",
+    "FRONTEND settings form: Change tg-posts-per-day to 3 with times '10:00, 15:00, 21:00', click tg-save-settings, toast shows 'Impostazioni salvate', KPI shows '/ 3'",
+    "FRONTEND security: Page HTML does not contain token fragment '<REDACTED>'",
+    "REGRESSION public home: / renders with age gate, FilmStrip, model cards",
+    "REGRESSION public profile: /modelle/francesca-rossi renders with OnlyFans CTA",
+    "REGRESSION admin analytics: /admin/analytics renders (no black screen)",
+    "REGRESSION admin seo-autopilot: /admin/seo-autopilot renders",
+    "REGRESSION API sitemap: GET /api/sitemap.xml returns 200",
+    "REGRESSION API models: GET /api/models returns 200"
+  ],
+  "test_report_links": [
+    "/app/tests/test_telegram_autopilot.py",
+    "/app/backend_test_telegram_autopilot.py"
+  ],
+  "action_item_for_main_agent": "",
+  "updated_files": [
+    "/app/backend_test_telegram_autopilot.py"
+  ],
+  "success_percentage": {
+    "backend": "100% (43/43 API tests + 15/15 pytest tests passed)",
+    "frontend": "100% (all UI elements, buttons, forms, KPIs, rotation list work correctly)",
+    "regression": "100% (all public pages and APIs work correctly)"
+  },
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_test_itself": false
+}

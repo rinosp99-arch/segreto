@@ -33,6 +33,7 @@ import AdminAnalytics from '@/pages/admin/AdminAnalytics';
 import AdminCampaigns from '@/pages/admin/AdminCampaigns';
 import AdminMotore from '@/pages/admin/AdminMotore';
 import AdminSeoAutopilot from '@/pages/admin/AdminSeoAutopilot';
+import AdminTelegramAutopilot from '@/pages/admin/AdminTelegramAutopilot';
 import AdminSettings from '@/pages/admin/AdminSettings';
 
 function PublicLayout() {
@@ -100,6 +101,7 @@ export default function App() {
             <Route path="campagne" element={<AdminCampaigns />} />
             <Route path="motore" element={<AdminMotore />} />
             <Route path="seo-autopilot" element={<AdminSeoAutopilot />} />
+            <Route path="telegram-autopilot" element={<AdminTelegramAutopilot />} />
             <Route path="impostazioni" element={<AdminSettings />} />
           </Route>
         </Routes>
