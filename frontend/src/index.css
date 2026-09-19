@@ -338,10 +338,8 @@
   top: 0; left: 0; height: 100%;
   display: flex;
   width: max-content;
-  animation-name: ls-marquee-ltr;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-  will-change: transform;
+  will-change: transform;               /* moved by requestAnimationFrame + translate3d (see GlobalOfMarquee.js) */
+  backface-visibility: hidden;
 }
 .ls-marquee__group { display: flex; height: 100%; align-items: center; flex: 0 0 auto; }
 .ls-marquee__item {
@@ -409,5 +407,6 @@
   to   { transform: scale(1.6); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ls-marquee, .ls-marquee__track, .ls-marquee__arrow, .ls-marquee__sweep { animation: none !important; }
+  /* decorative animations only: the text movement itself is JS-driven and must keep scrolling (slower) */
+  .ls-marquee, .ls-marquee__arrow, .ls-marquee__sweep { animation: none !important; }
 }
