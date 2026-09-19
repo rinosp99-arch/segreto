@@ -9,7 +9,7 @@ TELEGRAM_CHANNEL_ID=@latosegreto
 TELEGRAM_AUTOPILOT_MOCK=true            # preview: nessun post reale. In PRODUZIONE impostare false
 TELEGRAM_AUTO_SCHEDULER_ENABLED=false   # master switch dello scheduler: resta false finché non autorizzato
 TELEGRAM_LLM_ENABLED=true               # copy via Emergent LLM (fallback template automatico)
-SEO_CRAWL_BASE_URL / TELEGRAM_MEDIA_BASE_URL   # base per i media con URL relativo (in produzione = https://secret-side.emergent.host)
+TELEGRAM_MEDIA_BASE_URL=https://secret-side.emergent.host   # base ESCLUSIVA per i media Telegram con URL relativo
 ```
 
 ## Eleggibilità (dati reali del DB)
@@ -35,7 +35,7 @@ timestamp, model_id/slug/name, media_id/type, cycle_number, message_id, status (
 `tests/test_telegram_autopilot.py` (16): connessione/stati, admin/permessi, OF link, media pubblici, foto, video, caption, link, due consecutive, rotazione completa + wrap, no OF, no media, video fail → foto, LLM offline → template, restart, slot duplicato, 5 job concorrenti → 1 post, nuova/rimossa modella nel ciclo, pausa, publish-now, skip, auth API, token mai esposto (API, sorgenti, log).
 
 ## Messa in produzione (dopo Re-publish)
-1. Impostare in produzione: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID=@latosegreto`, `TELEGRAM_AUTOPILOT_MOCK=false`, `TELEGRAM_AUTO_SCHEDULER_ENABLED=false`, `SEO_CRAWL_BASE_URL=https://secret-side.emergent.host`.
+1. Impostare in produzione: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID=@latosegreto`, `TELEGRAM_AUTOPILOT_MOCK=false`, `TELEGRAM_AUTO_SCHEDULER_ENABLED=false`, `TELEGRAM_MEDIA_BASE_URL=https://secret-side.emergent.host`.
 2. Admin → Telegram Autopilot → "Test connessione" → CONNECTED.
 3. UN solo "Pubblica ora" con una modella reale → verifica nel canale → stop.
 4. Solo su autorizzazione: `TELEGRAM_AUTO_SCHEDULER_ENABLED=true` + "Attiva".

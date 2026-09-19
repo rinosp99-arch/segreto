@@ -23,7 +23,8 @@ def valid_of_link(url: Optional[str]) -> Optional[str]:
 
 
 def media_base() -> str:
-    return (os.environ.get("TELEGRAM_MEDIA_BASE_URL") or os.environ.get("SEO_CRAWL_BASE_URL") or "").rstrip("/")
+    """Base for relative media URLs, used EXCLUSIVELY by Telegram (never shared with the SEO crawler setting)."""
+    return (os.environ.get("TELEGRAM_MEDIA_BASE_URL") or "").rstrip("/")
 
 
 def absolute(url: str) -> str:
