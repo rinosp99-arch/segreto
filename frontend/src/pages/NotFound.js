@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { setSeo } from '@/lib/seo';
+import { setNotFoundSeo } from '@/lib/seo';
 import { api } from '@/lib/api';
 
 export default function NotFound() {
@@ -8,7 +8,7 @@ export default function NotFound() {
   const navigate = useNavigate();
   const [checking, setChecking] = useState(true);
 
-  useEffect(() => { setSeo({ title: 'Pagina non trovata | LATO SEGRETO', description: 'Pagina non trovata', noindex: true }); }, []);
+  useEffect(() => { setNotFoundSeo(); }, []);
 
   // Safe redirects managed by the SEO engine (e.g. slug changes): resolve before showing the 404
   useEffect(() => {

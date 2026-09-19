@@ -2,7 +2,7 @@ import DOMPurify from 'dompurify';
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getArticle, track, mediaUrl } from '@/lib/api';
-import { setSeo, SITE } from '@/lib/seo';
+import { setSeo, setNotFoundSeo, SITE } from '@/lib/seo';
 import { getSessionId } from '@/lib/session';
 import { ModelCard } from '@/components/ModelCard';
 import { ArrowLeft } from 'lucide-react';
@@ -24,10 +24,10 @@ export default function ArticlePage() {
         type: 'article', noindex: !art.indicizzabile,
         jsonLd: { '@context': 'https://schema.org', '@type': 'Article', headline: art.titolo, image: art.immagine_principale, datePublished: art.data_pubblicazione, author: { '@type': 'Organization', name: art.autore } },
       });
-    }).catch(() => setNotFound(true));
+    }).catch(() => { setNotFoundSeo(); setNotFound(true); });
   }, [slug]);
 
-  if (notFound) return <div className="max-w-2xl mx-auto px-4 py-24 text-center"><div className="font-serif text-3xl mb-3">Articolo non trovato</div><Link to="/articoli" className="btn-gold inline-block rounded-xl px-6 py-3 text-sm">Torna alla rivista</Link></div>;
+  if (notFound) return <div className="max-w-2xl mx-auto px-4 py-24 text-center" data-testid="article-not-found"><div className="font-serif text-3xl mb-3">Articolo non trovato</div><Link to="/articoli" className="btn-gold inline-block rounded-xl px-6 py-3 text-sm">Torna alla rivista</Link></div>;
   if (!a) return <div className="max-w-3xl mx-auto px-4 py-10"><div className="h-96 animate-pulse bg-muted/50 rounded-2xl" /></div>;
 
   return (

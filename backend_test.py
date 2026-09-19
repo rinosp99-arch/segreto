@@ -759,13 +759,28 @@ class LatoSegretoTester:
             self.log(f"✓ Source correctly ignored in target list: updated {resp.get('updated')} models", "SUCCESS")
 
     def test_seo_endpoints(self):
-        self.log("\n--- SEO ENDPOINTS ---", "INFO")
+        self.log("\n--- SEO ENDPOINTS (Phase 14C) ---", "INFO")
 
-        # Sitemap
+        # Sitemap - Phase 14C: must include /articoli
         success, resp = self.test("Sitemap XML", "GET", "sitemap.xml", 200)
         if success and isinstance(resp.get("text"), str):
-            if "<?xml" in resp["text"] and "<urlset" in resp["text"]:
+            content = resp["text"]
+            if "<?xml" in content and "<urlset" in content:
                 self.log("Sitemap XML is valid", "SUCCESS")
+                
+                # Phase 14C: Check /articoli is in sitemap
+                if "/articoli</loc>" in content:
+                    self.log("✓ Phase 14C: /articoli found in sitemap", "SUCCESS")
+                else:
+                    self.log("✗ Phase 14C: /articoli NOT found in sitemap", "FAIL")
+                
+                # Check for duplicates
+                locs = [line.strip() for line in content.split('\n') if '<loc>' in line]
+                unique_locs = set(locs)
+                if len(locs) == len(unique_locs):
+                    self.log(f"✓ No duplicate URLs ({len(locs)} unique)", "SUCCESS")
+                else:
+                    self.log(f"✗ Duplicate URLs found: {len(locs)} total, {len(unique_locs)} unique", "FAIL")
             else:
                 self.log("Sitemap XML may be invalid", "WARN")
 
@@ -784,6 +799,12 @@ class LatoSegretoTester:
                 self.log("RSS XML is valid", "SUCCESS")
             else:
                 self.log("RSS XML may be invalid", "WARN")
+        
+        # Phase 14C: Test not-found endpoints return 404
+        self.log("\n--- Phase 14C: Not-Found Backend Tests ---", "INFO")
+        self.test("Non-existent model returns 404", "GET", "models/profilo-inesistente-xyz", 404)
+        self.test("Non-existent category returns 404", "GET", "categories/categoria-inesistente-xyz", 404)
+        self.test("Non-existent article returns 404", "GET", "articoli/articolo-inesistente-xyz", 404)
 
     def print_summary(self):
         self.log("\n" + "=" * 60, "INFO")

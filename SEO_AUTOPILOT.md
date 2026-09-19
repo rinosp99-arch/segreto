@@ -83,3 +83,12 @@ Non blocchi ma da sistemare: 12 URL "Rilevata, ma attualmente non indicizzata" (
 1. `backend/v1_seo.py::sitemap_entries` — aggiunta `/articoli` (type `articles_index`, priority 0.5) quando esiste almeno un articolo pubblicato indicizzabile.
 2. `frontend/src/components/layout/Footer.js` — riga discreta "Categorie" con link a tutte le categorie pubblicate (`data-testid=footer-categories`): elimina le pagine orfane su qualsiasi viewport.
 Non toccati: H1, title, description, contenuti, canonical, structured data, robots, SSR/prerender, profili, Home, CTA, media.
+
+---
+
+## Fase 14C — Technical SEO Cleanup finale (preview) — 2026-09-19
+
+Soft-404 (SPA): `lib/seo.js::setNotFoundSeo()` applicata nei rami `notFound` di ModelProfile, CategoryPage, ArticlePage, LandingPage e nella route generica NotFound → `title "Pagina non trovata | Lato Segreto"`, `meta robots "noindex, follow"`, canonical/JSON-LD/og rimossi. `FRONTEND_HTTP_STATUS = 200` (limite SPA/static hosting) · `SEO_NOT_FOUND_STATE = NOINDEX + NO_CANONICAL + 404_UI` · le API restano 404 reali.
+H1: l'unico H1 "LATO SEGRETO" era nell'overlay Age Gate (`components/AgeGate.js`): ora `<div class="font-serif …">` identico al pixel (diff 0 px vs produzione). Gli H1 di pagina erano già corretti (Home claim · profilo nome · categoria nome · articolo titolo · /articoli "Storie dal Lato Segreto").
+Verifiche preview: sitemap 22 URL (10 modelle, 7 categorie, 3 articoli, /articoli, home) senza duplicati/draft/noindex/non-200 · ORPHAN=FALSE per tutte · 1 H1 semantico per pagina con Age Gate visibile · regression testing agent 22/22 PASS · pytest 121 PASS (+1 flaky pre-esistente non correlato). VISUAL_DIFF = NONE (unica aggiunta: riga "Categorie" nel footer, già approvata in 14B).
+Dopo il Re-publish: SEO Autopilot resta READ_ONLY, nessuna landing, solo raccolta dati Search Console.

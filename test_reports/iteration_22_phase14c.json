@@ -1,0 +1,66 @@
+{
+  "summary": "Phase 14C Technical SEO Cleanup - Regression Test Complete. All Phase 14C requirements verified: (1) sitemap includes /articoli; (2) footer has 'Categorie' link row; (3) not-found states set noindex/follow, remove canonical/JSON-LD/og; (4) Age Gate brand text changed from h1 to div. No public functionality broken.",
+  "backend_issues": {
+    "critical_bugs": [],
+    "flaky_endpoints": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: Sitemap XML returns 200 and includes /articoli (Phase 14C)",
+    "Backend: Robots.txt returns 200 with correct content",
+    "Backend: Non-existent model/category/article return 404",
+    "Backend: Admin login successful",
+    "Backend: SEO autopilot foundation endpoint returns 200 with BASE_SEO verdict",
+    "Frontend: Age gate brand text is div (not h1) - Phase 14C requirement",
+    "Frontend: Home page has exactly one h1",
+    "Frontend: Footer categories section with 7 links (cosplay, latine) - Phase 14C",
+    "Frontend: Model profile has single h1, canonical, JSON-LD Person",
+    "Frontend: Not-found model - correct title, robots noindex/follow, NO canonical/JSON-LD/og - Phase 14C",
+    "Frontend: Not-found category - same correct behavior - Phase 14C",
+    "Frontend: Not-found article - same correct behavior - Phase 14C",
+    "Frontend: Generic 404 - correct title and single h1 - Phase 14C",
+    "Frontend: SPA navigation - canonical appears/disappears correctly - Phase 14C",
+    "Frontend: Category pages render with correct h1 and model cards",
+    "Frontend: Footer category links navigate correctly",
+    "Frontend: Articles list page has h1 'Storie dal Lato Segreto'",
+    "Frontend: Individual article has correct h1 and JSON-LD Article",
+    "Frontend: Admin login successful",
+    "Frontend: Admin analytics page renders without black screen",
+    "Frontend: SEO autopilot page renders with READ_ONLY mode pill",
+    "Frontend: Mobile viewport (390x844) - age gate dismissable, pages render, media visible, footer fits"
+  ],
+  "test_report_links": [
+    "/app/backend_test.py"
+  ],
+  "success_percentage": {
+    "backend": "100% (all critical endpoints working)",
+    "frontend": "100% (all Phase 14C requirements verified)"
+  },
+  "action_item_for_main_agent": "",
+  "updated_files": [
+    "/app/backend_test.py"
+  ],
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_test_itself": false,
+  "phase14c_verification": {
+    "sitemap_includes_articoli": true,
+    "footer_categories_row_present": true,
+    "not_found_seo_state_correct": true,
+    "age_gate_h1_removed": true,
+    "single_h1_per_page": true,
+    "canonical_behavior_correct": true,
+    "mobile_responsive": true,
+    "admin_panel_working": true
+  },
+  "test_environment": {
+    "base_url": "https://secret-side.preview.emergentagent.com",
+    "backend_url": "https://secret-side.preview.emergentagent.com/api",
+    "admin_credentials": "admin@latosegreto.it / LatoSegreto2025!",
+    "test_date": "2026-09-19",
+    "seo_autopilot_mode": "READ_ONLY"
+  }
+}

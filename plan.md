@@ -319,6 +319,12 @@ Confronto **INITIAL_HTML vs RENDERED_DOM vs GOOGLE_INSPECTION**:
 
 ## 3) Phase 14 — SEO AUTOPILOT READ_ONLY (Status: COMPLETED — PASS, PUBLIC_MUTATIONS=0)
 
+### Phase 14C — Technical SEO Cleanup finale (Status: COMPLETED in preview — attende Re-publish utente)
+- [x] soft-404 SPA (noindex,follow + no canonical/JSON-LD/og + 404 UI) su profili/categorie/articoli/landing/generica
+- [x] Age Gate h1 → div (VISUAL_DIFF = NONE, 0 px diff vs produzione)
+- [x] sitemap/orfane/H1 verificati su DOM renderizzato; regression 22/22 PASS; pytest 121 PASS
+- Dopo il deploy: SEO Autopilot resta READ_ONLY, nessuna nuova landing, monitoraggio GSC
+
 ### Phase 14B — Technical SEO Foundation (Status: COMPLETED in preview — attende Re-publish utente)
 - [x] audit produzione sola lettura (HTTP + Chromium + URL Inspection 15 URL): **BASE SEO INDICIZZABILE**, 0 blocchi tecnici; Home INDEXED, 12 URL discovered-not-indexed, 2 orfane, /articoli fuori sitemap, soft-404
 - [x] fix minimi in preview: `/articoli` in sitemap (v1_seo.py) + link categorie nel Footer (Footer.js) — produzione NON modificata (verificato dopo: sitemap prod 30 URL, senza /articoli)

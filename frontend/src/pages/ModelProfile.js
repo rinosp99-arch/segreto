@@ -5,7 +5,7 @@ import { ArrowLeft, Lock, ArrowRight, Mail, X, Sparkles, Volume2, VolumeX } from
 import { getModel, getModelSecret, getRelated, track, mediaUrl } from '@/lib/api';
 import { MediaMorph } from '@/components/MediaMorph';
 import { ModelCard } from '@/components/ModelCard';
-import { setSeo, SITE } from '@/lib/seo';
+import { setSeo, setNotFoundSeo, SITE } from '@/lib/seo';
 import { getAudio } from '@/lib/sound';
 import { urlsForAudioCfg } from '@/lib/tracks';
 import { Instagram, Music2, Send, Youtube, Facebook, Globe, Twitter, Link2 } from 'lucide-react';
@@ -153,14 +153,14 @@ export default function ModelProfile() {
         markDiscovered(slug);
         track({ tipo: 'secret_activate', model_slug: slug, session_id: getSessionId(), valore: 0, mode: 'secret', meta: { via: 'swipe' } });
         carriedSecret.current = { audio: sd?.regia?.audio || {} };
-      }).catch(() => { if (alive) setNotFound(true); });
+      }).catch(() => { if (alive) { setNotFoundSeo(); setNotFound(true); } });
     } else {
       getModel(slug).then((m) => {
         if (!alive) return;
         setModel(m);
         afterModel(m);
         getModelSecret(slug).then((sd) => { if (!alive) return; setSecretData(sd); preloadSecret(sd); }).catch(() => {});
-      }).catch(() => { if (alive) setNotFound(true); });
+      }).catch(() => { if (alive) { setNotFoundSeo(); setNotFound(true); } });
     }
     return () => {
       alive = false;
@@ -341,7 +341,7 @@ export default function ModelProfile() {
   };
 
   if (notFound) return (
-    <div className="max-w-2xl mx-auto px-4 py-24 text-center">
+    <div className="max-w-2xl mx-auto px-4 py-24 text-center" data-testid="model-not-found">
       <div className="font-serif text-3xl mb-2">Qui non c'è nessun Lato Segreto.</div>
       <p className="text-muted-foreground mb-6">La modella che cerchi non esiste o non è più disponibile.</p>
       <Link to="/" className="btn-gold inline-block rounded-xl px-6 py-3 text-sm" data-testid="not-found-home-button">Torna alle modelle</Link>

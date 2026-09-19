@@ -29,7 +29,7 @@ export default function AgeGate() {
             </div>
           </div>
           <div className="caps-label gold-text mb-3">Accesso riservato</div>
-          <h1 className="text-3xl mb-3 leading-tight">LATO SEGRETO</h1>
+          <div className="font-serif text-3xl mb-3 leading-tight">LATO SEGRETO</div>
           <p className="text-muted-foreground text-sm leading-relaxed mb-7">
             Questo spazio è riservato a un pubblico adulto. Proseguendo dichiari di avere almeno 18 anni
             e di voler visualizzare contenuti destinati a maggiorenni.

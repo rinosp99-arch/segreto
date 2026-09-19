@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { ModelCard } from '@/components/ModelCard';
-import { setSeo, SITE } from '@/lib/seo';
+import { setSeo, setNotFoundSeo, SITE } from '@/lib/seo';
 import { ArrowLeft, SearchX } from 'lucide-react';
 
 /**
@@ -42,7 +42,7 @@ export default function LandingPage() {
         type: 'website',
         jsonLd,
       });
-    }).catch(() => setNotFound(true));
+    }).catch(() => { setNotFoundSeo(); setNotFound(true); });
   }, [slug]);
 
   if (notFound) return (

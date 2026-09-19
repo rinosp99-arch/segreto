@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getCategory } from '@/lib/api';
 import { ModelCard } from '@/components/ModelCard';
-import { setSeo, SITE } from '@/lib/seo';
+import { setSeo, setNotFoundSeo, SITE } from '@/lib/seo';
 import { ArrowLeft, SearchX } from 'lucide-react';
 
 export default function CategoryPage() {
@@ -27,11 +27,11 @@ export default function CategoryPage() {
           ],
         },
       });
-    }).catch(() => setNotFound(true));
+    }).catch(() => { setNotFoundSeo(); setNotFound(true); });
   }, [slug]);
 
   if (notFound) return (
-    <div className="max-w-2xl mx-auto px-4 py-24 text-center">
+    <div className="max-w-2xl mx-auto px-4 py-24 text-center" data-testid="category-not-found">
       <div className="font-serif text-3xl mb-2">Categoria non trovata</div>
       <Link to="/" className="btn-gold inline-block rounded-xl px-6 py-3 text-sm mt-4">Torna alla home</Link>
     </div>

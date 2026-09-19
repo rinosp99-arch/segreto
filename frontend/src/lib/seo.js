@@ -61,3 +61,17 @@ export const SITE = {
   name: 'LATO SEGRETO',
   tagline: 'Il lato che non hai ancora visto',
 };
+
+// Phase 14C — SEO state for a dynamic resource that does not exist (profile / category / article / landing).
+// The static host always answers HTTP 200 for SPA routes (FRONTEND_HTTP_STATUS = 200); Google's recommended handling for
+// JS sites is: noindex + no canonical + real 404 UI (SEO_NOT_FOUND_STATE = NOINDEX + NO_CANONICAL + 404_UI).
+export function setNotFoundSeo() {
+  document.title = 'Pagina non trovata | Lato Segreto';
+  upsertMeta('name', 'description', 'Pagina non trovata');
+  upsertMeta('name', 'robots', 'noindex, follow');
+  document.head.querySelectorAll('link[rel="canonical"]').forEach((el) => el.remove());
+  const ld = document.getElementById('ls-jsonld');
+  if (ld) ld.remove();
+  ['og:title', 'og:description', 'og:type', 'og:image', 'og:url'].forEach((p) => { const el = document.head.querySelector(`meta[property="${p}"]`); if (el) el.remove(); });
+  ['twitter:card', 'twitter:title', 'twitter:description', 'twitter:image'].forEach((n) => { const el = document.head.querySelector(`meta[name="${n}"]`); if (el) el.remove(); });
+}
