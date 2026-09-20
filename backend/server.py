@@ -45,6 +45,8 @@ from instagram_autopilot.routes import router as instagram_autopilot_router
 # X Autopilot (backend + admin only; INDEPENDENT queue; MOCK, X NOT_CONNECTED in this phase)
 from x_autopilot import jobs as x_autopilot_jobs  # noqa: F401
 from x_autopilot.routes import router as x_autopilot_router
+# OnlyFans provider connection (The Only API) — READ-ONLY phase, secrets backend-only
+from of_autopilot.routes import router as of_autopilot_router
 from v1_dashboard import dashboard_router
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -102,6 +104,7 @@ app.include_router(seo_autopilot_router)   # /api/admin/seo-autopilot/* (admin J
 app.include_router(telegram_autopilot_router)   # /api/admin/telegram-autopilot/* (admin JWT)
 app.include_router(instagram_autopilot_router)  # /api/admin/instagram-autopilot/* (admin JWT, MOCK)
 app.include_router(x_autopilot_router)          # /api/admin/x-autopilot/* (admin JWT, MOCK)
+app.include_router(of_autopilot_router)         # /api/admin/of-autopilot/* (admin JWT, READ-ONLY)
 # SUPER API v1
 for r in (ai_router, models_router, media_router, model_media_router, seo_v1_router, tracking_router, landings_router, public_landings_router,
           experiments_router, public_experiments_router, health_router, alerts_router, jobs_router, config_router, webhooks_router,

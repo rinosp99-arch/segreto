@@ -319,6 +319,15 @@ Confronto **INITIAL_HTML vs RENDERED_DOM vs GOOGLE_INSPECTION**:
 
 ## 3) Phase 14 — SEO AUTOPILOT READ_ONLY (Status: COMPLETED — PASS, PUBLIC_MUTATIONS=0)
 
+### Phase 18 — ONLYFANS PROVIDER CONNECTION (The Only API) (Status: COMPLETED — READ-ONLY PASS; OF_REAL_WRITE_CALLS=0; nessun post/upload/schedule)
+- [x] secrets solo in `backend/.env` (git-ignored): THE_ONLY_API_KEY/CRM_ID; `THE_ONLY_OF_USER_ID` auto-scoperto; `OF_PROVIDER=the_only_api`, `OF_CONNECTION_ENABLED=true`, `OF_REAL_POSTING_ENABLED=false`, `OF_AUTO_SCHEDULER_ENABLED=false`
+- [x] `backend/of_autopilot/` : `providers/base.py` (OFProviderAdapter astratto), `providers/the_only_api.py` (X-API-Key only, redazione log, write-guard, unwrap passthrough), `connection.py` (discovery + STOP rule), `routes.py` (`/api/admin/of-autopilot/connection|test-connection`)
+- [x] verificato REALE read-only: key valida, CRM scope, 1 account onlyfans `latosegreto`, HEALTHY (users/me), schedules leggibili (0), gate pannello write OFF
+- [x] Admin card minima `AdminOfAutopilot.js` (PROVIDER/CONNECTION/ACCOUNT/HEALTH/REAL POSTING OFF/AUTO SCHEDULER OFF), nav + route + api
+- [x] `tests/test_of_provider_connection.py` 7/7 · testing agent 29/29 PASS 0 bug (`test_reports/iteration_26_onlyfans_autopilot.json`) · regressione 153 PASS (1 failure preesistente telemetry) · key assente da log/report/frontend
+- [x] `OF_AUTOPILOT.md`
+- STOP qui: primo post reale e OF Autopilot completo solo su autorizzazione esplicita.
+
 ### Phase 17 — X AUTOPILOT (Status: COMPLETED in preview — MOCK, X NOT_CONNECTED, scheduler OFF, 0 chiamate X, nessun post reale)
 Decisioni utente: FOTO+FOTO → SINGLE_POST (priorità 1); con video → THREAD (main PUBLIC + reply SECRET), thread = una sola pubblicazione logica; PARTIAL_FAILED/THREAD_SECRET_FAILED senza duplicati; X_SAFE leggero; CONNECTION_STATUS=NOT_CONNECTED separato da MOCK_MODE=TRUE.
 - [x] `backend/x_autopilot/` (MockXAdapter + RealXAdapter skeleton, media PUBLIC+SECRET con X-safe e link OF validato, copy IT contrasto + OF reale ≤280, engine con due cursori/lock/slot `x_*`, jobs tick 300s, routes `/api/admin/x-autopilot/*` incl. `preview`)

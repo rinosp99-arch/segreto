@@ -36,6 +36,7 @@ import AdminSeoAutopilot from '@/pages/admin/AdminSeoAutopilot';
 import AdminTelegramAutopilot from '@/pages/admin/AdminTelegramAutopilot';
 import AdminInstagramAutopilot from '@/pages/admin/AdminInstagramAutopilot';
 import AdminXAutopilot from '@/pages/admin/AdminXAutopilot';
+import AdminOfAutopilot from '@/pages/admin/AdminOfAutopilot';
 import AdminSettings from '@/pages/admin/AdminSettings';
 
 function PublicLayout() {
@@ -106,6 +107,7 @@ export default function App() {
             <Route path="telegram-autopilot" element={<AdminTelegramAutopilot />} />
             <Route path="instagram-autopilot" element={<AdminInstagramAutopilot />} />
             <Route path="x-autopilot" element={<AdminXAutopilot />} />
+            <Route path="of-autopilot" element={<AdminOfAutopilot />} />
             <Route path="impostazioni" element={<AdminSettings />} />
           </Route>
         </Routes>

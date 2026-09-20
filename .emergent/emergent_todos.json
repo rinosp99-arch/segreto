@@ -1,22 +1,26 @@
 [
   {
-    "content": "X.1 backend package: adapter (MockX/RealX skeleton), media (public+secret cursors, X_SAFE, pairing/thread), copy IT contrasto + OF reale",
+    "content": "OF.1 Secrets in backend/.env (git-ignored) + env flags",
     "status": "completed"
   },
   {
-    "content": "X.2 engine indipendente (x_* collections, lock, slot, thread=1 item, partial failure) + jobs/routes/server/env",
+    "content": "OF.2 Official The Only API docs verified",
     "status": "completed"
   },
   {
-    "content": "X.3 Admin page X Autopilot + nav + route + adminApi + preview",
+    "content": "OF.3 of_autopilot providers + connection + routes + server wiring",
     "status": "completed"
   },
   {
-    "content": "X.4 tests A-Y + thread cases (16/16), regressione, testing agent (37/37)",
+    "content": "OF.4 READ-ONLY discovery: CONNECTED, latosegreto/onlyfans, HEALTHY, of_user_id, schedules",
     "status": "completed"
   },
   {
-    "content": "X.5 docs X_AUTOPILOT.md, plan.md, report finale",
+    "content": "OF.5 Admin minimal card + nav + route + api",
+    "status": "completed"
+  },
+  {
+    "content": "OF.6 tests A-S (7/7) + testing agent (29/29) + regression + docs/report",
     "status": "completed"
   }
 ]

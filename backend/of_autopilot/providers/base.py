@@ -1,0 +1,110 @@
+"""Provider abstraction for the future OF Autopilot. The engine will depend ONLY on `OFProviderAdapter`, never on a vendor API.
+
+Contract (vendor-neutral):
+  READ  : test_connection, get_account, get_account_health, get_scheduled_posts, get_post
+  WRITE : upload_media, create_post, schedule_post, delete_scheduled_post  (guarded by OF_REAL_POSTING_ENABLED; blocked in this phase)
+A scheduled post is SUCCESS only when `verify_scheduled(post_id)` finds it in the provider's schedule list (SCHEDULE_CONFIRMED),
+otherwise SCHEDULE_NOT_CONFIRMED and the caller must NOT advance blindly."""
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+CONNECTION_STATUSES = ("CONNECTED", "NOT_CONNECTED", "ERROR")
+ACCOUNT_STATUSES = ("HEALTHY", "UNHEALTHY", "UNKNOWN")
+
+
+class OFProviderError(Exception):
+    """code: NOT_CONFIGURED | UNAUTHORIZED | FORBIDDEN | NOT_FOUND | RATE_LIMITED | API_ERROR | NETWORK_ERROR | WRITES_DISABLED |
+    NOT_DOCUMENTED | ACCOUNT_MISMATCH | AMBIGUOUS_ACCOUNTS. `description` is always secret-scrubbed by the adapter."""
+
+    def __init__(self, code: str, description: str = "", status: Optional[int] = None):
+        super().__init__(f"{code}: {description}")
+        self.code, self.description, self.status = code, description, status
+
+
+@dataclass
+class OFAccount:
+    of_user_id: str
+    username: str
+    platform: str                       # "onlyfans" expected
+    raw: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class OFAccountHealth:
+    status: str                         # HEALTHY | UNHEALTHY | UNKNOWN
+    username: Optional[str] = None      # username as seen by the live platform session
+    write_actions_allowed: Optional[bool] = None
+    polling_enabled: Optional[bool] = None
+    detail: Optional[str] = None        # scrubbed, non-sensitive
+
+
+@dataclass
+class OFMedia:
+    """Complete media object exactly as returned by the provider. `raw` MUST be passed through whole to the post (`mediaFiles`)."""
+    provider_ref: str
+    kind: str                           # photo | video | audio | gif
+    raw: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class OFPostRequest:
+    text: str
+    media: List[OFMedia] = field(default_factory=list)
+    scheduled_at: Optional[str] = None  # ISO-8601 with offset -> isScheduled + scheduledDate (never postedAt)
+
+
+@dataclass
+class OFPostResult:
+    post_id: Optional[str]
+    scheduled: bool
+    schedule_state: str                 # PUBLISHED | SCHEDULE_CONFIRMED | SCHEDULE_NOT_CONFIRMED | UNKNOWN
+    raw: Dict[str, Any] = field(default_factory=dict)
+
+
+class OFProviderAdapter(ABC):
+    name: str = "abstract"
+
+    # ---------------- READ ----------------
+    @abstractmethod
+    async def test_connection(self) -> Dict[str, Any]: ...
+
+    @abstractmethod
+    async def list_accounts(self) -> List[OFAccount]: ...
+
+    @abstractmethod
+    async def get_account(self, of_user_id: str) -> OFAccount: ...
+
+    @abstractmethod
+    async def get_account_health(self, of_user_id: str) -> OFAccountHealth: ...
+
+    @abstractmethod
+    async def get_scheduled_posts(self, of_user_id: str, limit: int = 10, offset: int = 0) -> Dict[str, Any]: ...
+
+    @abstractmethod
+    async def get_post(self, of_user_id: str, post_id: str) -> Dict[str, Any]: ...
+
+    # ---------------- WRITE (guarded) ----------------
+    @abstractmethod
+    async def upload_media(self, of_user_id: str, *, file_name: str, content: bytes, content_type: str) -> OFMedia: ...
+
+    @abstractmethod
+    async def create_post(self, of_user_id: str, req: OFPostRequest) -> OFPostResult: ...
+
+    @abstractmethod
+    async def schedule_post(self, of_user_id: str, req: OFPostRequest) -> OFPostResult: ...
+
+    @abstractmethod
+    async def delete_scheduled_post(self, of_user_id: str, post_id: str) -> Dict[str, Any]: ...
+
+    # ---------------- fail-safe verification ----------------
+    async def verify_scheduled(self, of_user_id: str, post_id: str, pages: int = 5, page_size: int = 50) -> bool:
+        """CREATE -> post id -> GET schedules -> id present ? SCHEDULE_CONFIRMED : SCHEDULE_NOT_CONFIRMED (read-only)."""
+        for p in range(pages):
+            page = await self.get_scheduled_posts(of_user_id, limit=page_size, offset=p * page_size)
+            items = page.get("list") or []
+            if any(str(it.get("id")) == str(post_id) for it in items):
+                return True
+            if not page.get("hasMore") or not items:
+                break
+        return False

@@ -148,3 +148,7 @@ export const xApPreview = () => api.post('/admin/x-autopilot/preview').then((r) 
 export const xApPublishNow = () => api.post('/admin/x-autopilot/publish-now').then((r) => r.data);
 export const xApSkip = () => api.post('/admin/x-autopilot/skip').then((r) => r.data);
 export const xApSettings = (body) => api.patch('/admin/x-autopilot/settings', body).then((r) => r.data);
+
+// ---------------- ONLYFANS AUTOPILOT (provider connection, READ-ONLY phase) ----------------
+export const ofApConnection = () => api.get('/admin/of-autopilot/connection').then((r) => r.data);
+export const ofApTestConnection = () => api.post('/admin/of-autopilot/test-connection').then((r) => r.data);
