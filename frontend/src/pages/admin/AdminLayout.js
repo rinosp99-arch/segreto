@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, Tags, Newspaper, BarChart3, Megaphone, Settings, LogOut, Menu, X, ExternalLink, Cpu, Brain, Send } from 'lucide-react';
+import { LayoutDashboard, Users, Tags, Newspaper, BarChart3, Megaphone, Settings, LogOut, Menu, X, ExternalLink, Cpu, Brain, Send, Instagram } from 'lucide-react';
 import { adminMe } from '@/lib/adminApi';
 
 const NAV = [
@@ -13,6 +13,7 @@ const NAV = [
   { to: '/admin/motore', label: 'Motore API', icon: Cpu },
   { to: '/admin/seo-autopilot', label: 'SEO Autopilot', icon: Brain },
   { to: '/admin/telegram-autopilot', label: 'Telegram Autopilot', icon: Send },
+  { to: '/admin/instagram-autopilot', label: 'Instagram Autopilot', icon: Instagram },
   { to: '/admin/impostazioni', label: 'Impostazioni', icon: Settings },
 ];
 

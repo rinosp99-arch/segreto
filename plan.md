@@ -319,6 +319,15 @@ Confronto **INITIAL_HTML vs RENDERED_DOM vs GOOGLE_INSPECTION**:
 
 ## 3) Phase 14 — SEO AUTOPILOT READ_ONLY (Status: COMPLETED — PASS, PUBLIC_MUTATIONS=0)
 
+### Phase 16 — INSTAGRAM AUTOPILOT (Status: COMPLETED in preview — MOCK, Meta NOT_CONNECTED, scheduler OFF, 0 chiamate Meta, nessun post reale)
+Decisioni utente: CONNECTION_STATUS=NOT_CONNECTED + MOCK_MODE=TRUE mostrati separatamente; Telegram completamente fuori fase (non toccato).
+- [x] pacchetto `backend/instagram_autopilot/` (adapter Meta skeleton + MockMeta, media PUBLIC-only con filtro IG-safe, caption IT LLM/template + CTA "link in bio" + 3-6 hashtag, engine con coda/stato/cursori/lock/slot INDIPENDENTI `instagram_*`, jobs tick 300s nello scheduler esistente, routes `/api/admin/instagram-autopilot/*`)
+- [x] env preview: `INSTAGRAM_AUTOPILOT_MOCK=true`, `INSTAGRAM_AUTO_SCHEDULER_ENABLED=false`, `INSTAGRAM_ITALY_AUDIENCE_MODE=true` (nessuna credenziale Meta)
+- [x] Admin: `AdminInstagramAutopilot.js` + nav + route + `adminApi.js` (igAp*)
+- [x] `tests/test_instagram_autopilot.py` 16/16 PASS · testing agent PASS 0 bug (`test_reports/iteration_24_instagram_autopilot.json`) · regressione 121 PASS (2 failure preesistenti non correlate: telemetry password_scrubbing; test Telegram che legge env preview)
+- [x] `INSTAGRAM_AUTOPILOT.md`
+- Prossima fase (solo su richiesta utente): collegamento Meta (INSTAGRAM_ACCESS_TOKEN/USER_ID/APP_ID), MOCK=false, 1 post reale via PUBBLICA ORA, poi scheduler.
+
 ### Phase 15 — TELEGRAM AUTOPILOT (Status: COMPLETED in preview, mock — READY; scheduler OFF; nessun post reale)
 - [x] modulo `telegram_autopilot/` (client+mock, eligibility, copy LLM/template, engine, jobs, routes) + Admin page + 16 test + testing agent 30/30
 - [x] token solo in backend/.env, filtro redazione log httpx, nessuna esposizione

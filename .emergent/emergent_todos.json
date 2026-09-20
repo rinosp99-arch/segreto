@@ -1,6 +1,22 @@
 [
   {
-    "content": "Phase 15 Telegram Autopilot: module, admin, tests, docs — COMPLETED (mock, scheduler OFF, no real post)",
+    "content": "IG.1 backend package (adapter mock, media public-only, caption IT)",
+    "status": "completed"
+  },
+  {
+    "content": "IG.2 engine indipendente + jobs/routes/server wiring/env",
+    "status": "completed"
+  },
+  {
+    "content": "IG.3 Admin page/nav/API client",
+    "status": "completed"
+  },
+  {
+    "content": "IG.4 tests (16/16) + regressione + testing agent (PASS 0 bug)",
+    "status": "completed"
+  },
+  {
+    "content": "IG.5 documentazione INSTAGRAM_AUTOPILOT.md + plan.md + report",
     "status": "completed"
   }
 ]

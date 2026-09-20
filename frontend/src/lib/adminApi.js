@@ -125,3 +125,14 @@ export const tgApPause = () => api.post('/admin/telegram-autopilot/pause').then(
 export const tgApPublishNow = (dryRun = false) => api.post('/admin/telegram-autopilot/publish-now', null, { params: { dry_run: dryRun } }).then((r) => r.data);
 export const tgApSkip = () => api.post('/admin/telegram-autopilot/skip').then((r) => r.data);
 export const tgApSettings = (body) => api.patch('/admin/telegram-autopilot/settings', body).then((r) => r.data);
+
+// ---------------- INSTAGRAM AUTOPILOT (independent queue, MOCK / NOT_CONNECTED) ----------------
+const igAp = (path, params) => api.get(`/admin/instagram-autopilot/${path}`, { params }).then((r) => r.data);
+export const igApStatus = () => igAp('status');
+export const igApLogs = (limit = 40) => igAp('logs', { limit });
+export const igApTestConnection = () => api.post('/admin/instagram-autopilot/test-connection').then((r) => r.data);
+export const igApStart = () => api.post('/admin/instagram-autopilot/start').then((r) => r.data);
+export const igApPause = () => api.post('/admin/instagram-autopilot/pause').then((r) => r.data);
+export const igApPublishNow = (dryRun = false) => api.post('/admin/instagram-autopilot/publish-now', null, { params: { dry_run: dryRun } }).then((r) => r.data);
+export const igApSkip = () => api.post('/admin/instagram-autopilot/skip').then((r) => r.data);
+export const igApSettings = (body) => api.patch('/admin/instagram-autopilot/settings', body).then((r) => r.data);

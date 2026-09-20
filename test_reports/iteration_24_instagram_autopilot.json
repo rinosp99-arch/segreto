@@ -1,0 +1,169 @@
+{
+  "summary": "Instagram Autopilot (FASE INSTAGRAM) - Complete backend and frontend testing. All endpoints working correctly with MOCK_MODE=true, CONNECTION_STATUS='NOT_CONNECTED', META_REAL_CALLS=0. Frontend admin page renders correctly with all status pills, KPIs, buttons, and settings. Telegram collections verified untouched. Public site regression passed.",
+  "backend_issues": {
+    "critical_bugs": [],
+    "flaky_endpoints": [],
+    "notes": "All backend endpoints working perfectly. Zero Meta API calls as expected."
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "notes": "All UI elements render correctly. All buttons clickable and functional. Public home page loads successfully (timeout was due to networkidle wait, but page rendered correctly as shown in screenshot)."
+  },
+  "passed_tests": [
+    "Backend: Admin login and JWT authentication (401 without token on all endpoints)",
+    "Backend: GET /status returns all required fields (MOCK_MODE=true, CONNECTION_STATUS='NOT_CONNECTED', operational=true, AUTO_SCHEDULER_ENABLED=false, active=false, ITALY_AUDIENCE_MODE=true, META_REAL_CALLS=0, SECRET_MEDIA_USED=false, INSTAGRAM_REAL_POST_DONE=false)",
+    "Backend: GET /status settings (posts_per_day=2, schedule_times=['13:00','20:30'], timezone='Europe/Rome')",
+    "Backend: GET /status queue (total>=1, order list present)",
+    "Backend: GET /status schedule (next_slot.slot_id starts with 'instagram_' and ends with 13:00 or 20:30)",
+    "Backend: POST /test-connection returns CONNECTION_STATUS='NOT_CONNECTED', MOCK_MODE=true, META_REAL_CALLS=0, no access token in body",
+    "Backend: POST /publish-now?dry_run=true returns status='DRY_RUN', post_type in (PHOTO_POST, REEL_POST), caption in Italian with 'link in bio', no 'onlyfans' or 'http', hashtags 3-6, media[0].side='PUBLIC', no 'segret'/'secret' in path",
+    "Backend: POST /publish-now (real, 2 calls) returns status='MOCK_PREPARED', payload.media_type in (IMAGE, REELS), logs show MOCK_PREPARED with mock=true, queue position advanced, last_published populated, META_REAL_CALLS still 0",
+    "Backend: POST /skip returns status='MANUAL_SKIP', skipped creator name",
+    "Backend: No duplicate creators within same cycle (verified in queue.order done flags)",
+    "Backend: PATCH /settings validation - rejects invalid time '25:00' (422), invalid timezone 'Mars/Olympus' (422), non-Italy timezone 'America/New_York' (422), posts_per_day > schedule_times (422)",
+    "Backend: PATCH /settings valid update - accepts valid body, sorts schedule_times ['13:00','20:30'], returns 200",
+    "Backend: POST /start returns enabled=true with note about master switch being off (AUTO_SCHEDULER_ENABLED=false)",
+    "Backend: POST /pause returns enabled=false",
+    "Backend: Telegram collections untouched - queue.position and cycle_number unchanged before/after Instagram actions (read-only verification via /api/admin/telegram-autopilot/status)",
+    "Frontend: Admin login successful at /admin (age gate dismissed)",
+    "Frontend: Sidebar navigation contains 'Instagram Autopilot' link to /admin/instagram-autopilot",
+    "Frontend: Page data-testid='instagram-autopilot-page' renders correctly",
+    "Frontend: Status pills render - ig-state='IN PAUSA', ig-scheduler='DISABILITATO', ig-connection='Meta: NOT_CONNECTED', ig-mock='MOCK_MODE: TRUE', ig-italy-mode='ON', ig-meta-calls='Chiamate Meta reali: 0'",
+    "Frontend: KPI ig-kpi-current shows 'x / N' format (4 / 10)",
+    "Frontend: KPI ig-kpi-today shows 'orari 13:00 · 20:30 (Europe/Rome)'",
+    "Frontend: Button ig-dry-run ('Anteprima caption') works - ig-preview appears with ig-preview-caption containing 'link in bio' and hashtags, toast success",
+    "Frontend: Button ig-test-connection works - toast shows 'Meta: NOT_CONNECTED · MOCK_MODE'",
+    "Frontend: Settings form ig-settings-form present with ig-posts-per-day=2, ig-schedule-times='13:00, 20:30', ig-timezone='Europe/Rome', switches ig-use-photo/ig-use-video/ig-use-ai",
+    "Frontend: Rotation list ig-rotation has 10 items (ig-rotation-item)",
+    "Frontend: Log entries ig-log-item present (3 entries showing MOCK PREPARATO)",
+    "Frontend: Button ig-publish-now works (clicked once with window.confirm accepted) - toast 'Mock preparato: ...' and log shows 'MOCK PREPARATO'",
+    "Regression: Public home https://secret-side.preview.emergentagent.com/ loads successfully (creator cards visible, no console errors)",
+    "Regression: /admin/telegram-autopilot page structure intact (no errors, page renders)"
+  ],
+  "test_report_links": [
+    "/app/instagram_backend_test.py",
+    "/app/tests/test_instagram_autopilot.py"
+  ],
+  "success_percentage": {
+    "backend": "100% (9/9 tests passed)",
+    "frontend": "100% (12/12 tests passed)",
+    "overall": "100%"
+  },
+  "updated_files": [
+    "/app/instagram_backend_test.py"
+  ],
+  "action_item_for_main_agent": "",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_test_itself": false,
+  "test_details": {
+    "backend_test_summary": {
+      "total_tests": 9,
+      "passed": 9,
+      "failed": 0,
+      "test_file": "/app/instagram_backend_test.py",
+      "execution_time": "~60 seconds",
+      "key_verifications": [
+        "All endpoints require admin JWT (401/403 without token)",
+        "Status endpoint contract verified (all required fields present and correct)",
+        "Test connection returns NOT_CONNECTED with MOCK_MODE",
+        "Dry run returns Italian caption with proper CTA and hashtags",
+        "Publish-now works in MOCK mode (2 calls, queue advances, META_REAL_CALLS stays 0)",
+        "Skip works with MANUAL_SKIP status",
+        "Settings validation rejects invalid inputs (times, timezones, posts_per_day)",
+        "Start/pause toggle enabled state correctly",
+        "Telegram state verified unchanged (position and cycle_number)"
+      ]
+    },
+    "frontend_test_summary": {
+      "total_tests": 12,
+      "passed": 12,
+      "failed": 0,
+      "test_method": "Playwright browser automation",
+      "execution_time": "~45 seconds",
+      "key_verifications": [
+        "Admin login flow works (age gate dismissed, JWT obtained)",
+        "Instagram Autopilot page accessible via sidebar navigation",
+        "All status pills render with correct values",
+        "KPIs show correct data (current creator, cycle, schedule, last published)",
+        "Dry run button shows preview with Italian caption",
+        "Test connection button triggers toast",
+        "Settings form has all fields and switches",
+        "Rotation list shows 10 eligible creators",
+        "Logs show MOCK_PREPARED entries",
+        "Publish-now button works (once, with confirmation dialog)",
+        "Public home page loads successfully",
+        "Telegram admin page structure intact"
+      ]
+    },
+    "pytest_suite": {
+      "file": "/app/tests/test_instagram_autopilot.py",
+      "total_tests": 16,
+      "passed": 16,
+      "failed": 0,
+      "execution_time": "1.90s",
+      "coverage": [
+        "Connection status (MOCK_MODE, NOT_CONNECTED, zero Meta calls)",
+        "Public-only media (secret structurally unreachable)",
+        "Instagram-safe filter (explicit flag, unsupported formats)",
+        "Photo -> PHOTO_POST, video -> REEL_POST, caption Italian",
+        "Two consecutive different creators",
+        "Circular rotation, no repeats, wrap to cycle 2",
+        "Skips and media fallback (video rejected -> photo)",
+        "LLM offline -> Italian template fallback",
+        "Restart persistence (state and media cursors)",
+        "Duplicate slot and concurrency (lock mechanism)",
+        "New/removed models mid-cycle",
+        "Pause, publish-now, skip, disabled tick",
+        "Independence from Telegram (collections untouched)",
+        "Admin API auth and status contract",
+        "Settings validation and Italy mode",
+        "Job registered and zero Meta calls"
+      ]
+    }
+  },
+  "environment_verification": {
+    "backend_url": "https://secret-side.preview.emergentagent.com",
+    "env_variables_verified": {
+      "INSTAGRAM_AUTOPILOT_MOCK": "true",
+      "INSTAGRAM_AUTO_SCHEDULER_ENABLED": "false",
+      "INSTAGRAM_ITALY_AUDIENCE_MODE": "true"
+    },
+    "meta_credentials": "Not present (as expected for MOCK mode)",
+    "meta_real_calls": 0,
+    "connection_status": "NOT_CONNECTED",
+    "mock_mode": true,
+    "operational": true
+  },
+  "compliance_verification": {
+    "mock_only": "✅ VERIFIED - All operations in MOCK mode, zero real Meta API calls",
+    "connection_status": "✅ VERIFIED - CONNECTION_STATUS='NOT_CONNECTED' while MOCK_MODE=true shown separately",
+    "published_creators_only": "✅ VERIFIED - Only PUBLISHED creators with PUBLIC-side media eligible",
+    "secret_media_never_used": "✅ VERIFIED - SECRET_MEDIA_USED=false, all media[].side='PUBLIC', no 'segret'/'secret' in paths",
+    "photo_video_mapping": "✅ VERIFIED - Photo -> PHOTO_POST (IMAGE), video -> REEL_POST (REELS)",
+    "italian_captions": "✅ VERIFIED - Captions in Italian with CTA 'link in bio'",
+    "no_onlyfans_url": "✅ VERIFIED - No 'onlyfans' or 'http' in captions",
+    "hashtags": "✅ VERIFIED - 3-6 hashtags including #latosegreto",
+    "schedule_defaults": "✅ VERIFIED - 2 posts/day at 13:00 and 20:30 Europe/Rome",
+    "telegram_untouched": "✅ VERIFIED - Telegram queue position and cycle_number unchanged",
+    "no_env_modifications": "✅ VERIFIED - No .env files modified during testing"
+  },
+  "notes": [
+    "All 16 pytest tests pass (test_instagram_autopilot.py)",
+    "All 9 backend API tests pass (instagram_backend_test.py)",
+    "All 12 frontend UI tests pass (Playwright browser automation)",
+    "Zero Meta API calls throughout all testing (META_REAL_CALLS=0)",
+    "Telegram collections verified untouched (read-only check)",
+    "Public site regression passed (home page loads, no errors)",
+    "Admin page fully functional with all buttons clickable",
+    "Settings validation working correctly (rejects invalid inputs)",
+    "Queue rotation working correctly (no duplicates within cycle)",
+    "Logs show MOCK_PREPARED status with mock=true flag",
+    "Italy Audience Mode enforced (timezone must be Europe/Rome)",
+    "Master switch AUTO_SCHEDULER_ENABLED=false (scheduler disabled as expected)",
+    "No modifications made to Telegram files, env, or state",
+    "No modifications made to public site",
+    "Test performed at 2026-09-20 01:18-01:21 UTC"
+  ]
+}
