@@ -12,6 +12,12 @@ from . import connection, engine
 router = APIRouter(prefix="/api/admin/of-autopilot", tags=["OnlyFans Autopilot"])
 
 
+class MassDmTest(BaseModel):
+    model_slug: str
+    provider_post_id: str
+    execute: bool = False               # False = READ-ONLY dry run (pre-checks + copy preview). True = the ONE real/mock mass message
+
+
 class Settings(BaseModel):
     posts_per_day: Optional[int] = Field(None, ge=1, le=12)
     schedule_times: Optional[List[str]] = None
@@ -63,6 +69,15 @@ async def publish_now(admin=Depends(get_current_admin)):
     if not ready["operational"]:
         raise HTTPException(409, f"OF Autopilot non operativo: {ready['reason']}")
     r = await engine.run("PUBLISH_NOW", "admin")
+    if r.get("status") == "LOCKED":
+        raise HTTPException(409, "Pubblicazione già in corso")
+    return r
+
+
+@router.post("/mass-dm-test")
+async def mass_dm_test(body: MassDmTest, admin=Depends(get_current_admin)):
+    """DM-only test from an EXISTING confirmed feed post: never a new feed, never another model, hard cap 1 real mass DM, gate restored in finally."""
+    r = await engine.mass_dm_from_post(body.model_slug.strip().lower(), body.provider_post_id, execute=body.execute, trigger="admin")
     if r.get("status") == "LOCKED":
         raise HTTPException(409, "Pubblicazione già in corso")
     return r

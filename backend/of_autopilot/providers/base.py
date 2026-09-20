@@ -62,6 +62,24 @@ class OFPostResult:
     raw: Dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class OFMassMessageRequest:
+    """Mass DM to ALL fans/subscribers of the account. `media_ids` = vault media ids of media ALREADY consumed by the confirmed feed post
+    (read back from GET post -> media[].id), PUBLIC first then SECRET. price None/0 = free message."""
+    text: str
+    media_ids: List[Any] = field(default_factory=list)
+    price: Optional[float] = None
+    audience: str = "ALL"               # ALL = every subscriber (empty queueBuyers); nothing else is supported by this engine
+
+
+@dataclass
+class OFMassMessageResult:
+    message_id: Optional[str]
+    state: str                          # MASS_DM_CONFIRMED | MASS_DM_NOT_CONFIRMED | UNKNOWN
+    audience_size: Optional[int] = None
+    raw: Dict[str, Any] = field(default_factory=dict)
+
+
 class OFProviderAdapter(ABC):
     name: str = "abstract"
 
@@ -116,6 +134,32 @@ class OFProviderAdapter(ABC):
             page = await self.get_scheduled_posts(of_user_id, limit=page_size, offset=p * page_size)
             items = page.get("list") or []
             if any(str(it.get("id")) == str(post_id) for it in items):
+                return True
+            if not page.get("hasMore") or not items:
+                break
+        return False
+
+    # ---------------- MASS MESSAGE (optional capability; guarded like every write) ----------------
+    async def mass_message_audience_size(self, of_user_id: str) -> Optional[int]:
+        """Recipients of an ALL-subscribers mass message (read-like preview). None when the provider cannot tell."""
+        return None
+
+    async def get_mass_messages(self, of_user_id: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
+        """{"list": [...], "hasMore": bool} of the account's mass messages (queued/sent), read-only."""
+        raise OFProviderError("NOT_SUPPORTED", "mass message non supportato da questo provider")
+
+    async def send_mass_message(self, of_user_id: str, req: OFMassMessageRequest) -> OFMassMessageResult:
+        raise OFProviderError("NOT_SUPPORTED", "mass message non supportato da questo provider")
+
+    async def verify_mass_message(self, of_user_id: str, message_id: str, pages: int = 3, page_size: int = 50) -> bool:
+        """SEND -> id -> GET mass messages -> id present ? MASS_DM_CONFIRMED : MASS_DM_NOT_CONFIRMED (read-only)."""
+        for p in range(pages):
+            try:
+                page = await self.get_mass_messages(of_user_id, limit=page_size, offset=p * page_size)
+            except OFProviderError:
+                return False
+            items = page.get("list") or []
+            if any(str(it.get("id")) == str(message_id) for it in items):
                 return True
             if not page.get("hasMore") or not items:
                 break

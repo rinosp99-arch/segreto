@@ -1,18 +1,30 @@
 [
   {
-    "content": "Production READ-ONLY prechecks (19/19 PASS, OF_REAL_TEST_MAX_POSTS waived by user)",
+    "content": "Provider contract (base/mock/the_only_api documented mass message endpoints, gated)",
     "status": "completed"
   },
   {
-    "content": "Single controlled real publish-now Vanessa Bella -> POST_CONFIRMED",
+    "content": "caption.py build_dm_caption different from feed",
     "status": "completed"
   },
   {
-    "content": "Gate restored false (verified by READ), scheduler false, TOTAL_REAL_POSTS_CREATED=1, no second post",
+    "content": "engine.py of_model_runs, FEED/MASS_DM statuses, retry-only-DM, no duplicates, gates, status, tick",
     "status": "completed"
   },
   {
-    "content": "plan.md updated, temp files removed, final report",
+    "content": "Env flags workspace (OF_MASS_DM_MOCK=true, OF_MASS_DM_ENABLED=false)",
+    "status": "completed"
+  },
+  {
+    "content": "Admin UI minimal FEED / MASS MESSAGE",
+    "status": "completed"
+  },
+  {
+    "content": "tests/test_of_mass_dm.py + regression + testing agent (iteration_28, 0 bugs)",
+    "status": "completed"
+  },
+  {
+    "content": "plan.md / OF_AUTOPILOT.md updated, report, STOP",
     "status": "completed"
   }
 ]

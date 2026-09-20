@@ -1,11 +1,12 @@
 """MockOFProvider — simulates the full provider contract (upload -> complete media object -> immediate post / scheduled post ->
 GET schedules / GET post -> verification) with ZERO network. Test knobs: fail_upload (url substrings), timeout_upload, fail_create,
-hide_scheduled (create returns 200 but the post is not in the schedule list -> SCHEDULE_NOT_CONFIRMED), hide_post (POST_NOT_CONFIRMED)."""
+hide_scheduled (create returns 200 but the post is not in the schedule list -> SCHEDULE_NOT_CONFIRMED), hide_post (POST_NOT_CONFIRMED),
+fail_mass_dm (send rejected), hide_mass_dm (send 200 but not in the mass message list -> MASS_DM_NOT_CONFIRMED), fans (audience size)."""
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from .base import OFAccount, OFAccountHealth, OFMedia, OFPostRequest, OFPostResult, OFProviderAdapter, OFProviderError
+from .base import OFAccount, OFAccountHealth, OFMassMessageRequest, OFMassMessageResult, OFMedia, OFPostRequest, OFPostResult, OFProviderAdapter, OFProviderError
 
 MOCK_OF_USER_ID = "mock_latosegreto"
 
@@ -25,6 +26,10 @@ class MockOFProvider(OFProviderAdapter):
         self.write_calls = 0                  # mock-internal counter (never a real write)
         self.gate: bool = False
         self.gate_history: List[bool] = []
+        self.mass_messages: List[dict] = []   # sent mass DMs (mock queue list)
+        self.fail_mass_dm: bool = False
+        self.hide_mass_dm: bool = False
+        self.fans: int = 418                  # mock audience size (ALL subscribers)
 
     # ---------------- READ
     async def test_connection(self) -> Dict[str, Any]:
@@ -103,3 +108,25 @@ class MockOFProvider(OFProviderAdapter):
 
     async def delete_scheduled_post(self, of_user_id: str, post_id: str) -> Dict[str, Any]:
         raise OFProviderError("NOT_DOCUMENTED", "mock: non documentato")
+
+    # ---------------- MASS MESSAGE (mock only, zero network)
+    async def mass_message_audience_size(self, of_user_id: str):
+        return self.fans
+
+    async def get_mass_messages(self, of_user_id: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
+        page = self.mass_messages[offset: offset + limit]
+        return {"list": [dict(x) for x in page], "hasMore": offset + limit < len(self.mass_messages)}
+
+    async def send_mass_message(self, of_user_id: str, req: OFMassMessageRequest) -> OFMassMessageResult:
+        self.write_calls += 1
+        if self.fail_mass_dm:
+            raise OFProviderError("API_ERROR", "mock: mass message rifiutato", 500)
+        if not req.text and not req.media_ids:
+            raise OFProviderError("API_ERROR", "mock: message requires text or mediaFiles", 400)
+        mid = f"mock_dm_{uuid.uuid4().hex[:10]}"
+        msg = {"id": mid, "text": req.text, "mediaFiles": list(req.media_ids), "price": req.price or 0, "queueBuyers": [] if req.audience == "ALL" else [req.audience],
+               "audience": "ALL_SUBSCRIBERS" if req.audience == "ALL" else req.audience, "recipients": self.fans, "createdAt": datetime.now(timezone.utc).isoformat(), "mock": True}
+        if not self.hide_mass_dm:
+            self.mass_messages.append(msg)
+        confirmed = await self.verify_mass_message(of_user_id, mid)
+        return OFMassMessageResult(mid, "MASS_DM_CONFIRMED" if confirmed else "MASS_DM_NOT_CONFIRMED", self.fans, dict(msg))

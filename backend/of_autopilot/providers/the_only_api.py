@@ -10,7 +10,11 @@ Documented endpoints used:
   GET  {base}/api2/v2/posts/{post_id}     (header user-id)
   POST {base}/accounts/{of_user_id}/media  (multipart file)       WRITE -> returns complete `media` object (kept whole)
   POST {base}/api2/v2/posts                (header user-id)       WRITE -> body {text, mediaFiles:[<whole media obj>], isScheduled:1, scheduledDate}
+  POST {base}/api2/v2/messages/queue        (header user-id)       WRITE -> OnlyFans mass message (queue) {text, mediaFiles:[vault ids], price, queueBuyers:[]=ALL subscribers}
+  GET  {base}/api2/v2/messages/queue        (header user-id)       {list:[...], hasMore}  (verification of a mass message by id)
+  POST {base}/api2/v2/messages/queue/size   (header user-id)       {size} audience preview for the same queueBuyers (no send)
   Delete scheduled post: NOT documented -> never called (NOT_DOCUMENTED).
+Mass message writes are additionally blocked unless OF_MASS_DM_ENABLED=true AND OF_MASS_DM_MOCK=false (MASS_DM_DISABLED, no network).
 All WRITE methods are blocked while OF_REAL_POSTING_ENABLED != true and never reach the network. OF_REAL_WRITE_CALLS counts real write HTTP calls."""
 import logging
 import os
@@ -18,12 +22,12 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from .base import OFAccount, OFAccountHealth, OFMedia, OFPostRequest, OFPostResult, OFProviderAdapter, OFProviderError
+from .base import OFAccount, OFAccountHealth, OFMassMessageRequest, OFMassMessageResult, OFMedia, OFPostRequest, OFPostResult, OFProviderAdapter, OFProviderError
 
 PANEL_HOST = "https://theonlyapi.com"
 WHOAMI_URL = "https://api.theonlyapi.com/api/whoami"
 TIMEOUT_S = 40.0
-CALLS = {"read": 0, "write": 0, "gate": 0, "upload": 0, "create": 0}          # OF_REAL_WRITE_CALLS = CALLS["write"] (includes gate/upload/create)
+CALLS = {"read": 0, "write": 0, "gate": 0, "upload": 0, "create": 0, "mass_dm": 0}   # OF_REAL_WRITE_CALLS = CALLS["write"] (includes gate/upload/create/mass_dm)
 MASK = "****"
 
 
@@ -41,6 +45,11 @@ def configured() -> bool:
 
 def writes_enabled() -> bool:
     return os.environ.get("OF_REAL_POSTING_ENABLED", "false").lower() in ("1", "true", "yes")
+
+
+def mass_dm_real_allowed() -> bool:
+    """Real mass DM only when explicitly enabled AND not in mock: OF_MASS_DM_ENABLED=true and OF_MASS_DM_MOCK=false."""
+    return os.environ.get("OF_MASS_DM_ENABLED", "false").lower() in ("1", "true", "yes") and os.environ.get("OF_MASS_DM_MOCK", "true").lower() not in ("1", "true", "yes")
 
 
 def scrub(text: Any) -> str:
@@ -106,7 +115,7 @@ class TheOnlyAPIAdapter(OFProviderAdapter):
             h["user-id"] = str(of_user_id)
         return h
 
-    async def _request(self, method: str, url: str, *, of_user_id: Optional[str] = None, write: bool = False, **kw) -> Any:
+    async def _request(self, method: str, url: str, *, of_user_id: Optional[str] = None, write: bool = False, read_post: bool = False, **kw) -> Any:
         if not configured():
             raise OFProviderError("NOT_CONFIGURED", "THE_ONLY_API_KEY / THE_ONLY_CRM_ID assenti")
         if write:
@@ -114,7 +123,7 @@ class TheOnlyAPIAdapter(OFProviderAdapter):
                 raise OFProviderError("WRITES_DISABLED", "OF_REAL_POSTING_ENABLED=false: nessuna scrittura verso The Only API")
             CALLS["write"] += 1
         else:
-            assert method.upper() == "GET", "read path must be GET"
+            assert method.upper() == "GET" or read_post, "read path must be GET"          # read_post: documented POST that only computes (queue/size)
             CALLS["read"] += 1
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as c:
@@ -257,3 +266,42 @@ class TheOnlyAPIAdapter(OFProviderAdapter):
         if not writes_enabled():
             raise OFProviderError("WRITES_DISABLED", "OF_REAL_POSTING_ENABLED=false")
         raise OFProviderError("NOT_DOCUMENTED", "The Only API non documenta un endpoint di cancellazione post programmato: nessuna richiesta inviata")
+
+    # ------------------------------------------------------------------ MASS MESSAGE (documented OnlyFans passthrough: /api2/v2/messages/queue)
+    def _mass_guard(self):
+        if not mass_dm_real_allowed():
+            raise OFProviderError("MASS_DM_DISABLED", "OF_MASS_DM_ENABLED=false o OF_MASS_DM_MOCK=true: nessun mass message reale")
+
+    @staticmethod
+    def _queue_buyers(req: OFMassMessageRequest) -> list:
+        if req.audience != "ALL":
+            raise OFProviderError("NOT_SUPPORTED", "solo audience ALL (tutti i subscriber) è supportata")
+        return []                                                                                    # documented: empty array = all subscribers
+
+    async def mass_message_audience_size(self, of_user_id: str) -> Optional[int]:
+        """POST /api2/v2/messages/queue/size {queueBuyers: []} -> {size}. Computes only, sends nothing; still behind the mass DM gate."""
+        self._mass_guard()
+        data = _unwrap(await self._request("POST", f"{self.base}/api2/v2/messages/queue/size", of_user_id=of_user_id, read_post=True, json={"queueBuyers": []}))
+        v = (data or {}).get("size")
+        return int(v) if isinstance(v, (int, float, str)) and str(v).isdigit() else None
+
+    async def get_mass_messages(self, of_user_id: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
+        data = _unwrap(await self._request("GET", f"{self.base}/api2/v2/messages/queue", of_user_id=of_user_id, params={"limit": limit, "offset": offset}))
+        if isinstance(data, list):
+            data = {"list": data, "hasMore": False}
+        return {"list": data.get("list") or [], "hasMore": bool(data.get("hasMore"))}
+
+    async def send_mass_message(self, of_user_id: str, req: OFMassMessageRequest) -> OFMassMessageResult:
+        """POST /api2/v2/messages/queue {text, mediaFiles:[vault ids], price, lockedText:false, queueBuyers:[]} -> created queue item (id) -> GET queue -> id present ? CONFIRMED."""
+        self._mass_guard()
+        if not req.text and not req.media_ids:
+            raise OFProviderError("API_ERROR", "message requires text or mediaFiles")
+        body: Dict[str, Any] = {"text": req.text, "mediaFiles": [int(x) if str(x).isdigit() else x for x in req.media_ids], "price": req.price if (req.price or 0) > 0 else None,
+                                "lockedText": False, "queueBuyers": self._queue_buyers(req)}
+        CALLS["mass_dm"] += 1
+        data = _unwrap(await self._request("POST", f"{self.base}/api2/v2/messages/queue", of_user_id=of_user_id, write=True, json=body))
+        mid = (data or {}).get("id")
+        if mid is None:
+            return OFMassMessageResult(None, "MASS_DM_NOT_CONFIRMED", None, data or {})
+        confirmed = await self.verify_mass_message(of_user_id, str(mid))
+        return OFMassMessageResult(str(mid), "MASS_DM_CONFIRMED" if confirmed else "MASS_DM_NOT_CONFIRMED", None, data)

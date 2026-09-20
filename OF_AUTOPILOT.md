@@ -56,3 +56,20 @@ Collezioni: `of_autopilot_state` · `of_model_media_state` · `of_media_uploads`
 API: `GET status|preview|logs|uploads|connection`, `POST start|pause|publish-now|skip|test-connection`, `PATCH settings` (nessuna route per abilitare real posting).
 File: `engine.py`, `media.py`, `caption.py`, `jobs.py`, `providers/mock.py`, `routes.py`, `AdminOfAutopilot.js`, `tests/test_of_autopilot.py` (16) + `tests/test_of_provider_connection.py` (7).
 Prossima fase (autorizzazione esplicita): 1 solo post reale controllato (OF_REAL_POSTING_ENABLED=true + `allow_of_write_actions` nel pannello) → verifica su OnlyFans → poi valutazione AUTO ON.
+
+## FEED + MASS MESSAGE (fase MOCK ONLY)
+Per ogni modella della coda: FEED post → `FEED_STATUS=OK` (verifica read-back) → MASS MESSAGE a tutti i fan/subscriber con la **stessa coppia Public+Secret**
+(vault ids letti dal post confermato) e copy **diverso** (`👀 Hai già scoperto NOME? / ✨ LATO PUBBLICO / 🔥 LATO SEGRETO / ❤️‍🔥 Scoprila qui: + link OF DB`) →
+`MASS_DM_STATUS=OK` (verifica read-back) → solo allora la coda avanza. Stato per (modella, ciclo) in `of_model_runs`.
+- Feed OK + DM fallito → nessun nuovo feed, si ritenta solo il DM (PUBBLICA ORA / tick). DM già inviato (id presente) → mai una seconda volta (`UNVERIFIED` non viene mai rispedito).
+- Provider: `OFProviderAdapter` → `TheOnlyAPIAdapter`, solo endpoint documentati OnlyFans passthrough: `POST /api2/v2/messages/queue` (`queueBuyers: []` = tutti i subscriber),
+  `GET /api2/v2/messages/queue` (verifica), `POST /api2/v2/messages/queue/size` (audience).
+- Gate: `OF_MASS_DM_MOCK=true` + `OF_MASS_DM_ENABLED=false` (default). DM reale solo con `OF_MASS_DM_ENABLED=true` **e** `OF_MASS_DM_MOCK=false` **e** `OF_REAL_POSTING_ENABLED=true`;
+  altrimenti l'adapter alza `MASS_DM_DISABLED` prima di qualsiasi rete. DM disattivato → comportamento feed-only invariato. DM mock dopo feed reale → non eseguito (`MOCK_ONLY`).
+- Scheduler (quando attivo): feed programmato → DM dovuto 2' dopo la pubblicazione, gestito dal tick prima di ogni nuovo slot. Ora resta `OF_AUTO_SCHEDULER_ENABLED=false`.
+- Admin: riga "Modella corrente: FEED · MASS MESSAGE" (OK/PENDING/FAILED). Test: `tests/test_of_mass_dm.py`.
+
+### Test DM-only da post esistente
+`POST /api/admin/of-autopilot/mass-dm-test` `{model_slug, provider_post_id, execute}` — `execute=false` = solo pre-check READ-ONLY + anteprima copy (zero write);
+`execute=true` = se tutti i check PASS: gate on → **1** mass message a tutti i subscriber con i vault id del post → verifica READ → stato in `of_model_runs` (`post:<id>`) → gate off + verifica.
+Hard cap: 1 mass DM reale totale (`REAL_MASS_DM_TEST_MAX`), nessun nuovo feed, nessuna altra modella, STOP su qualsiasi check FAIL.

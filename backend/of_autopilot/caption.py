@@ -24,6 +24,8 @@ TIMEOUT_S = 25
 CAPTION_LIMIT = 900
 SENTENCE_LIMIT = 120
 CTA = "💋 Scoprila su OnlyFans:"
+DM_CTA = "❤️‍🔥 Scoprila qui:"
+DM_OPENER = "👀 Hai già scoperto {NAME}?"
 H_PUBLIC = "✨ LATO PUBBLICO"
 H_SECRET = "🔥 LATO SEGRETO"
 EMOJI_POOL = ["👀", "🖤", "❤️‍🔥", "🌙", "🔐", "🥀", "🔥", "✨"]
@@ -220,3 +222,82 @@ async def build_caption(m: dict, of_url: str, cycle: int, use_ai: bool = True) -
         text = f"{body}\n\n{CTA}\n{of_url}"
     assert text.count("http") == 1 and of_url in text and "@" not in body and H_PUBLIC in body and H_SECRET in body
     return {"text": text, "body": body, "cta": CTA, "of_url": of_url, "source": source, "language": "it"}
+
+
+# ------------------------------------------------------------------------------------------------ MASS MESSAGE copy (more direct, ALWAYS different from the feed)
+DM_SYSTEM_EXTRA = (" Questo testo è un MESSAGGIO DIRETTO ai fan (non un post): più diretto e confidenziale, come se parlassi a una persona sola, sempre elegante. "
+                   "Le frasi devono essere DIVERSE da quelle del post feed che ti passo: non riusarle né parafrasarle da vicino.")
+
+
+def compose_dm(name: str, parts: Dict[str, str]) -> str:
+    """👀 Hai già scoperto NOME? / ✨ LATO PUBBLICO / 🔥 LATO SEGRETO  (no hook: the ❤️‍🔥 CTA closes the message)."""
+    return f"{DM_OPENER.format(NAME=name.upper())}\n\n{H_PUBLIC}\n{parts['public'].strip()}\n\n{H_SECRET}\n{parts['secret'].strip()}"
+
+
+def dm_template_parts(m: dict, cycle: int) -> Dict[str, str]:
+    """Deterministic fallback for the DM: different pools offsets than the feed (part names differ -> different hashes)."""
+    f = _facts(m)
+    name = f["nome"] or "Lei"
+    first = name.split(" ")[0].capitalize()
+    adjs = _adjectives(f)
+    adj, adj2 = adjs[0], (adjs[1] if len(adjs) > 1 else "diversa")
+    slug = m.get("slug") or name.lower()
+    pub_pool = PUBLIC_TEMPLATES if (f["frase"] and len(f["frase"]) <= 70) else [t for t in PUBLIC_TEMPLATES if "{frase}" not in t]
+    fmt = dict(Name=first, adj=adj, Adj=adj.capitalize(), adj2=adj2, frase=f["frase"].rstrip("."))
+    return {"public": _pick(pub_pool, slug, cycle, "dm_public").format(**fmt),
+            "secret": _pick(SECRET_TEMPLATES, slug, cycle, "dm_secret").format(**fmt) + " " + _pick(EMOJI_POOL[:5], slug, cycle, "dm_emoji")}
+
+
+async def llm_dm_parts(m: dict, cycle: int, feed_text: str) -> Optional[Dict[str, str]]:
+    if not _llm_available():
+        return None
+    f = _facts(m)
+    slug = m.get("slug") or f["nome"]
+    emoji = _pick(EMOJI_POOL[:5], slug, cycle, "dm_emoji")
+    prompt = (f"Creator: {f['nome']}\nFrase breve: {f['frase'] or '-'}\nBio: {f['bio'] or '-'}\nCategorie: {', '.join(f['categorie']) or '-'}\nTag: {', '.join(f['tag']) or '-'}\n"
+              f"Stile/atmosfera: {', '.join(_adjectives(f)[:3])}\nEmoji suggerita per chiudere il Lato Segreto: {emoji}\n"
+              f"Testo del post feed già pubblicato (NON riusare queste frasi):\n{feed_text}\n\nCiclo n. {cycle}. Rispondi solo con il JSON (hook può essere una stringa vuota).")
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=f"of-dm-{slug}-{cycle}", system_message=SYSTEM + DM_SYSTEM_EXTRA).with_model(*MODEL)
+        raw = str(await asyncio.wait_for(chat.send_message(UserMessage(text=prompt)), timeout=TIMEOUT_S)).strip()
+        raw = raw[raw.find("{"): raw.rfind("}") + 1]
+        data = json.loads(raw)
+    except Exception:                                   # noqa: BLE001
+        return None
+    parts = {k: _clean_sentence(data.get(k)) for k in ("public", "secret")}
+    parts["hook"] = "-"                                  # not used in the DM; keeps the shared validator happy
+    full, first = f["nome"], (f["nome"].split(" ")[0] if f["nome"] else "")
+    if full and first and " " in full:
+        parts = {k: re.sub(re.escape(full), first, v, flags=re.I) for k, v in parts.items()}
+    if not _valid_parts(parts):
+        return None
+    if count_emoji(parts["secret"]) == 0:
+        parts["secret"] += " " + emoji
+    return {"public": parts["public"], "secret": parts["secret"]}
+
+
+def _sentences(text: str) -> set:
+    return {l.strip().lower() for l in text.split("\n") if l.strip() and not l.startswith(("✨", "🔥", "💋", "❤️‍🔥", "👀", "http"))}
+
+
+async def build_dm_caption(m: dict, of_url: str, cycle: int, feed_text: str = "", use_ai: bool = True) -> Dict[str, object]:
+    """Mass message copy: opener + PUBLIC/SECRET sentences + ❤️‍🔥 CTA + the model's real OF link (from the DB, appended deterministically).
+    Guarantees: text != feed text and no sentence shared with the feed (falls back to alternate template picks when needed)."""
+    assert of_url and "onlyfans.com" in of_url
+    name = _facts(m)["nome"] or "Lei"
+    parts, source = (await llm_dm_parts(m, cycle, feed_text)) if use_ai else None, "LLM"
+    feed_sent = _sentences(feed_text or "")
+    if not parts or (_sentences(compose_dm(name, parts)) & feed_sent):
+        source = "TEMPLATE"
+        for bump in range(0, 6):                                                    # alternate deterministic picks until no sentence overlaps the feed
+            parts = dm_template_parts(m, cycle + bump * 7)
+            if not (_sentences(compose_dm(name, parts)) & feed_sent):
+                break
+    body = compose_dm(name, parts)
+    text = f"{body}\n\n{DM_CTA}\n{of_url}"
+    if len(text) > CAPTION_LIMIT:
+        body = body[: CAPTION_LIMIT - len(DM_CTA) - len(of_url) - 8].rstrip() + "…"
+        text = f"{body}\n\n{DM_CTA}\n{of_url}"
+    assert text.count("http") == 1 and of_url in text and "@" not in body and H_PUBLIC in body and H_SECRET in body and text != (feed_text or "")
+    return {"text": text, "body": body, "cta": DM_CTA, "of_url": of_url, "source": source, "language": "it", "different_from_feed": text != feed_text and not (_sentences(body) & feed_sent)}

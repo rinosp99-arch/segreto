@@ -77,6 +77,7 @@ async def sandbox():
     await models_col.delete_many({"_test_tag": TAG})
     await engine.media_state_col.delete_many({"model_id": {"$in": test_ids}})
     await engine.uploads_col.delete_many({"model_id": {"$in": test_ids}})
+    await engine.runs_col.delete_many({"model_id": {"$in": test_ids}})
     await engine.log_col.delete_many({"$or": [{"model_slug": {"$regex": f"^{TAG}"}}, {"slot_id": {"$regex": f"^{TAG}"}}]})
     await engine.slots_col.delete_many({"slot_id": {"$regex": f"^{TAG}"}})
     await engine.state_col.delete_one({"id": "global"})
