@@ -325,7 +325,8 @@ Autorizzazione utente: 1 solo publish-now reale su `latosegreto`, Public+Secret 
 - [x] Pre-check READ-ONLY produzione eseguiti (`/tmp/prod_precheck.py`, output mascherato):
   - PASS: CONNECTED · latosegreto · onlyfans · HEALTHY · `write_actions_allowed=false` · OF_REAL_WRITE_CALLS=0 · MOCK_MODE=false · OF_REAL_POSTING_ENABLED=true · AUTO_SCHEDULER=false · TOTAL_REAL_POSTS_CREATED=0 · coda 1/16 = VANESSA BELLA · link OF = quello atteso del DB · Public (photo, 200, image/jpeg, 396 KB) + Secret (photo, 200, image/jpeg, 135 KB) stesso model_id · SAME_MODEL=true · caption IT (LLM) con 1 solo link
   - **FAIL: `OF_REAL_TEST_MAX_POSTS` NON presente nell'env di produzione → REAL_TEST_MODE=false, REAL_TEST_MAX_POSTS=None** → hard cap 1 non attivo e motore in modalità rotazione (potrebbe saltare a modella successiva). STOP: nessun gate aperto, nessun upload, nessun post.
-- [ ] Utente: aggiungere `OF_REAL_TEST_MAX_POSTS=1` all'env di produzione e ri-deployare → ripetere pre-check → se tutti PASS eseguire l'unico publish-now.
+- [x] Aggiunta `OF_REAL_TEST_MAX_POSTS=1` a `/app/backend/.env` (workspace) + restart backend → status workspace: REAL_TEST_MODE=true, MAX=1, TOTAL=0, writes=0.
+- [ ] PRODUZIONE: l'agente NON può modificare env/redeploy di produzione (confermato da support). Utente: Manage Publishes → Secrets → Custom Keys → `OF_REAL_TEST_MAX_POSTS=1` → Save & Redeploy → poi ripetere pre-check → se tutti PASS eseguire l'unico publish-now.
 
 
 ### Phase 19 — OF AUTOPILOT MOTORE COMPLETO (Status: COMPLETED in preview — MOCK, 0 write reali, nessun post reale)
