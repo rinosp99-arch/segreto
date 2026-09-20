@@ -13,8 +13,9 @@ Documented endpoints used:
   POST {base}/api2/v2/messages/queue        (header user-id)       WRITE -> OnlyFans mass message (queue) {text, mediaFiles:[vault ids], price, queueBuyers:[]=ALL subscribers}
   GET  {base}/api2/v2/messages/queue        (header user-id)       {list:[...], hasMore}  (verification of a mass message by id)
   POST {base}/api2/v2/messages/queue/size   (header user-id)       {size} audience preview for the same queueBuyers (no send)
-  POST {base}/accounts/{of_user_id}/messages/mass  (CRM)          {text, price, mediaFiles:[vault ids], audience:{type: all|active|expired}, dry_run}
-                                                                  dry_run=true -> {recipients, sent:0, sample} (no send); dry_run=false -> serial send inside the request
+  GET  {base}/api2/v2/lists                 (header user-id)       OF user lists -> system list type=fans (= UI "Messaggio di massa -> Fan"), usersCount
+  POST {base}/accounts/{of_user_id}/messages/mass  (CRM)          {text, price, mediaFiles:[vault ids], userLists:[fans_id], excludedLists:[]}  (OpenAPI shape; no audience.type, no fan_ids)
+  GET  {base}/accounts/{of_user_id}/chats                          recent conversations with lastMessage (read-back)
   GET  {base}/accounts/{of_user_id}/chats/{fan_id}/messages       read-back of a recipient's conversation (verification)
   POST {base}/accounts/{of_user_id}/subscribers/refresh           202 async sync of the provider subscriber cache (audience source of the CRM mass DM)
   GET  {base}/accounts/{of_user_id}/subscribers/refresh/status    refresh job state + cache summary {total, active, expired, last_refreshed_at}
@@ -308,27 +309,48 @@ class TheOnlyAPIAdapter(OFProviderAdapter):
         data = data if isinstance(data, dict) else {}
         return {"state": self._job_state(data), "cache": self._cache_summary(data), "raw": {k: v for k, v in data.items() if k != "cache"}}
 
-    # ------------------------------------------------------------------ MASS MESSAGE (CRM, documented): /accounts/{id}/messages/mass with audience.type + dry_run
-    MASS_SEND_TIMEOUT_S = 3600.0        # the real send is a serial loop inside one HTTP request (up to 5,000 recipients)
+    # ------------------------------------------------------------------ MASS MESSAGE = OnlyFans "Fan" list (definitive): GET /api2/v2/lists -> type=fans; POST /messages/mass {userLists:[id], excludedLists:[]}
+    MASS_SEND_TIMEOUT_S = 3600.0
+    FANS_DRY_RUN_SUPPORTED = False       # the OpenAPI schema of /messages/mass documents userLists/excludedLists only: no dry_run with userLists -> never sent
 
-    async def mass_message_crm(self, of_user_id: str, req: OFMassMessageRequest, dry_run: bool = True) -> Dict[str, Any]:
-        """POST {base}/accounts/{of_user_id}/messages/mass. audience.type from req.audience ('ALL' -> 'all', 'ACTIVE' -> 'active').
-        dry_run=True resolves the audience and sends NOTHING -> {success, dry_run, recipients, sent, sample}. dry_run=False = THE real send."""
+    async def get_fans_list(self, of_user_id: str) -> Optional[Dict[str, Any]]:
+        """GET {base}/api2/v2/lists (documented OF passthrough, READ) -> the system list with type == 'fans' (UI 'Fan')."""
+        data = _unwrap(await self._request("GET", f"{self.base}/api2/v2/lists", of_user_id=of_user_id, params={"limit": 100, "offset": 0, "skip_users": "all", "format": "infinite"}))
+        items = data.get("list") if isinstance(data, dict) else data
+        for it in (items or []):
+            if isinstance(it, dict) and (str(it.get("type") or "").lower() == "fans" or str(it.get("id")) == "fans"):
+                cnt = it.get("usersCount")
+                return {"id": str(it.get("id")), "name": it.get("name"), "usersCount": int(cnt) if isinstance(cnt, (int, float)) else None}
+        return None
+
+    async def mass_message_fans(self, of_user_id: str, req: OFMassMessageRequest) -> Dict[str, Any]:
+        """POST {base}/accounts/{of_user_id}/messages/mass {text, price, mediaFiles:[vault ids], userLists:[fans_id], excludedLists:[]} (OpenAPI shape). WRITE."""
         self._mass_guard()
         if not req.text and not req.media_ids:
             raise OFProviderError("API_ERROR", "message requires text or mediaFiles")
-        a_type = {"ALL": "all", "ACTIVE": "active", "EXPIRED": "expired"}.get(str(req.audience).upper())
-        if not a_type:
-            raise OFProviderError("NOT_SUPPORTED", "audience.type deve essere all | active | expired")
-        body: Dict[str, Any] = {"text": req.text, "price": float(req.price) if (req.price or 0) > 0 else 0, "mediaFiles": [str(x) for x in req.media_ids], "audience": {"type": a_type}, "dry_run": bool(dry_run)}
-        url = f"{self.base}/accounts/{of_user_id}/messages/mass"
-        if dry_run:
-            data = await self._request("POST", url, of_user_id=of_user_id, read_post=True, json=body)          # documented: "Preview only — no messages were sent."
-        else:
-            CALLS["mass_dm"] += 1
-            data = await self._request("POST", url, of_user_id=of_user_id, write=True, json=body, timeout=self.MASS_SEND_TIMEOUT_S)
-        data = _unwrap(data) if isinstance(data, dict) and "data" in data and "recipients" not in data else data
-        return data if isinstance(data, dict) else {"raw": data}
+        if not req.user_lists:
+            raise OFProviderError("NOT_SUPPORTED", "userLists obbligatorio: target = lista OnlyFans 'fans'")
+        body: Dict[str, Any] = {"text": req.text, "price": float(req.price) if (req.price or 0) > 0 else 0, "mediaFiles": [str(x) for x in req.media_ids],
+                                "userLists": [str(x) for x in req.user_lists], "excludedLists": [str(x) for x in (req.excluded_lists or [])]}
+        CALLS["mass_dm"] += 1
+        data = await self._request("POST", f"{self.base}/accounts/{of_user_id}/messages/mass", of_user_id=of_user_id, write=True, json=body, timeout=self.MASS_SEND_TIMEOUT_S)
+        inner = data if isinstance(data, dict) else {}
+        if isinstance(inner.get("data"), dict):                                                   # CRM may nest the created queue item under data
+            inner = {**inner, **inner["data"]}
+        mid = inner.get("id") or inner.get("queue_id") or inner.get("queueId")
+        if mid is None and isinstance(inner.get("queue"), dict):
+            mid = inner["queue"].get("id")
+        return {"success": bool((data or {}).get("success", True)) if isinstance(data, dict) else True, "id": str(mid) if mid is not None else None,
+                "sent": inner.get("sent"), "recipients": inner.get("recipients") or inner.get("usersCount"), "raw": inner}
+
+    async def get_recent_chats(self, of_user_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """GET {base}/accounts/{of_user_id}/chats (documented CRM, READ) -> [{withUser, lastMessage, ...}]."""
+        data = await self._request("GET", f"{self.base}/accounts/{of_user_id}/chats", of_user_id=of_user_id, params={"limit": limit})
+        if isinstance(data, dict):
+            for k in ("chats", "list", "items"):
+                if isinstance(data.get(k), list):
+                    return data[k]
+        return data if isinstance(data, list) else []
 
     async def get_chat_messages(self, of_user_id: str, fan_id: str, limit: int = 20) -> Dict[str, Any]:
         """GET {base}/accounts/{of_user_id}/chats/{fan_id}/messages (read-only) -> conversation page."""
@@ -342,9 +364,7 @@ class TheOnlyAPIAdapter(OFProviderAdapter):
 
     @staticmethod
     def _queue_buyers(req: OFMassMessageRequest) -> list:
-        if req.audience != "ALL":
-            raise OFProviderError("NOT_SUPPORTED", "solo audience ALL (tutti i subscriber) è supportata")
-        return []                                                                                    # documented: empty array = all subscribers
+        return []                                                                                    # legacy passthrough path (NOT used by the engine: resolved 0 recipients in production)
 
     async def mass_message_audience_size(self, of_user_id: str) -> Optional[int]:
         """POST /api2/v2/messages/queue/size {queueBuyers: []} -> {size}. Computes only, sends nothing; still behind the mass DM gate."""

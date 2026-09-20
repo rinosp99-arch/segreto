@@ -40,6 +40,9 @@ class MockOFProvider(OFProviderAdapter):
         self.refresh_stuck: bool = False        # job never completes -> TIMEOUT
         self.refresh_yields_empty: bool = False # completes but cache stays 0 (platform says fans exist) -> EMPTY_CACHE
         self.refresh_start_error: Optional[str] = None
+        self.fans_list_present: bool = True      # GET lists contains the system list type=fans
+        self.native_queue_id: bool = True        # provider returns the OF queue id (verification via GET messages/queue)
+        self.last_mass_payload: Optional[dict] = None
         self.chats: Dict[str, List[dict]] = {}   # fan_id -> messages (read-back verification)
 
     # ---------------- READ
@@ -154,24 +157,36 @@ class MockOFProvider(OFProviderAdapter):
         state = {"running": "RUNNING", "completed": "COMPLETED", "failed": "FAILED"}.get(job["state"], "IDLE") if job else "IDLE"
         return {"state": state, "cache": {"total": self.cache_total, "active": self.cache_active, "expired": self.cache_expired, "last_refreshed_at": self.cache_last_refreshed_at, "consecutive_failures": self.cache_failures}, "raw": {"job": dict(job) if job else None}}
 
-    async def mass_message_crm(self, of_user_id: str, req: OFMassMessageRequest, dry_run: bool = True) -> Dict[str, Any]:
+    # ---------------- NATIVE "FANS" LIST (mock): usersCount mirrors the platform count `fans` (new fans reflected immediately, like OnlyFans)
+    async def get_fans_list(self, of_user_id: str):
+        if not self.fans_list_present:
+            return None
+        return {"id": "fans", "name": "Fans", "usersCount": self.fans}
+
+    async def mass_message_fans(self, of_user_id: str, req: OFMassMessageRequest) -> Dict[str, Any]:
         if not req.text and not req.media_ids:
             raise OFProviderError("API_ERROR", "mock: message requires text or mediaFiles", 400)
-        a_type = {"ALL": "all", "ACTIVE": "active", "EXPIRED": "expired"}.get(str(req.audience).upper())
-        if not a_type:
-            raise OFProviderError("NOT_SUPPORTED", "mock: audience.type non valido")
-        recipients = {"all": self.cache_total, "active": self.cache_active, "expired": self.cache_expired}[a_type]      # resolved from the provider CACHE (empty until refreshed)
-        sample = [{"fan_of_user_id": f"fan{i}", "username": f"fan{i}"} for i in range(min(10, recipients))]
-        if dry_run:
-            return {"success": True, "dry_run": True, "recipients": recipients, "sent": 0, "sample": sample, "note": "Preview only — no messages were sent."}
+        if not req.user_lists:
+            raise OFProviderError("NOT_SUPPORTED", "mock: userLists obbligatorio")
         self.write_calls += 1
+        self.last_mass_payload = {"text": req.text, "price": req.price or 0, "mediaFiles": [str(x) for x in req.media_ids], "userLists": list(req.user_lists), "excludedLists": list(req.excluded_lists or [])}
         if self.fail_mass_dm:
             raise OFProviderError("API_ERROR", "mock: mass message rifiutato (validation)", 400)
-        msg = {"id": f"mock_crm_{uuid.uuid4().hex[:10]}", "text": req.text, "mediaFiles": [str(x) for x in req.media_ids], "audience": a_type, "recipients": recipients, "createdAt": datetime.now(timezone.utc).isoformat(), "mock": True, "crm": True}
-        self.mass_messages.append(msg)
-        for f in sample:
-            self.chats.setdefault(f["fan_of_user_id"], []).append({"id": msg["id"], "text": req.text, "mediaCount": len(req.media_ids), "fromUser": {"id": of_user_id}})
-        return {"success": True, "dry_run": False, "recipients": recipients, "sent": 0 if self.hide_mass_dm else recipients, "sample": sample}
+        recipients = self.fans if req.user_lists == ["fans"] else 0
+        mid = f"mock_queue_{uuid.uuid4().hex[:10]}"
+        msg = {"id": mid, "text": req.text, "mediaFiles": [str(x) for x in req.media_ids], "userLists": list(req.user_lists), "excludedLists": list(req.excluded_lists or []), "recipients": recipients,
+               "createdAt": datetime.now(timezone.utc).isoformat(), "mock": True}
+        if not self.hide_mass_dm:
+            self.mass_messages.append(msg)                                                            # visible in GET messages/queue (verification)
+            for i in range(min(10, recipients)):
+                self.chats.setdefault(f"fan{i}", []).append({"id": mid, "text": req.text, "mediaCount": len(req.media_ids), "fromUser": {"id": of_user_id}})
+        return {"success": True, "id": mid if self.native_queue_id else None, "sent": 0 if self.hide_mass_dm else recipients, "recipients": recipients, "raw": dict(msg)}
+
+    async def get_recent_chats(self, of_user_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        out = []
+        for fid, msgs in list(self.chats.items())[:limit]:
+            out.append({"withUser": {"id": fid}, "lastMessage": dict(msgs[-1]) if msgs else None})
+        return out
 
     async def get_chat_messages(self, of_user_id: str, fan_id: str, limit: int = 20) -> Dict[str, Any]:
         return {"list": list(self.chats.get(fan_id, []))[-limit:], "hasMore": False}
@@ -183,8 +198,7 @@ class MockOFProvider(OFProviderAdapter):
         if not req.text and not req.media_ids:
             raise OFProviderError("API_ERROR", "mock: message requires text or mediaFiles", 400)
         mid = f"mock_dm_{uuid.uuid4().hex[:10]}"
-        msg = {"id": mid, "text": req.text, "mediaFiles": list(req.media_ids), "price": req.price or 0, "queueBuyers": [] if req.audience == "ALL" else [req.audience],
-               "audience": "ALL_SUBSCRIBERS" if req.audience == "ALL" else req.audience, "recipients": self.fans, "createdAt": datetime.now(timezone.utc).isoformat(), "mock": True}
+        msg = {"id": mid, "text": req.text, "mediaFiles": list(req.media_ids), "price": req.price or 0, "queueBuyers": [], "recipients": self.fans, "createdAt": datetime.now(timezone.utc).isoformat(), "mock": True}
         if not self.hide_mass_dm:
             self.mass_messages.append(msg)
         confirmed = await self.verify_mass_message(of_user_id, mid)

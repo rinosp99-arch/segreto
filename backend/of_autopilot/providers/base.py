@@ -64,12 +64,14 @@ class OFPostResult:
 
 @dataclass
 class OFMassMessageRequest:
-    """Mass DM to ALL fans/subscribers of the account. `media_ids` = vault media ids of media ALREADY consumed by the confirmed feed post
-    (read back from GET post -> media[].id), PUBLIC first then SECRET. price None/0 = free message."""
+    """Mass DM = OnlyFans UI "Messaggio di massa -> Fan": target is ONLY the native OF system list (type=fans) via userLists, excludedLists=[].
+    `media_ids` = vault media ids of media ALREADY consumed by the confirmed feed post (GET post -> media[].id), PUBLIC first then SECRET.
+    No audience.type, no fan_ids, no cache-built audience, no tranches."""
     text: str
     media_ids: List[Any] = field(default_factory=list)
     price: Optional[float] = None
-    audience: str = "ALL"               # ALL = every subscriber (empty queueBuyers); nothing else is supported by this engine
+    user_lists: List[str] = field(default_factory=list)      # [fans_list_id] resolved from GET lists right before the send
+    excluded_lists: List[str] = field(default_factory=list)  # always []
 
 
 @dataclass
@@ -165,9 +167,18 @@ class OFProviderAdapter(ABC):
         """READ: {"state": RUNNING|COMPLETED|FAILED|IDLE|UNKNOWN, "cache": {total, active, expired, last_refreshed_at, consecutive_failures}, "raw": ...}"""
         raise OFProviderError("NOT_SUPPORTED", "refresh status non supportato da questo provider")
 
-    async def mass_message_crm(self, of_user_id: str, req: OFMassMessageRequest, dry_run: bool = True) -> Dict[str, Any]:
-        """Provider-side mass DM with explicit audience.type and dry_run preview -> {success, dry_run, recipients, sent, sample}."""
-        raise OFProviderError("NOT_SUPPORTED", "mass message CRM non supportato da questo provider")
+    # ---------------- NATIVE "FANS" LIST TARGET (definitive rule)
+    async def get_fans_list(self, of_user_id: str) -> Optional[Dict[str, Any]]:
+        """READ: the OnlyFans system list type=fans -> {"id", "name", "usersCount"} or None. Resolved dynamically before every mass DM."""
+        raise OFProviderError("NOT_SUPPORTED", "liste OnlyFans non supportate da questo provider")
+
+    async def mass_message_fans(self, of_user_id: str, req: OFMassMessageRequest) -> Dict[str, Any]:
+        """THE mass DM: {text, price, mediaFiles, userLists:[fans_id], excludedLists:[]} -> normalised {"success", "id", "sent", "recipients", "raw"}."""
+        raise OFProviderError("NOT_SUPPORTED", "mass message non supportato da questo provider")
+
+    async def get_recent_chats(self, of_user_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """READ: most recent conversations (each with lastMessage) for post-send read-back."""
+        raise OFProviderError("NOT_SUPPORTED", "lettura chat non supportata da questo provider")
 
     async def get_chat_messages(self, of_user_id: str, fan_id: str, limit: int = 20) -> Dict[str, Any]:
         raise OFProviderError("NOT_SUPPORTED", "lettura chat non supportata da questo provider")

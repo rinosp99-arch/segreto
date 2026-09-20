@@ -123,7 +123,8 @@ export default function AdminOfAutopilot() {
           <Pill label={`FEED: ${RUN_LABEL[s?.current_run?.FEED_STATUS] || 'PENDING'}`} color={RUN_COLOR[s?.current_run?.FEED_STATUS] || C.muted} testid="of-feed-status" />
           <Pill label={`FAN REFRESH: ${RUN_LABEL[s?.current_run?.FAN_REFRESH_STATUS] || 'PENDING'}`} color={RUN_COLOR[s?.current_run?.FAN_REFRESH_STATUS] || C.muted} testid="of-fan-refresh-status" />
           <Pill label={`MASS MESSAGE: ${RUN_LABEL[s?.current_run?.MASS_DM_STATUS] || 'PENDING'}`} color={RUN_COLOR[s?.current_run?.MASS_DM_STATUS] || C.muted} testid="of-mass-dm-status" />
-          {s?.current_run?.AUDIENCE != null && <span className="text-muted-foreground" data-testid="of-mass-dm-audience">Audience: {s.current_run.AUDIENCE}{s.current_run.cached_total != null ? ` (cache ${s.current_run.cached_total})` : ''}</span>}
+          <Pill label="TARGET: FAN" color={C.muted} testid="of-mass-dm-target" />
+          {s?.current_run?.FAN_COUNT != null && <span className="text-muted-foreground" data-testid="of-mass-dm-audience">FAN COUNT: {s.current_run.FAN_COUNT}</span>}
           {s && !s.OF_MASS_DM_ENABLED && <span className="text-muted-foreground" data-testid="of-mass-dm-mode">mass message disattivato (OF_MASS_DM_ENABLED=false)</span>}
           {s?.OF_MASS_DM_ENABLED && s?.OF_MASS_DM_MOCK && <span className="text-muted-foreground" data-testid="of-mass-dm-mode">mass message in MOCK</span>}
         </div>

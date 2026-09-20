@@ -575,8 +575,9 @@ async def _mass_dm_step(provider: OFProviderAdapter, of_uid: str, model: dict, r
     log_base = dict(action_type="MASS_DM", model_id=mid, model_slug=run.get("model_slug"), model_name=run.get("model_name"), cycle_number=cyc, trigger=trigger, mock=is_mock, of_link=run["of_link"],
                     feed_post_id=run.get("feed_post_id"), public_media_id=run.get("public_media_id"), secret_media_id=run.get("secret_media_id"), media_ids=media_ids)
     res = await _execute_mass_dm(dmp, provider, of_uid, run_filter, text, media_ids, run["of_link"], is_mock, log_base, attempts_before=int(run.get("mass_dm_attempts") or 0))
-    out.update(MASS_DM_STATUS=res["MASS_DM_STATUS"], advance=res["MASS_DM_STATUS"] == "OK", mass_dm_id=res.get("MASS_DM_MARKER"), error_code=res.get("error_code"),
-               audience_size=res.get("DRY_RUN_RECIPIENTS"), text=text, refresh=res.get("refresh"), sent_count=res.get("REAL_MASS_DM_SENT_COUNT"), readback=res.get("READBACK_VERIFY"))
+    out.update(MASS_DM_STATUS=res["MASS_DM_STATUS"], advance=res["MASS_DM_STATUS"] == "OK", mass_dm_id=res.get("MASS_DM_MARKER"), error_code=res.get("error_code"), target="FAN",
+               fans_list_id=res.get("FANS_LIST_ID"), fans_users_count=res.get("OF_FANS_USERS_COUNT"), audience_size=res.get("OF_FANS_USERS_COUNT"), text=text, refresh=res.get("refresh"),
+               sent_count=res.get("REAL_MASS_DM_SENT_COUNT"), queue_verify=res.get("QUEUE_VERIFY"), readback=res.get("READBACK_VERIFY"))
     return out
 
 
@@ -636,17 +637,17 @@ async def _refresh_subscribers(dmp: OFProviderAdapter, of_uid: str, run_filter: 
 
 
 async def _execute_mass_dm(dmp: OFProviderAdapter, provider: OFProviderAdapter, of_uid: str, run_filter: dict, text: str, media_ids: list, of_url: str, is_mock: bool, log_base: dict, attempts_before: int = 0) -> dict:
-    """ONE CRM mass message to ALL fans (audience.type=all): gate on -> subscriber cache refresh (wait COMPLETED) -> provider dry_run (recipients>0) ->
-    state SENDING -> real send -> read-back on sample chats -> OK | UNVERIFIED | FAILED -> gate off (finally, verified by READ).
-    Never a second send: SENDING/OK/UNVERIFIED are terminal for the caller's duplicate checks."""
-    rep = {"MASS_DM_STATUS": "PENDING", "AUDIENCE_TYPE": "all", "WRITE_GATE_ENABLED": False, "REAL_MASS_DM_CREATE": None, "DRY_RUN_RECIPIENTS": None, "REAL_MASS_DM_SENT_COUNT": None,
-           "READBACK_VERIFY": None, "MASS_DM_MARKER": None, "error_code": None, "refresh": None}
+    """ONE mass DM = OnlyFans UI "Messaggio di massa -> Fan": subscriber cache refresh (CRM data only) -> GET lists -> system list type=fans (usersCount>0)
+    -> gate on -> state SENDING -> POST messages/mass {userLists:[fans_id], excludedLists:[]} -> verify (GET messages/queue by id, else read-back recent chats)
+    -> OK | UNVERIFIED | FAILED -> gate off (finally, verified by READ). No audience.type, no fan_ids, no cache-built audience, no tranches, never a second send."""
+    rep = {"MASS_DM_STATUS": "PENDING", "TARGET": "FAN", "WRITE_GATE_ENABLED": False, "REAL_MASS_DM_CREATE": None, "FANS_LIST_FOUND": None, "FANS_LIST_ID": None, "OF_FANS_USERS_COUNT": None,
+           "FANS_DRY_RUN_SUPPORTED": bool(getattr(dmp, "FANS_DRY_RUN_SUPPORTED", False)), "REAL_MASS_DM_SENT_COUNT": None, "MASS_DM_ID": None, "QUEUE_VERIFY": None, "READBACK_VERIFY": None,
+           "MASS_DM_MARKER": None, "error_code": None, "refresh": None}
     gate_opened = False
-    req = OFMassMessageRequest(text=text, media_ids=media_ids, price=None, audience="ALL")
 
     async def fail(status: str, err: str, log_status: str = "MASS_DM_FAILED", **extra):
         await runs_col.update_one(run_filter, {"$set": {"mass_dm_status": status, "mass_dm_error": err, "updated_at": now_iso(), **extra}, "$inc": {"mass_dm_attempts": 1}})
-        await _log(status=log_status, **log_base, error_code=err, recipients=rep.get("DRY_RUN_RECIPIENTS"))
+        await _log(status=log_status, **log_base, error_code=err, fans_users_count=rep.get("OF_FANS_USERS_COUNT"))
         rep.update(MASS_DM_STATUS=status, error_code=err)
         return rep
 
@@ -656,7 +657,7 @@ async def _execute_mass_dm(dmp: OFProviderAdapter, provider: OFProviderAdapter, 
         except OFProviderError:
             hint = None
         rep["SUBSCRIBERS_COUNT"] = hint
-        # 1) refresh the provider subscriber cache (READ-side sync). If the panel gate blocks it, open the gate and retry once.
+        # 1) subscriber cache refresh (keeps CRM data fresh; NOT the audience source). If the panel gate blocks it, open the gate and retry once.
         ref = await _refresh_subscribers(dmp, of_uid, run_filter, is_mock, hint)
         if ref["status"] == "START_FAILED" and ref.get("error_code") in ("FORBIDDEN", "WRITES_DISABLED") and hasattr(dmp, "set_write_gate"):
             await dmp.set_write_gate(of_uid, True)
@@ -665,53 +666,66 @@ async def _execute_mass_dm(dmp: OFProviderAdapter, provider: OFProviderAdapter, 
         rep["refresh"] = {k: ref.get(k) for k in ("status", "polls")} | {"cache": ref.get("cache")}
         if not ref["ok"]:
             return await fail("PENDING" if ref["status"] in ("TIMEOUT", "START_FAILED") else "FAILED", f"REFRESH_{ref['status']}", "MASS_DM_REFRESH_FAILED")
-        # 2) gate on (writes)
+        # 2) resolve the native OnlyFans "Fans" list dynamically (READ) — the ONLY target
+        try:
+            fans = await dmp.get_fans_list(of_uid)
+        except OFProviderError as e:
+            fans = None
+            rep["FANS_LIST_ERROR"] = e.code
+        rep["FANS_LIST_FOUND"] = bool(fans)
+        if not fans:
+            return await fail("FAILED", "FANS_LIST_NOT_FOUND", target="FAN")
+        rep["FANS_LIST_ID"], rep["OF_FANS_USERS_COUNT"] = fans["id"], fans.get("usersCount")
+        await runs_col.update_one(run_filter, {"$set": {"target": "FAN", "of_fans_list_id": fans["id"], "of_fans_users_count": fans.get("usersCount"), "updated_at": now_iso()}})
+        if not isinstance(fans.get("usersCount"), int) or fans["usersCount"] <= 0:
+            return await fail("FAILED", "FANS_LIST_EMPTY")
+        req = OFMassMessageRequest(text=text, media_ids=media_ids, price=None, user_lists=[fans["id"]], excluded_lists=[])
+        # 3) gate on (writes)
         if not gate_opened and hasattr(dmp, "set_write_gate"):
             await dmp.set_write_gate(of_uid, True)
             gate_opened, rep["WRITE_GATE_ENABLED"] = True, True
-        # 3) provider dry_run for the IDENTICAL body: recipients must be > 0
-        try:
-            dry = await dmp.mass_message_crm(of_uid, req, dry_run=True)
-        except OFProviderError as e:
-            return await fail("FAILED", f"DRY_RUN_{e.code}")
-        recipients = dry.get("recipients")
-        rep["DRY_RUN_RECIPIENTS"] = recipients
-        sample_ids = [str(f.get("fan_of_user_id")) for f in (dry.get("sample") or []) if f.get("fan_of_user_id")][:5]
-        dry_ok = bool(dry.get("success")) and dry.get("dry_run") is True and (dry.get("sent") or 0) == 0 and isinstance(recipients, int) and recipients > 0
-        if not dry_ok:
-            return await fail("FAILED", "EMPTY_AUDIENCE" if isinstance(recipients, int) and recipients <= 0 else "DRY_RUN_INVALID", mass_dm_recipients=recipients)
         # 4) SENDING state BEFORE the send (idempotency key = run_filter: model_id + cycle/post key)
-        await runs_col.update_one(run_filter, {"$set": {"mass_dm_status": "SENDING", "mass_dm_recipients": recipients, "mass_dm_sample_ids": sample_ids, "mass_dm_send_started_at": now_iso(), "updated_at": now_iso()}, "$inc": {"mass_dm_attempts": 1}})
+        await runs_col.update_one(run_filter, {"$set": {"mass_dm_status": "SENDING", "mass_dm_recipients": fans["usersCount"], "mass_dm_user_lists": [fans["id"]], "mass_dm_send_started_at": now_iso(), "updated_at": now_iso()}, "$inc": {"mass_dm_attempts": 1}})
         send_error, definitive_fail, res = None, False, None
         try:
-            res = await dmp.mass_message_crm(of_uid, req, dry_run=False)
+            res = await dmp.mass_message_fans(of_uid, req)
         except OFProviderError as e:
             send_error = e.code
             definitive_fail = e.code in ("WRITES_DISABLED", "FORBIDDEN", "MASS_DM_DISABLED", "NOT_SUPPORTED", "NOT_CONFIGURED", "UNAUTHORIZED", "NOT_FOUND") or (e.code == "API_ERROR" and e.status is not None and e.status < 500)
+        mid = res.get("id") if isinstance(res, dict) else None
         sent = res.get("sent") if isinstance(res, dict) else None
-        ok = isinstance(res, dict) and bool(res.get("success")) and res.get("dry_run") is False and isinstance(sent, int) and sent > 0
-        rep.update(REAL_MASS_DM_CREATE="PASS" if ok else ("FAIL" if (res is not None or definitive_fail) else f"UNKNOWN_{send_error}"), REAL_MASS_DM_SENT_COUNT=sent)
-        # 5) read-back on sample recipients (documented GET chats/{fan}/messages): opener + OF link
-        verified, checked = False, 0
-        needle = of_url.lower().replace("https://", "")
-        for fid in sample_ids[:3]:
+        accepted = isinstance(res, dict) and bool(res.get("success"))
+        rep.update(REAL_MASS_DM_CREATE="PASS" if accepted else ("FAIL" if (res is not None or definitive_fail) else f"UNKNOWN_{send_error}"), REAL_MASS_DM_SENT_COUNT=sent, MASS_DM_ID=mid)
+        # 5) verify: documented queue READ by id first; otherwise read-back on recent conversations (never a reason to resend)
+        q_ok = False
+        if mid:
             try:
-                blob = json.dumps(await dmp.get_chat_messages(of_uid, fid, limit=20), ensure_ascii=False).lower()
+                q_ok = await dmp.verify_mass_message(of_uid, str(mid))
+            except OFProviderError:
+                q_ok = False
+        rep["QUEUE_VERIFY"] = ("PASS" if q_ok else "FAIL") if mid else "NO_ID"
+        verified, checked = q_ok, 0
+        if not verified:
+            needle = of_url.lower().replace("https://", "")
+            try:
+                chats = await dmp.get_recent_chats(of_uid, limit=20)
+            except OFProviderError:
+                chats = []
+            for ch in chats[:20]:
                 checked += 1
+                blob = json.dumps(ch.get("lastMessage") or ch, ensure_ascii=False).lower()
                 if needle in blob and "hai già scoperto" in blob:
                     verified = True
                     break
-            except OFProviderError:
-                continue
-        rep["READBACK_VERIFY"] = "PASS" if verified else ("FAIL" if checked else "UNAVAILABLE")
-        confirmed = ok and verified
-        status = "OK" if confirmed else ("UNVERIFIED" if (ok or verified or (res is None and not definitive_fail)) else "FAILED")
-        marker = f"crm:{uuid.uuid4().hex[:12]}" if status in ("OK", "UNVERIFIED") else None
-        err = None if confirmed else (send_error or ("NOT_VERIFIED" if ok else "SEND_FAILED"))
-        await runs_col.update_one(run_filter, {"$set": {"mass_dm_status": status, "mass_dm_id": marker, "mass_dm_sent_count": sent, "mass_dm_recipients": recipients, "mass_dm_error": err,
-                                  "mass_dm_confirmed_at": now_iso() if confirmed else None, "mass_dm_audience_size": recipients, "mass_dm_readback": rep["READBACK_VERIFY"], "updated_at": now_iso()}})
+        rep["READBACK_VERIFY"] = "PASS" if (verified and not q_ok) else ("SKIPPED" if q_ok else ("FAIL" if checked else "UNAVAILABLE"))
+        confirmed = accepted and verified
+        status = "OK" if confirmed else ("UNVERIFIED" if (accepted or verified or (res is None and not definitive_fail)) else "FAILED")
+        marker = (str(mid) if mid else f"crm:{uuid.uuid4().hex[:12]}") if status in ("OK", "UNVERIFIED") else None
+        err = None if confirmed else (send_error or ("NOT_VERIFIED" if accepted else "SEND_FAILED"))
+        await runs_col.update_one(run_filter, {"$set": {"mass_dm_status": status, "mass_dm_id": marker, "mass_dm_queue_id": mid, "mass_dm_sent_count": sent, "mass_dm_error": err,
+                                  "mass_dm_confirmed_at": now_iso() if confirmed else None, "mass_dm_queue_verify": rep["QUEUE_VERIFY"], "mass_dm_readback": rep["READBACK_VERIFY"], "updated_at": now_iso()}})
         await _log(status=("MOCK_DM_CONFIRMED" if is_mock else "MASS_DM_CONFIRMED") if confirmed else ("MASS_DM_NOT_CONFIRMED" if status == "UNVERIFIED" else "MASS_DM_FAILED"), **log_base,
-                   mass_dm_id=marker, mass_dm_text=text, recipients=recipients, sent=sent, audience="all", error_code=err)
+                   mass_dm_id=marker, mass_dm_text=text, target="FAN", user_lists=[fans["id"]], fans_users_count=fans["usersCount"], sent=sent, error_code=err)
         rep.update(MASS_DM_STATUS=status, MASS_DM_MARKER=marker, error_code=err)
         return rep
     finally:
@@ -942,12 +956,12 @@ async def status() -> dict:
 def _run_view(run: Optional[dict]) -> dict:
     """Admin-minimal view of the current model's run: FEED OK/PENDING/FAILED · MASS MESSAGE OK/PENDING/FAILED (+ DISABLED/MOCK_ONLY/SKIPPED/UNVERIFIED)."""
     if not run:
-        return {"FEED_STATUS": "PENDING", "MASS_DM_STATUS": "PENDING", "FAN_REFRESH_STATUS": "PENDING", "AUDIENCE": None, "model_slug": None}
+        return {"FEED_STATUS": "PENDING", "MASS_DM_STATUS": "PENDING", "FAN_REFRESH_STATUS": "PENDING", "TARGET": "FAN", "FAN_COUNT": None, "AUDIENCE": None, "model_slug": None}
     fr = run.get("subscriber_refresh_status")
     return {"FEED_STATUS": run.get("feed_status") or "PENDING", "MASS_DM_STATUS": run.get("mass_dm_status") or "PENDING", "model_slug": run.get("model_slug"), "cycle_number": run.get("cycle_number"),
             "feed_post_id": run.get("feed_post_id"), "mass_dm_id": run.get("mass_dm_id"), "mass_dm_error": run.get("mass_dm_error"), "mass_dm_attempts": run.get("mass_dm_attempts"), "mock": run.get("mock"),
             "dm_due_at": run.get("dm_due_at"), "FAN_REFRESH_STATUS": ("OK" if fr == "OK" else "RUNNING" if fr == "RUNNING" else "FAILED" if fr else "PENDING"), "fan_refresh_detail": fr,
-            "AUDIENCE": run.get("mass_dm_recipients"), "cached_total": run.get("cached_total"), "cached_active": run.get("cached_active"), "cached_expired": run.get("cached_expired"),
+            "TARGET": "FAN", "FAN_COUNT": run.get("of_fans_users_count"), "AUDIENCE": run.get("of_fans_users_count") if run.get("of_fans_users_count") is not None else run.get("mass_dm_recipients"), "cached_total": run.get("cached_total"), "cached_active": run.get("cached_active"), "cached_expired": run.get("cached_expired"),
             "last_refreshed_at": run.get("last_refreshed_at"), "sent_count": run.get("mass_dm_sent_count")}
 
 
@@ -1039,16 +1053,22 @@ async def mass_dm_from_post(model_slug: str, post_id: str, execute: bool = False
         else:
             ck["SOURCE_POST_ACCOUNT=latosegreto"] = ck["SOURCE_MEDIA_COUNT=2"] = ck["VAULT_MEDIA_IDS_FOUND"] = ck["SOURCE_POST_BELONGS_TO_MODEL(OF link in caption)"] = False
         rep["VAULT_MEDIA_IDS_MASKED"] = [f"…{str(x)[-4:]}" for x in media_ids]
-        # audience ALL subscribers: READ proxy (users/me.subscribersCount) before the gate; the exact queue size is re-checked after the gate opens
-        audience = None
+        # TARGET = OnlyFans native "Fans" list (READ, resolved dynamically): FANS_LIST_FOUND, usersCount > 0
+        fans = None
         if dmp is not None and of_uid:
             try:
-                audience = await dmp.subscribers_count(of_uid)
+                fans = await dmp.get_fans_list(of_uid)
             except OFProviderError as e:
-                rep["AUDIENCE_ERROR"] = e.code
-        rep["AUDIENCE_SIZE"] = audience
-        rep["SUBSCRIBERS_COUNT"] = audience
-        ck["MASS_DM_TARGET_ALL_FANS(subscribers>0)"] = isinstance(audience, int) and audience > 0
+                rep["FANS_LIST_ERROR"] = e.code
+            try:
+                rep["SUBSCRIBERS_COUNT"] = await dmp.subscribers_count(of_uid)
+            except OFProviderError:
+                rep["SUBSCRIBERS_COUNT"] = None
+        rep["ONLYFANS_UI_TARGET"], rep["TARGET"] = "FAN", "FAN"
+        rep["FANS_LIST_FOUND"], rep["FANS_LIST_ID"], rep["OF_FANS_USERS_COUNT"] = bool(fans), (fans or {}).get("id"), (fans or {}).get("usersCount")
+        rep["FANS_DRY_RUN_SUPPORTED"] = bool(getattr(dmp, "FANS_DRY_RUN_SUPPORTED", False)) if dmp is not None else None
+        ck["FANS_LIST_FOUND(type=fans)"] = bool(fans)
+        ck["FANS_USERS_COUNT>0"] = bool(fans) and isinstance(fans.get("usersCount"), int) and fans["usersCount"] > 0
         # copy (different from the feed text read back from the post)
         cap = None
         if model and of_url:
@@ -1072,11 +1092,10 @@ async def mass_dm_from_post(model_slug: str, post_id: str, execute: bool = False
             return rep
         # ---------------- the ONE write: shared CRM flow (gate -> refresh -> dry_run -> SENDING -> send -> read-back -> gate off)
         run_key = _run_key(post_id)
-        rep["AUDIENCE_TYPE"] = "all"
         run_filter = {"model_id": model["id"], "cycle_number": run_key}
         await runs_col.update_one(run_filter, {"$set": {"model_slug": model_slug, "model_name": row["name"], "mock": is_mock, "action_type": "MASS_DM_TEST", "feed_status": "OK", "feed_post_id": post_id,
                                   "feed_media_ids": media_ids, "feed_caption": text, "of_link": of_url, "mass_dm_text": cap["text"], "mass_dm_copy_source": cap["source"], "mass_dm_different_from_feed": True,
-                                  "mass_dm_status": "PENDING", "mass_dm_audience_type": "all", "updated_at": now_iso()},
+                                  "mass_dm_status": "PENDING", "target": "FAN", "updated_at": now_iso()},
                                   "$setOnInsert": {"id": str(uuid.uuid4()), "model_id": model["id"], "cycle_number": run_key, "created_at": now_iso(), "mass_dm_attempts": 0}}, upsert=True)
         if not is_mock and await real_mass_dm_sent_count() >= REAL_MASS_DM_TEST_MAX:                  # hard cap re-check
             rep["status"], rep["REAL_MASS_DM_CREATE"] = "BLOCKED_HARD_CAP", "SKIPPED"
@@ -1084,17 +1103,18 @@ async def mass_dm_from_post(model_slug: str, post_id: str, execute: bool = False
             return rep
         log_base = dict(action_type="MASS_DM_TEST", model_id=model["id"], model_slug=model_slug, model_name=row["name"], trigger=trigger, mock=is_mock, of_link=of_url, feed_post_id=post_id, media_ids=media_ids)
         res = await _execute_mass_dm(dmp, provider, of_uid, run_filter, cap["text"], media_ids, of_url, is_mock, log_base)
-        rep.update({k: res.get(k) for k in ("WRITE_GATE_ENABLED", "REAL_MASS_DM_CREATE", "DRY_RUN_RECIPIENTS", "REAL_MASS_DM_SENT_COUNT", "READBACK_VERIFY", "MASS_DM_MARKER", "error_code", "refresh", "SUBSCRIBERS_COUNT", "write_gate", "WRITE_GATE_RESTORED_TO_FALSE")})
-        rep["AUDIENCE_COUNT"] = res.get("DRY_RUN_RECIPIENTS")
-        rep["REAL_MASS_DM_VERIFY"] = res.get("READBACK_VERIFY")
+        rep.update({k: res.get(k) for k in ("WRITE_GATE_ENABLED", "REAL_MASS_DM_CREATE", "REAL_MASS_DM_SENT_COUNT", "QUEUE_VERIFY", "READBACK_VERIFY", "MASS_DM_MARKER", "MASS_DM_ID", "error_code", "refresh",
+                                           "SUBSCRIBERS_COUNT", "write_gate", "WRITE_GATE_RESTORED_TO_FALSE", "FANS_LIST_FOUND", "FANS_LIST_ID", "OF_FANS_USERS_COUNT", "FANS_DRY_RUN_SUPPORTED")})
+        rep["MASS_DM_TARGET_PAYLOAD"] = {"userLists": [rep.get("FANS_LIST_ID")], "excludedLists": []}
+        rep["REAL_MASS_DM_VERIFY"] = "PASS" if res["MASS_DM_STATUS"] == "OK" else "FAIL"
         rep["REAL_MASS_DM_CONFIRMED"] = "PASS" if res["MASS_DM_STATUS"] == "OK" else "FAIL"
-        rep["MASS_DM_ID_RECEIVED"] = False
+        rep["MASS_DM_ID_RECEIVED"] = bool(res.get("MASS_DM_ID"))
         st_map = {"OK": "MASS_DM_CONFIRMED", "UNVERIFIED": "MASS_DM_UNVERIFIED", "FAILED": "MASS_DM_FAILED", "PENDING": "MASS_DM_PENDING"}
         err = res.get("error_code") or ""
         if err.startswith("REFRESH_"):
             rep["status"] = "ABORTED_" + err
-        elif err == "EMPTY_AUDIENCE":
-            rep["status"] = "ABORTED_EMPTY_AUDIENCE"
+        elif err in ("FANS_LIST_NOT_FOUND", "FANS_LIST_EMPTY"):
+            rep["status"] = "ABORTED_" + err
         else:
             rep["status"] = st_map.get(res["MASS_DM_STATUS"], res["MASS_DM_STATUS"])
         if rep["REAL_MASS_DM_CREATE"] is None:

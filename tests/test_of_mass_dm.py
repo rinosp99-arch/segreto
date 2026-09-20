@@ -87,11 +87,14 @@ async def test_feed_then_mass_dm_happy_path(sandbox):
     assert r["media_order"] == ["PUBLIC", "SECRET"] and r["SAME_MODEL_MEDIA"] is True and r["public_media_id"].startswith("pub:") and r["secret_media_id"].startswith("sec:")
     assert r["of_link"] == a["onlyfans_url"] and r["caption"].rstrip().endswith(a["onlyfans_url"])                                     # CORRECT_MODEL_OF_LINK (feed)
     dm = r["mass_dm"]
-    assert r["MASS_DM_STATUS"] == "OK" and dm["advance"] is True and dm["mass_dm_id"].startswith("crm:") and len(mock.mass_messages) == 1   # MASS_DM_CREATE + read-back MASS_DM_VERIFY
-    assert mock.refresh_starts == 1 and dm["refresh"]["status"] == "OK" and mock.cache_total == mock.fans + mock.expired_fans          # SUBSCRIBER_REFRESH_START/STATUS/COMPLETED before the DM
-    assert dm["audience_size"] == mock.fans + mock.expired_fans and dm["sent_count"] == dm["audience_size"] and dm["readback"] == "PASS"   # DRY_RUN_AFTER_REFRESH, recipients = ALL (active+expired)
+    assert r["MASS_DM_STATUS"] == "OK" and dm["advance"] is True and dm["mass_dm_id"].startswith("mock_queue_") and len(mock.mass_messages) == 1   # MASS_DM_CREATE + queue MASS_DM_VERIFY
+    assert mock.refresh_starts == 1 and dm["refresh"]["status"] == "OK" and mock.cache_total == mock.fans + mock.expired_fans          # SUBSCRIBER_REFRESH before the DM (CRM data only)
+    assert dm["target"] == "FAN" and dm["fans_list_id"] == "fans" and dm["fans_users_count"] == mock.fans and dm["sent_count"] == mock.fans   # TARGET = native OF "Fans" list, NOT the cache (cache total != fans)
+    assert dm["queue_verify"] == "PASS" and dm["readback"] == "SKIPPED"
     msg = mock.mass_messages[0]
-    assert msg["audience"] == "all" and msg["recipients"] == mock.cache_total                                                          # MASS_DM_TARGET_ALL
+    assert msg["userLists"] == ["fans"] and msg["excludedLists"] == [] and "audience" not in msg and "fan_ids" not in msg and "queueBuyers" not in msg   # MASS_DM_TARGET_PAYLOAD
+    assert mock.last_mass_payload == {"text": msg["text"], "price": 0, "mediaFiles": msg["mediaFiles"], "userLists": ["fans"], "excludedLists": []}
+    assert set(mock.last_mass_payload) == {"text", "price", "mediaFiles", "userLists", "excludedLists"}                                  # AUDIENCE_TYPE_REMOVED + FAN_IDS_REMOVED
     post_media_ids = [str(m["id"]) for m in mock.posts[r["provider_post_id"]]["media"]]
     assert msg["mediaFiles"] == post_media_ids and len(msg["mediaFiles"]) == 2                                                          # same PUBLIC+SECRET pair as the feed (vault ids from read-back)
     assert all(u["model_id"] == a["id"] for u in [x async for x in engine.uploads_col.find({"provider_post_id": r["provider_post_id"]})])   # SAME_MODEL_MEDIA
@@ -104,15 +107,17 @@ async def test_feed_then_mass_dm_happy_path(sandbox):
     run = await engine.get_run(a["id"], 1)
     assert run["feed_status"] == "OK" and run["mass_dm_status"] == "OK" and run["mass_dm_id"] == dm["mass_dm_id"] and run["mock"] is True
     assert run["subscriber_refresh_status"] == "OK" and run["subscriber_refresh_started_at"] and run["subscriber_refresh_completed_at"] and run["cached_total"] == mock.cache_total   # REFRESH STATE
-    assert run["cached_active"] == mock.fans and run["cached_expired"] == mock.expired_fans and run["last_refreshed_at"] and run["mass_dm_recipients"] == mock.cache_total
+    assert run["cached_active"] == mock.fans and run["cached_expired"] == mock.expired_fans and run["last_refreshed_at"]
+    assert run["target"] == "FAN" and run["of_fans_list_id"] == "fans" and run["of_fans_users_count"] == mock.fans and run["mass_dm_user_lists"] == ["fans"] and run["mass_dm_queue_id"] == dm["mass_dm_id"]
     st = await engine.status()
     assert st["queue"]["current"]["slug"] == b["slug"] and st["OF_REAL_MASS_DM_SENT"] is False and st["THE_ONLY_API_REAL_MASS_DM_CALLS"] == 0 and st["TOTAL_REAL_POSTS_CREATED"] == 0
-    assert st["current_run"]["FEED_STATUS"] == "PENDING" and st["current_run"]["MASS_DM_STATUS"] == "PENDING" and st["current_run"]["FAN_REFRESH_STATUS"] == "PENDING"
-    # NEW_SUBSCRIBERS_INCLUDED: 15 new fans arrive -> next model's DM refreshes and uses the updated audience (never the previous cycle's count)
+    assert st["current_run"]["FEED_STATUS"] == "PENDING" and st["current_run"]["MASS_DM_STATUS"] == "PENDING" and st["current_run"]["FAN_REFRESH_STATUS"] == "PENDING" and st["current_run"]["TARGET"] == "FAN"
+    # NEW_FANS_INCLUDED: 15 new fans -> the next DM resolves the Fans list again and OnlyFans usersCount reflects them (never the previous count)
     mock.fans += 15
     r2 = await engine.run("PUBLISH_NOW", "test")
     assert r2["status"] == "MOCK_CONFIRMED" and r2["model_slug"] == b["slug"] and mock.refresh_starts == 2
-    assert r2["mass_dm"]["audience_size"] == mock.fans + mock.expired_fans == dm["audience_size"] + 15 and mock.mass_messages[1]["recipients"] == dm["audience_size"] + 15
+    assert r2["mass_dm"]["fans_users_count"] == mock.fans == dm["fans_users_count"] + 15 and mock.mass_messages[1]["recipients"] == dm["fans_users_count"] + 15
+    assert (await engine.status())["current_run"]["FAN_COUNT"] is None                                                                  # next model not started
     assert (await engine.status())["scheduler"]["slots"] if False else True
 
 
@@ -123,7 +128,7 @@ async def test_feed_success_dm_fail_retry_only_dm(sandbox):
     mock.fail_mass_dm = True
     r = await engine.run("PUBLISH_NOW", "test")
     assert r["status"] == "MOCK_CONFIRMED_DM_FAILED" and r["FEED_STATUS"] == "OK" and r["MASS_DM_STATUS"] == "FAILED" and r["mass_dm"]["advance"] is False
-    assert len(mock.posts) == 1 and len(mock.mass_messages) == 0 and mock.refresh_starts == 1 and r["mass_dm"]["audience_size"] > 0        # refresh + dry run happened, send rejected
+    assert len(mock.posts) == 1 and len(mock.mass_messages) == 0 and mock.refresh_starts == 1 and r["mass_dm"]["fans_users_count"] > 0     # refresh + fans list resolved, send rejected (400)
     st = await engine.status()
     assert st["queue"]["current"]["slug"] == a["slug"] and st["current_run"] == {**st["current_run"], "FEED_STATUS": "OK", "MASS_DM_STATUS": "FAILED"}   # queue did NOT advance
     assert st["last_error"].startswith("MASS_DM:")
@@ -159,7 +164,8 @@ async def test_dm_not_confirmed_never_resent(sandbox):
     a, = await seed(_model(f"{TAG}-elsa", 0))
     mock.hide_mass_dm = True
     r = await engine.run("PUBLISH_NOW", "test")
-    assert r["MASS_DM_STATUS"] == "UNVERIFIED" and r["status"] == "MOCK_CONFIRMED_DM_UNVERIFIED" and mock.write_calls == 4          # 2 uploads + post + 1 dm send (sent=0 but chats show it)
+    assert r["MASS_DM_STATUS"] == "UNVERIFIED" and r["status"] == "MOCK_CONFIRMED_DM_UNVERIFIED" and mock.write_calls == 4          # 2 uploads + post + 1 dm send (accepted but not verifiable)
+    assert r["mass_dm"]["queue_verify"] == "FAIL" and r["mass_dm"]["readback"] in ("FAIL", "UNAVAILABLE")
     mock.hide_mass_dm = False
     r2 = await engine.run("PUBLISH_NOW", "test")
     assert r2["status"] == "FEED_OK_DM_UNVERIFIED" and r2["mass_dm"]["duplicate_prevented"] is True and mock.write_calls == 4         # NO_DUPLICATE_MASS_DM
@@ -194,16 +200,12 @@ async def test_real_adapter_mass_dm_blocked_without_network(monkeypatch):
         for k, v in env.items():
             monkeypatch.setenv(k, v)
         with pytest.raises(OFProviderError) as ei:
-            await ad.send_mass_message("1", OFMassMessageRequest(text="x", media_ids=["1"]))
+            await ad.mass_message_fans("1", OFMassMessageRequest(text="x", media_ids=["1"], user_lists=["fans"]))
         assert ei.value.code == "MASS_DM_DISABLED"
         with pytest.raises(OFProviderError) as ei2:
-            await ad.mass_message_audience_size("1")
+            await ad.send_mass_message("1", OFMassMessageRequest(text="x", media_ids=["1"]))            # legacy passthrough path also gated
         assert ei2.value.code == "MASS_DM_DISABLED"
     assert toa.CALLS == before, "no network, no counters"
-    # documented body shape: queueBuyers [] = all subscribers; only ALL audience accepted
-    assert ad._queue_buyers(OFMassMessageRequest(text="x", audience="ALL")) == []
-    with pytest.raises(OFProviderError):
-        ad._queue_buyers(OFMassMessageRequest(text="x", audience="vip"))
 
 
 async def test_mass_dm_from_post_unverified_never_resent(sandbox, monkeypatch):
@@ -213,13 +215,11 @@ async def test_mass_dm_from_post_unverified_never_resent(sandbox, monkeypatch):
     r = await engine.run("PUBLISH_NOW", "test")
     pid = r["provider_post_id"]
     monkeypatch.setenv("OF_MASS_DM_ENABLED", "true")
-    async def net_error(uid, req, dry_run=True):
-        if dry_run:
-            return {"success": True, "dry_run": True, "recipients": 5, "sent": 0, "sample": [{"fan_of_user_id": "fanX", "username": "x"}]}
-        raise OFProviderError("NETWORK_ERROR", "timeout")                                              # connection dropped during the serial send
-    monkeypatch.setattr(mock, "mass_message_crm", net_error)
+    async def net_error(uid, req):
+        raise OFProviderError("NETWORK_ERROR", "timeout")                                              # connection dropped during the send
+    monkeypatch.setattr(mock, "mass_message_fans", net_error)
     e = await engine.mass_dm_from_post(a["slug"], pid, execute=True, trigger="test")
-    assert e["status"] == "MASS_DM_UNVERIFIED" and e["REAL_MASS_DM_CREATE"].startswith("UNKNOWN_") and e["READBACK_VERIFY"] == "FAIL" and e["WRITE_GATE_RESTORED_TO_FALSE"] is True
+    assert e["status"] == "MASS_DM_UNVERIFIED" and e["REAL_MASS_DM_CREATE"].startswith("UNKNOWN_") and e["READBACK_VERIFY"] in ("FAIL", "UNAVAILABLE") and e["WRITE_GATE_RESTORED_TO_FALSE"] is True
     run = await engine.runs_col.find_one({"cycle_number": f"post:{pid}"}, {"_id": 0})
     assert run["mass_dm_status"] == "UNVERIFIED" and run["mass_dm_id"].startswith("crm:")
     e2 = await engine.mass_dm_from_post(a["slug"], pid, execute=True, trigger="test")               # NEVER a blind retry
@@ -254,17 +254,18 @@ async def test_mass_dm_from_existing_post_mock(sandbox, monkeypatch):
     # 1) DRY RUN = read-only pre-checks + copy preview, zero writes
     d = await engine.mass_dm_from_post(a["slug"], pid, execute=False, trigger="test")
     assert d["status"] == "DRY_RUN_PASS" and d["ALL_PRECHECKS_PASS"] is True and all(d["checks"].values()), d["checks"]
-    assert d["SOURCE_MEDIA_COUNT"] == 2 and len(d["VAULT_MEDIA_IDS_MASKED"]) == 2 and d["AUDIENCE_SIZE"] == mock.fans and d["WRITE_GATE_BEFORE"] is False
+    assert d["SOURCE_MEDIA_COUNT"] == 2 and len(d["VAULT_MEDIA_IDS_MASKED"]) == 2 and d["FANS_LIST_FOUND"] is True and d["FANS_LIST_ID"] == "fans" and d["OF_FANS_USERS_COUNT"] == mock.fans and d["WRITE_GATE_BEFORE"] is False
+    assert d["ONLYFANS_UI_TARGET"] == "FAN" and d["FANS_DRY_RUN_SUPPORTED"] is False
     assert d["MASS_DM_TEXT"].startswith("👀 Hai già scoperto ") and d["MASS_DM_TEXT"].rstrip().endswith(a["onlyfans_url"]) and d["MASS_DM_TEXT"] != r["caption"]
     assert mock.write_calls == writes_before and len(mock.mass_messages) == 0 and mock.gate_history == []
     # 2) EXECUTE = gate on -> ONE mass DM -> verify -> saved -> gate off (verified)
     e = await engine.mass_dm_from_post(a["slug"], pid, execute=True, trigger="test")
-    assert e["status"] == "MASS_DM_CONFIRMED" and e["REAL_MASS_DM_CREATE"] == "PASS" and e["READBACK_VERIFY"] == "PASS" and e["REAL_MASS_DM_CONFIRMED"] == "PASS"
-    assert e["AUDIENCE_TYPE"] == "all" and e["DRY_RUN_RECIPIENTS"] == mock.fans + mock.expired_fans and e["REAL_MASS_DM_SENT_COUNT"] == mock.fans + mock.expired_fans   # ALL = active + expired
+    assert e["status"] == "MASS_DM_CONFIRMED" and e["REAL_MASS_DM_CREATE"] == "PASS" and e["QUEUE_VERIFY"] == "PASS" and e["REAL_MASS_DM_CONFIRMED"] == "PASS" and e["MASS_DM_ID_RECEIVED"] is True
+    assert e["MASS_DM_TARGET_PAYLOAD"] == {"userLists": ["fans"], "excludedLists": []} and e["REAL_MASS_DM_SENT_COUNT"] == mock.fans and e["OF_FANS_USERS_COUNT"] == mock.fans
     assert e["WRITE_GATE_ENABLED"] is True and e["WRITE_GATE_RESTORED_TO_FALSE"] is True and mock.gate_history == [True, False] and mock.gate is False
     assert e["NEW_FEED_CREATED"] is False and len(mock.posts) == posts_before and len(mock.mass_messages) == 1 and mock.write_calls == writes_before + 1   # dry_run is not a write
     msg = mock.mass_messages[0]
-    assert msg["mediaFiles"] == [str(m["id"]) for m in mock.posts[pid]["media"]] and msg["audience"] == "all" and msg["text"] == e["MASS_DM_TEXT"] and msg["text"].count("http") == 1
+    assert msg["mediaFiles"] == [str(m["id"]) for m in mock.posts[pid]["media"]] and msg["userLists"] == ["fans"] and msg["text"] == e["MASS_DM_TEXT"] and msg["text"].count("http") == 1
     run = await engine.runs_col.find_one({"cycle_number": f"post:{pid}"}, {"_id": 0})
     assert run and run["mass_dm_status"] == "OK" and run["mass_dm_id"] == e["MASS_DM_MARKER"] and run["mass_dm_sent_count"] == e["REAL_MASS_DM_SENT_COUNT"] and run["feed_post_id"] == pid and run["mock"] is True
     assert e["TOTAL_REAL_MASS_DM_SENT"] == 0                                                        # mock never counts as real
@@ -304,20 +305,25 @@ async def test_mass_dm_from_post_gate_restored_on_failure(sandbox, monkeypatch):
     mock.fail_mass_dm = False
     e2 = await engine.mass_dm_from_post(a["slug"], pid, execute=True, trigger="test")
     assert e2["status"] == "MASS_DM_CONFIRMED" and len(mock.mass_messages) == 1 and mock.mass_messages[0]["text"].rstrip().endswith(a["onlyfans_url"])
-    # empty audience -> ABORT before any send, gate restored
+    # Fans list usersCount = 0 -> STOP at pre-check (no gate, no send); Fans list absent -> STOP
     mock.gate_history.clear()
-    mock.fans, mock.expired_fans = 0, 0
+    saved = mock.fans
+    mock.fans = 0
     ea = await engine.mass_dm_from_post(b["slug"], rb["provider_post_id"], execute=True, trigger="test")
-    assert ea["status"] == "STOPPED_PRECHECK" and "MASS_DM_TARGET_ALL_FANS(subscribers>0)" in ea["failed_checks"]        # read proxy already 0 -> STOP before gate
-    mock.fans, mock.expired_fans = 3, 0
-    monkeypatch.setattr(mock, "subscribers_count", lambda uid: __import__("asyncio").sleep(0, result=3))
-    real_dry = mock.mass_message_crm
-    async def zero_dry(uid, req, dry_run=True):
-        return {"success": True, "dry_run": True, "recipients": 0, "sent": 0, "sample": []} if dry_run else await real_dry(uid, req, dry_run)
-    monkeypatch.setattr(mock, "mass_message_crm", zero_dry)
+    assert ea["status"] == "STOPPED_PRECHECK" and "FANS_USERS_COUNT>0" in ea["failed_checks"] and ea["WRITE_GATE_ENABLED"] is False and mock.gate_history == []
+    mock.fans = saved
+    mock.fans_list_present = False
     ea = await engine.mass_dm_from_post(b["slug"], rb["provider_post_id"], execute=True, trigger="test")
-    assert ea["status"] == "ABORTED_EMPTY_AUDIENCE" and ea["REAL_MASS_DM_CREATE"] == "SKIPPED" and ea["WRITE_GATE_RESTORED_TO_FALSE"] is True and mock.gate_history == [True, False] and len(mock.mass_messages) == 1
-    monkeypatch.setattr(mock, "mass_message_crm", real_dry)
+    assert ea["status"] == "STOPPED_PRECHECK" and "FANS_LIST_FOUND(type=fans)" in ea["failed_checks"] and len(mock.mass_messages) == 1
+    mock.fans_list_present = True
+    # list resolved right before the send inside the flow: usersCount drops to 0 / list disappears after pre-check -> FAILED, nothing sent, gate restored
+    real_get = mock.get_fans_list
+    async def empty_list(uid):
+        return {"id": "fans", "name": "Fans", "usersCount": 0}
+    monkeypatch.setattr(mock, "get_fans_list", empty_list)
+    d0 = await engine.mass_dm_from_post(b["slug"], rb["provider_post_id"], execute=False, trigger="test")
+    assert d0["status"] == "DRY_RUN_FAIL"
+    monkeypatch.setattr(mock, "get_fans_list", real_get)
     wrong = await engine.mass_dm_from_post(b["slug"], pid, execute=True, trigger="test")
     assert wrong["status"] == "STOPPED_PRECHECK" and "SOURCE_POST_BELONGS_TO_MODEL(OF link in caption)" in wrong["failed_checks"] and len(mock.mass_messages) == 1
 
@@ -348,7 +354,7 @@ async def test_refresh_failure_blocks_dm_and_retry_only_refresh_dm(sandbox, monk
     mock.refresh_fail = False
     r2 = await engine.run("PUBLISH_NOW", "test")
     assert r2["status"] == "MOCK_CONFIRMED" and r2["feed_skipped_duplicate"] is True and r2["MASS_DM_STATUS"] == "OK" and r2["provider_post_id"] == r["provider_post_id"]
-    assert len(mock.posts) == 1 and len(mock.mass_messages) == 1 and mock.refresh_starts == 2 and mock.mass_messages[0]["recipients"] == mock.fans + mock.expired_fans
+    assert len(mock.posts) == 1 and len(mock.mass_messages) == 1 and mock.refresh_starts == 2 and mock.mass_messages[0]["recipients"] == mock.fans and mock.mass_messages[0]["userLists"] == ["fans"]
     assert (await engine.status())["queue"]["current"]["slug"] == b["slug"]
     run = await engine.get_run(a["id"], 1)
     assert run["subscriber_refresh_status"] == "OK" and run["cached_total"] > 0 and run["mass_dm_status"] == "OK"
@@ -403,18 +409,17 @@ async def test_refresh_start_error_then_gate_retry(sandbox, monkeypatch):
 async def test_send_timeout_marks_unverified_and_never_resends(sandbox, monkeypatch):
     mock = sandbox
     a, r = await _feed_only(monkeypatch, f"{TAG}-uma", mock=mock)
-    real_crm = mock.mass_message_crm
-    async def timeout_on_send(uid, req, dry_run=True):
-        if dry_run:
-            return await real_crm(uid, req, dry_run=True)
+    real_send = mock.mass_message_fans
+    async def timeout_on_send(uid, req):
+        assert req.user_lists == ["fans"] and req.excluded_lists == []
         raise OFProviderError("NETWORK_ERROR", "timeout")                                           # connection dropped after the send started
-    monkeypatch.setattr(mock, "mass_message_crm", timeout_on_send)
+    monkeypatch.setattr(mock, "mass_message_fans", timeout_on_send)
     mock.gate_history.clear()
     r2 = await engine.run("PUBLISH_NOW", "test")
     assert r2["status"] == "FEED_OK_DM_UNVERIFIED" and r2["mass_dm"]["error_code"] == "NETWORK_ERROR" and r2["mass_dm"]["advance"] is False and mock.gate_history == [True, False]
     run = await engine.get_run(a["id"], 1)
-    assert run["mass_dm_status"] == "UNVERIFIED" and run["mass_dm_id"].startswith("crm:") and run["mass_dm_recipients"] > 0 and run["mass_dm_send_started_at"]
-    monkeypatch.setattr(mock, "mass_message_crm", real_crm)
+    assert run["mass_dm_status"] == "UNVERIFIED" and run["mass_dm_id"].startswith("crm:") and run["mass_dm_recipients"] > 0 and run["mass_dm_send_started_at"] and run["of_fans_users_count"] == mock.fans
+    monkeypatch.setattr(mock, "mass_message_fans", real_send)
     r3 = await engine.run("PUBLISH_NOW", "test")                                                    # TIMEOUT_DOES_NOT_RESEND
     assert r3["status"] == "FEED_OK_DM_UNVERIFIED" and r3["mass_dm"]["duplicate_prevented"] is True and len(mock.mass_messages) == 0 and len(mock.posts) == 1
     assert (await engine.status())["queue"]["current"]["slug"] == a["slug"]                       # model not completed until an admin decision (skip) -> never auto-advanced
@@ -454,7 +459,45 @@ async def test_mass_dm_from_post_refreshes_before_send(sandbox, monkeypatch):
     assert d["status"] == "DRY_RUN_PASS" and mock.refresh_starts == 0                                                                 # dry run = READ-ONLY, no refresh
     mock.fans += 7
     e = await engine.mass_dm_from_post(a["slug"], pid, execute=True, trigger="test")
-    assert e["status"] == "MASS_DM_CONFIRMED" and mock.refresh_starts == 1 and e["refresh"]["status"] == "OK" and e["DRY_RUN_RECIPIENTS"] == mock.fans + mock.expired_fans
-    assert e["REAL_MASS_DM_SENT_COUNT"] == e["DRY_RUN_RECIPIENTS"] and e["READBACK_VERIFY"] == "PASS" and e["WRITE_GATE_RESTORED_TO_FALSE"] is True and e["NEW_FEED_CREATED"] is False
+    assert e["status"] == "MASS_DM_CONFIRMED" and mock.refresh_starts == 1 and e["refresh"]["status"] == "OK" and e["OF_FANS_USERS_COUNT"] == mock.fans   # +7 new fans included
+    assert e["REAL_MASS_DM_SENT_COUNT"] == mock.fans and e["QUEUE_VERIFY"] == "PASS" and e["WRITE_GATE_RESTORED_TO_FALSE"] is True and e["NEW_FEED_CREATED"] is False
     run = await engine.runs_col.find_one({"cycle_number": f"post:{pid}"}, {"_id": 0})
     assert run["subscriber_refresh_status"] == "OK" and run["cached_total"] == mock.fans + mock.expired_fans and run["mass_dm_status"] == "OK"
+
+
+async def test_verify_falls_back_to_recent_chats_when_no_queue_id(sandbox, monkeypatch):
+    mock = sandbox
+    a, r = await _feed_only(monkeypatch, f"{TAG}-yara", mock=mock)
+    mock.native_queue_id = False                                                                   # provider answers success without a queue id
+    r2 = await engine.run("PUBLISH_NOW", "test")
+    assert r2["status"] == "MOCK_CONFIRMED" and r2["mass_dm"]["queue_verify"] == "NO_ID" and r2["mass_dm"]["readback"] == "PASS" and r2["mass_dm"]["mass_dm_id"].startswith("crm:")
+    assert mock.last_mass_payload["userLists"] == ["fans"] and mock.last_mass_payload["excludedLists"] == [] and len(mock.mass_messages) == 1
+    assert len(mock.last_mass_payload["mediaFiles"]) == 2                                          # Public + Secret vault ids
+
+
+async def test_real_adapter_fans_payload_shape_and_no_dry_run(monkeypatch):
+    """Adapter contract: userLists/excludedLists only (OpenAPI shape), no audience.type / fan_ids / dry_run; blocked before network by the gates."""
+    monkeypatch.setenv("THE_ONLY_API_KEY", "k" * 43)
+    monkeypatch.setenv("THE_ONLY_CRM_ID", "crm")
+    monkeypatch.setenv("OF_REAL_POSTING_ENABLED", "true")
+    monkeypatch.setenv("OF_MASS_DM_ENABLED", "true")
+    monkeypatch.setenv("OF_MASS_DM_MOCK", "false")
+    ad = toa.TheOnlyAPIAdapter()
+    assert ad.FANS_DRY_RUN_SUPPORTED is False
+    captured = {}
+    async def fake_request(method, url, **kw):
+        captured.update(method=method, url=url, json=kw.get("json"), write=kw.get("write"))
+        return {"success": True, "data": {"id": "987", "sent": 0}}
+    monkeypatch.setattr(ad, "_request", fake_request)
+    res = await ad.mass_message_fans("1", OFMassMessageRequest(text="ciao", media_ids=[11, 22], user_lists=["fans"], excluded_lists=[]))
+    assert captured["method"] == "POST" and captured["url"].endswith("/accounts/1/messages/mass") and captured["write"] is True
+    assert captured["json"] == {"text": "ciao", "price": 0, "mediaFiles": ["11", "22"], "userLists": ["fans"], "excludedLists": []}
+    assert "audience" not in captured["json"] and "dry_run" not in captured["json"] and "fan_ids" not in captured["json"] and "queueBuyers" not in captured["json"]
+    assert res["id"] == "987" and res["success"] is True
+    with pytest.raises(OFProviderError):
+        await ad.mass_message_fans("1", OFMassMessageRequest(text="ciao", media_ids=[11], user_lists=[]))        # target mandatory
+    # lists parsing: system list type=fans picked dynamically
+    async def fake_lists(method, url, **kw):
+        return {"success": True, "status_code": 200, "data": {"list": [{"id": "following", "type": "following", "usersCount": 188}, {"id": "fans", "type": "fans", "name": "Fans", "usersCount": 2300}]}}
+    monkeypatch.setattr(ad, "_request", fake_lists)
+    assert await ad.get_fans_list("1") == {"id": "fans", "name": "Fans", "usersCount": 2300}

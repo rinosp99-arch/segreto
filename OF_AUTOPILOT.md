@@ -83,3 +83,8 @@ sui fan campione; marker `crm:<id>` in `of_model_runs` → mai un secondo invio 
 Prima di OGNI mass DM: `POST /accounts/{id}/subscribers/refresh` (202, async) → poll `GET …/subscribers/refresh/status` finché COMPLETED (max `OF_REFRESH_MAX_WAIT_MINUTES`, default 10; poll `OF_REFRESH_POLL_SECONDS`, default 10).
 Stato in `of_model_runs`: `subscriber_refresh_status` (RUNNING/OK/FAILED/TIMEOUT/EMPTY_CACHE/START_FAILED), `subscriber_refresh_started_at/completed_at`, `cached_total/active/expired`, `last_refreshed_at`.
 Refresh fallito/timeout/cache vuota → nessun DM, nessun nuovo feed, nessun avanzamento (MASS_DM_STATUS PENDING/FAILED, retry = solo refresh + DM). Poi dry_run CRM `audience.type=all` → recipients>0 → SENDING → invio → read-back.
+
+### Target Mass DM definitivo = lista OnlyFans "Fans"
+Prima di ogni invio: `GET /api2/v2/lists` → lista di sistema `type=fans` (UI "Messaggio di massa → Fan"), `usersCount>0` → `POST /accounts/{id}/messages/mass`
+`{text, price, mediaFiles:[vault ids], userLists:[fans_id], excludedLists:[]}`. Niente `audience.type`, `fan_ids`, `queueBuyers`, tranche, cache come audience.
+`dry_run` non è documentato insieme a `userLists` → non usato (`FANS_DRY_RUN_SUPPORTED=False`); pre-check READ = lista Fans + usersCount. Verifica: `GET /api2/v2/messages/queue` per id, altrimenti read-back `GET /accounts/{id}/chats`.
