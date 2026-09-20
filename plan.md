@@ -186,7 +186,8 @@ copy diverso dal feed, nessun DM già inviato per il post, hard cap 1 DM reale, 
 stato in `of_model_runs` (key `post:<id>`) → gate off in finally + verifica READ. Mai nuovo feed, mai altra modella.
 - [x] Test mock: `tests/test_of_mass_dm.py` 8 PASS (dry run zero write, execute, duplicato STOP, modella errata STOP, post inesistente STOP, DM disabilitato STOP, gate ripristinato anche su FAIL)
 - [x] Dry run READ-ONLY reale dal workspace sul post 2759765107: SOURCE_POST_FOUND, account latosegreto, SOURCE_MEDIA_COUNT=2, VAULT_MEDIA_IDS_FOUND=2, HEALTHY, gate false (FAIL attesi solo per modello assente nel DB workspace e DM disabilitato)
-- [ ] Utente: Secrets prod `OF_MASS_DM_ENABLED=true`, `OF_MASS_DM_MOCK=false` (scheduler resta false) → Save & Redeploy → "DEPLOY FATTO"
+- [x] Utente: Secrets prod `OF_MASS_DM_ENABLED=true`, `OF_MASS_DM_MOCK=false` impostati (verificati via status prod). MA il redeploy dei Secrets ha ripubblicato il codice precedente: `POST /mass-dm-test` → 404 in prod (200 nel workspace). STOP a zero write.
+- [ ] Utente: ripubblicare l'ULTIMA versione del codice (Deploy/Publish della versione corrente, non solo Save & Redeploy dei Secrets) → "DEPLOY FATTO"
 - [ ] Poi: dry run prod → se tutti PASS → execute=true (1 solo DM) → report → STOP
 
 ### Phase 22 — OF AUTOPILOT FEED + MASS MESSAGE (MOCK ONLY) — Status: COMPLETED in workspace (mock only; testing agent iteration_28 0 bug; OF_REAL_MASS_DM_SENT=false; scheduler OFF; no deploy)
