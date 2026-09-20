@@ -78,3 +78,8 @@ Hard cap: 1 mass DM reale totale (`REAL_MASS_DM_TEST_MAX`), nessun nuovo feed, n
 Il passthrough `queueBuyers: []` su OnlyFans risolve 0 destinatari (`queue/size`=0) → il test è stato abortito in sicurezza. La route `mass-dm-test` ora usa la modalità CRM documentata
 `POST /accounts/{id}/messages/mass` con `audience.type=all` e `dry_run:true` (recipients + campione, nessun invio) → stesso body `dry_run:false`. Nessun queue id: verifica via `GET chats/{fan}/messages`
 sui fan campione; marker `crm:<id>` in `of_model_runs` → mai un secondo invio (anche dopo timeout: stato `UNVERIFIED`). `background=true` + `GET /mass-dm-test/{post_id}` per invii lunghi.
+
+### Refresh automatico subscriber cache (definitivo)
+Prima di OGNI mass DM: `POST /accounts/{id}/subscribers/refresh` (202, async) → poll `GET …/subscribers/refresh/status` finché COMPLETED (max `OF_REFRESH_MAX_WAIT_MINUTES`, default 10; poll `OF_REFRESH_POLL_SECONDS`, default 10).
+Stato in `of_model_runs`: `subscriber_refresh_status` (RUNNING/OK/FAILED/TIMEOUT/EMPTY_CACHE/START_FAILED), `subscriber_refresh_started_at/completed_at`, `cached_total/active/expired`, `last_refreshed_at`.
+Refresh fallito/timeout/cache vuota → nessun DM, nessun nuovo feed, nessun avanzamento (MASS_DM_STATUS PENDING/FAILED, retry = solo refresh + DM). Poi dry_run CRM `audience.type=all` → recipients>0 → SENDING → invio → read-back.

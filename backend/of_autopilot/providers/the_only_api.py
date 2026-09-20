@@ -16,6 +16,8 @@ Documented endpoints used:
   POST {base}/accounts/{of_user_id}/messages/mass  (CRM)          {text, price, mediaFiles:[vault ids], audience:{type: all|active|expired}, dry_run}
                                                                   dry_run=true -> {recipients, sent:0, sample} (no send); dry_run=false -> serial send inside the request
   GET  {base}/accounts/{of_user_id}/chats/{fan_id}/messages       read-back of a recipient's conversation (verification)
+  POST {base}/accounts/{of_user_id}/subscribers/refresh           202 async sync of the provider subscriber cache (audience source of the CRM mass DM)
+  GET  {base}/accounts/{of_user_id}/subscribers/refresh/status    refresh job state + cache summary {total, active, expired, last_refreshed_at}
   Delete scheduled post: NOT documented -> never called (NOT_DOCUMENTED).
 Mass message writes are additionally blocked unless OF_MASS_DM_ENABLED=true AND OF_MASS_DM_MOCK=false (MASS_DM_DISABLED, no network).
 All WRITE methods are blocked while OF_REAL_POSTING_ENABLED != true and never reach the network. OF_REAL_WRITE_CALLS counts real write HTTP calls."""
@@ -270,6 +272,41 @@ class TheOnlyAPIAdapter(OFProviderAdapter):
         if not writes_enabled():
             raise OFProviderError("WRITES_DISABLED", "OF_REAL_POSTING_ENABLED=false")
         raise OFProviderError("NOT_DOCUMENTED", "The Only API non documenta un endpoint di cancellazione post programmato: nessuna richiesta inviata")
+
+    # ------------------------------------------------------------------ SUBSCRIBER CACHE (documented): POST subscribers/refresh (202, async) + GET subscribers/refresh/status
+    @staticmethod
+    def _cache_summary(data: Dict[str, Any]) -> Dict[str, Any]:
+        c = (data or {}).get("cache") or {}
+        return {"total": c.get("total"), "active": c.get("active"), "expired": c.get("expired"), "last_refreshed_at": c.get("last_refreshed_at"), "last_row_synced_at": c.get("last_row_synced_at"),
+                "consecutive_failures": c.get("consecutive_failures")}
+
+    @staticmethod
+    def _job_state(data: Dict[str, Any]) -> str:
+        """Normalise the refresh job state from the documented status payload (job/refresh/state/status keys)."""
+        job = data.get("job") or data.get("refresh") or data.get("status") if isinstance(data, dict) else None
+        raw = None
+        if isinstance(job, dict):
+            raw = job.get("state") or job.get("status")
+        elif isinstance(job, str):
+            raw = job
+        raw = (raw or data.get("state") or "").lower() if isinstance(data, dict) else ""
+        if raw in ("running", "pending", "queued", "in_progress", "started", "active"):
+            return "RUNNING"
+        if raw in ("completed", "complete", "success", "succeeded", "done", "finished", "ok"):
+            return "COMPLETED"
+        if raw in ("failed", "error", "errored", "cancelled", "canceled", "cleared", "superseded"):
+            return "FAILED"
+        return "IDLE" if not raw else "UNKNOWN"
+
+    async def subscribers_refresh_start(self, of_user_id: str) -> Dict[str, Any]:
+        """POST {base}/accounts/{of_user_id}/subscribers/refresh -> 202 (async sync of the provider's subscriber cache). Sends nothing to fans."""
+        data = await self._request("POST", f"{self.base}/accounts/{of_user_id}/subscribers/refresh", of_user_id=of_user_id, read_post=True)
+        return data if isinstance(data, dict) else {"raw": data}
+
+    async def subscribers_refresh_status(self, of_user_id: str) -> Dict[str, Any]:
+        data = await self._request("GET", f"{self.base}/accounts/{of_user_id}/subscribers/refresh/status", of_user_id=of_user_id)
+        data = data if isinstance(data, dict) else {}
+        return {"state": self._job_state(data), "cache": self._cache_summary(data), "raw": {k: v for k, v in data.items() if k != "cache"}}
 
     # ------------------------------------------------------------------ MASS MESSAGE (CRM, documented): /accounts/{id}/messages/mass with audience.type + dry_run
     MASS_SEND_TIMEOUT_S = 3600.0        # the real send is a serial loop inside one HTTP request (up to 5,000 recipients)

@@ -1,30 +1,22 @@
 [
   {
-    "content": "Provider contract (base/mock/the_only_api documented mass message endpoints, gated)",
-    "status": "completed"
+    "content": "Adapter/base/mock: subscribers refresh start/status/cached summary (documented endpoints), mock async pending->completed, knobs (fail/stuck/new fans)",
+    "status": "in_progress"
   },
   {
-    "content": "caption.py build_dm_caption different from feed",
-    "status": "completed"
+    "content": "Engine: shared _execute_mass_dm (gate -> refresh+wait -> dry_run>0 -> SENDING -> CRM send -> read-back -> status), used by cycle step + mass_dm_from_post; refresh state fields; vault-id wait; REFRESH_MAX_WAIT env",
+    "status": "pending"
   },
   {
-    "content": "engine.py of_model_runs, FEED/MASS_DM statuses, retry-only-DM, no duplicates, gates, status, tick",
-    "status": "completed"
+    "content": "Status/current_run + Admin UI: FAN REFRESH pill + Audience",
+    "status": "pending"
   },
   {
-    "content": "Env flags workspace (OF_MASS_DM_MOCK=true, OF_MASS_DM_ENABLED=false)",
-    "status": "completed"
+    "content": "Mock tests (refresh ok/pending/fail/timeout/new fans/dry run/DM/retry-only-DM/timeout UNVERIFIED/duplicates/gate/scheduler unchanged) + regression + lint/esbuild",
+    "status": "pending"
   },
   {
-    "content": "Admin UI minimal FEED / MASS MESSAGE",
-    "status": "completed"
-  },
-  {
-    "content": "tests/test_of_mass_dm.py + regression + testing agent (iteration_28, 0 bugs)",
-    "status": "completed"
-  },
-  {
-    "content": "plan.md / OF_AUTOPILOT.md updated, report, STOP",
-    "status": "completed"
+    "content": "Docs/plan update + report, STOP (no real DM, no deploy)",
+    "status": "pending"
   }
 ]

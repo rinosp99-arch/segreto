@@ -4,7 +4,7 @@ hide_scheduled (create returns 200 but the post is not in the schedule list -> S
 fail_mass_dm (send rejected), hide_mass_dm (send 200 but not in the mass message list -> MASS_DM_NOT_CONFIRMED), fans (audience size)."""
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Optional, Any, Dict, List
 
 from .base import OFAccount, OFAccountHealth, OFMassMessageRequest, OFMassMessageResult, OFMedia, OFPostRequest, OFPostResult, OFProviderAdapter, OFProviderError
 
@@ -31,6 +31,15 @@ class MockOFProvider(OFProviderAdapter):
         self.hide_mass_dm: bool = False
         self.fans: int = 418                  # mock audience size (active subscribers)
         self.expired_fans: int = 57           # extra recipients when audience.type = all
+        # provider subscriber cache (empty until a refresh completes) + refresh knobs
+        self.cache_total, self.cache_active, self.cache_expired, self.cache_last_refreshed_at, self.cache_failures = 0, 0, 0, None, 0
+        self._refresh_job: Optional[dict] = None
+        self.refresh_starts: int = 0
+        self.refresh_polls_needed: int = 2      # status reads before COMPLETED (async simulation)
+        self.refresh_fail: bool = False         # job ends FAILED
+        self.refresh_stuck: bool = False        # job never completes -> TIMEOUT
+        self.refresh_yields_empty: bool = False # completes but cache stays 0 (platform says fans exist) -> EMPTY_CACHE
+        self.refresh_start_error: Optional[str] = None
         self.chats: Dict[str, List[dict]] = {}   # fan_id -> messages (read-back verification)
 
     # ---------------- READ
@@ -122,13 +131,36 @@ class MockOFProvider(OFProviderAdapter):
         page = self.mass_messages[offset: offset + limit]
         return {"list": [dict(x) for x in page], "hasMore": offset + limit < len(self.mass_messages)}
 
+    # ---------------- SUBSCRIBER CACHE (mock): async pending -> completed after `refresh_polls_needed` status reads
+    async def subscribers_refresh_start(self, of_user_id: str) -> Dict[str, Any]:
+        if self.refresh_start_error:
+            raise OFProviderError(self.refresh_start_error, "mock: refresh rifiutato", 403 if self.refresh_start_error == "FORBIDDEN" else 500)
+        self.refresh_starts += 1
+        self._refresh_job = {"state": "running", "polls": 0, "started_at": datetime.now(timezone.utc).isoformat()}
+        return {"success": True, "status": 202, "job": {"state": "running"}}
+
+    async def subscribers_refresh_status(self, of_user_id: str) -> Dict[str, Any]:
+        job = self._refresh_job
+        if job and job["state"] == "running":
+            job["polls"] += 1
+            if self.refresh_fail:
+                job["state"] = "failed"
+                self.cache_failures += 1
+            elif not self.refresh_stuck and job["polls"] >= self.refresh_polls_needed:
+                job["state"] = "completed"
+                self.cache_total = self.fans + self.expired_fans if not self.refresh_yields_empty else 0     # cache now mirrors the platform (new fans included)
+                self.cache_active, self.cache_expired = (self.fans, self.expired_fans) if not self.refresh_yields_empty else (0, 0)
+                self.cache_last_refreshed_at = datetime.now(timezone.utc).isoformat()
+        state = {"running": "RUNNING", "completed": "COMPLETED", "failed": "FAILED"}.get(job["state"], "IDLE") if job else "IDLE"
+        return {"state": state, "cache": {"total": self.cache_total, "active": self.cache_active, "expired": self.cache_expired, "last_refreshed_at": self.cache_last_refreshed_at, "consecutive_failures": self.cache_failures}, "raw": {"job": dict(job) if job else None}}
+
     async def mass_message_crm(self, of_user_id: str, req: OFMassMessageRequest, dry_run: bool = True) -> Dict[str, Any]:
         if not req.text and not req.media_ids:
             raise OFProviderError("API_ERROR", "mock: message requires text or mediaFiles", 400)
         a_type = {"ALL": "all", "ACTIVE": "active", "EXPIRED": "expired"}.get(str(req.audience).upper())
         if not a_type:
             raise OFProviderError("NOT_SUPPORTED", "mock: audience.type non valido")
-        recipients = self.fans + (self.expired_fans if a_type == "all" else 0) if a_type != "expired" else self.expired_fans
+        recipients = {"all": self.cache_total, "active": self.cache_active, "expired": self.cache_expired}[a_type]      # resolved from the provider CACHE (empty until refreshed)
         sample = [{"fan_of_user_id": f"fan{i}", "username": f"fan{i}"} for i in range(min(10, recipients))]
         if dry_run:
             return {"success": True, "dry_run": True, "recipients": recipients, "sent": 0, "sample": sample, "note": "Preview only — no messages were sent."}

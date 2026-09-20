@@ -8,9 +8,9 @@ import { Input } from '@/components/ui/input';
 
 const C = { ok: 'hsl(150 45% 58%)', warn: 'hsl(38 75% 60%)', fail: 'hsl(0 60% 58%)', info: 'hsl(200 50% 60%)', muted: 'hsl(var(--muted-foreground))', gold: 'hsl(var(--primary))' };
 const STATUS_COLOR = { MOCK_CONFIRMED: C.info, MOCK_PREPARED: C.info, POST_CONFIRMED: C.ok, SCHEDULE_CONFIRMED: C.ok, POST_NOT_CONFIRMED: C.warn, SCHEDULE_NOT_CONFIRMED: C.warn, UPLOAD_FAILED: C.fail, FAILED: C.fail, SKIPPED_NO_PUBLIC: C.warn, SKIPPED_NO_SECRET: C.warn, SKIPPED_NO_OF_LINK: C.warn, MANUAL_SKIP: C.muted, SKIP_DUPLICATE_SLOT: C.info };
-const STATUS_LABEL = { MOCK_CONFIRMED: 'MOCK CONFERMATO', MOCK_PREPARED: 'MOCK PREPARATO', POST_CONFIRMED: 'POST CONFERMATO', SCHEDULE_CONFIRMED: 'SCHEDULE CONFERMATO', POST_NOT_CONFIRMED: 'POST NON CONFERMATO', SCHEDULE_NOT_CONFIRMED: 'SCHEDULE NON CONFERMATO', UPLOAD_FAILED: 'UPLOAD FALLITO', FAILED: 'ERRORE', SKIPPED_NO_PUBLIC: 'SALTATA: NO PUBLIC', SKIPPED_NO_SECRET: 'SALTATA: NO SECRET', SKIPPED_NO_OF_LINK: 'SALTATA: NO LINK OF', MANUAL_SKIP: 'SALTO MANUALE', SKIP_DUPLICATE_SLOT: 'SLOT DUPLICATO', MOCK_DM_CONFIRMED: 'MOCK MASS DM CONFERMATO', MASS_DM_CONFIRMED: 'MASS DM CONFERMATO', MASS_DM_FAILED: 'MASS DM FALLITO', MASS_DM_NOT_CONFIRMED: 'MASS DM NON CONFERMATO' };
-const RUN_LABEL = { OK: 'OK', PENDING: 'PENDING', FAILED: 'FAILED', UNVERIFIED: 'NON VERIFICATO', DISABLED: 'OFF', MOCK_ONLY: 'MOCK ONLY', SKIPPED: 'SALTATO' };
-const RUN_COLOR = { OK: C.ok, PENDING: C.muted, FAILED: C.fail, UNVERIFIED: C.warn, DISABLED: C.muted, MOCK_ONLY: C.warn, SKIPPED: C.muted };
+const STATUS_LABEL = { MOCK_CONFIRMED: 'MOCK CONFERMATO', MOCK_PREPARED: 'MOCK PREPARATO', POST_CONFIRMED: 'POST CONFERMATO', SCHEDULE_CONFIRMED: 'SCHEDULE CONFERMATO', POST_NOT_CONFIRMED: 'POST NON CONFERMATO', SCHEDULE_NOT_CONFIRMED: 'SCHEDULE NON CONFERMATO', UPLOAD_FAILED: 'UPLOAD FALLITO', FAILED: 'ERRORE', SKIPPED_NO_PUBLIC: 'SALTATA: NO PUBLIC', SKIPPED_NO_SECRET: 'SALTATA: NO SECRET', SKIPPED_NO_OF_LINK: 'SALTATA: NO LINK OF', MANUAL_SKIP: 'SALTO MANUALE', SKIP_DUPLICATE_SLOT: 'SLOT DUPLICATO', MOCK_DM_CONFIRMED: 'MOCK MASS DM CONFERMATO', MASS_DM_CONFIRMED: 'MASS DM CONFERMATO', MASS_DM_FAILED: 'MASS DM FALLITO', MASS_DM_NOT_CONFIRMED: 'MASS DM NON CONFERMATO', MASS_DM_REFRESH_FAILED: 'REFRESH FAN FALLITO', MASS_DM_TEST_STOPPED: 'TEST DM FERMATO' };
+const RUN_LABEL = { OK: 'OK', PENDING: 'PENDING', RUNNING: 'RUNNING', SENDING: 'SENDING', FAILED: 'FAILED', UNVERIFIED: 'UNVERIFIED', DISABLED: 'OFF', MOCK_ONLY: 'MOCK ONLY', SKIPPED: 'SALTATO' };
+const RUN_COLOR = { OK: C.ok, PENDING: C.muted, RUNNING: C.warn, SENDING: C.warn, FAILED: C.fail, UNVERIFIED: C.warn, DISABLED: C.muted, MOCK_ONLY: C.warn, SKIPPED: C.muted };
 
 function Pill({ label, color = C.muted, testid }) {
   return <span className="caps-label px-2.5 py-1 rounded-full text-[10px] whitespace-nowrap" style={{ color, border: `1px solid ${color.replace(')', ' / 0.4)')}` }} data-testid={testid}>{label}</span>;
@@ -121,7 +121,9 @@ export default function AdminOfAutopilot() {
         <div className="flex flex-wrap items-center gap-2 mt-3 text-xs" data-testid="of-run-status">
           <span className="text-muted-foreground">Modella corrente{s?.current_run?.model_slug ? ` (${s.current_run.model_slug})` : q.current ? ` (${q.current.slug})` : ''}:</span>
           <Pill label={`FEED: ${RUN_LABEL[s?.current_run?.FEED_STATUS] || 'PENDING'}`} color={RUN_COLOR[s?.current_run?.FEED_STATUS] || C.muted} testid="of-feed-status" />
+          <Pill label={`FAN REFRESH: ${RUN_LABEL[s?.current_run?.FAN_REFRESH_STATUS] || 'PENDING'}`} color={RUN_COLOR[s?.current_run?.FAN_REFRESH_STATUS] || C.muted} testid="of-fan-refresh-status" />
           <Pill label={`MASS MESSAGE: ${RUN_LABEL[s?.current_run?.MASS_DM_STATUS] || 'PENDING'}`} color={RUN_COLOR[s?.current_run?.MASS_DM_STATUS] || C.muted} testid="of-mass-dm-status" />
+          {s?.current_run?.AUDIENCE != null && <span className="text-muted-foreground" data-testid="of-mass-dm-audience">Audience: {s.current_run.AUDIENCE}{s.current_run.cached_total != null ? ` (cache ${s.current_run.cached_total})` : ''}</span>}
           {s && !s.OF_MASS_DM_ENABLED && <span className="text-muted-foreground" data-testid="of-mass-dm-mode">mass message disattivato (OF_MASS_DM_ENABLED=false)</span>}
           {s?.OF_MASS_DM_ENABLED && s?.OF_MASS_DM_MOCK && <span className="text-muted-foreground" data-testid="of-mass-dm-mode">mass message in MOCK</span>}
         </div>

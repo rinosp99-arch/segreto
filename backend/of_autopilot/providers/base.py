@@ -156,6 +156,15 @@ class OFProviderAdapter(ABC):
     async def send_mass_message(self, of_user_id: str, req: OFMassMessageRequest) -> OFMassMessageResult:
         raise OFProviderError("NOT_SUPPORTED", "mass message non supportato da questo provider")
 
+    # ---------------- SUBSCRIBER CACHE (provider-side; the CRM mass DM audience is resolved from it)
+    async def subscribers_refresh_start(self, of_user_id: str) -> Dict[str, Any]:
+        """Start the provider's async subscriber sync (reads OnlyFans -> provider cache). NOT an OnlyFans write."""
+        raise OFProviderError("NOT_SUPPORTED", "refresh subscriber non supportato da questo provider")
+
+    async def subscribers_refresh_status(self, of_user_id: str) -> Dict[str, Any]:
+        """READ: {"state": RUNNING|COMPLETED|FAILED|IDLE|UNKNOWN, "cache": {total, active, expired, last_refreshed_at, consecutive_failures}, "raw": ...}"""
+        raise OFProviderError("NOT_SUPPORTED", "refresh status non supportato da questo provider")
+
     async def mass_message_crm(self, of_user_id: str, req: OFMassMessageRequest, dry_run: bool = True) -> Dict[str, Any]:
         """Provider-side mass DM with explicit audience.type and dry_run preview -> {success, dry_run, recipients, sent, sample}."""
         raise OFProviderError("NOT_SUPPORTED", "mass message CRM non supportato da questo provider")

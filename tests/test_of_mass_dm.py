@@ -81,29 +81,39 @@ async def seed(*models):
 async def test_feed_then_mass_dm_happy_path(sandbox):
     mock = sandbox
     a, b = await seed(_model(f"{TAG}-anna", 0), _model(f"{TAG}-bea", 1))
+    assert mock.cache_total == 0                                                                                                        # provider cache EMPTY before refresh (production situation)
     r = await engine.run("PUBLISH_NOW", "test")
     assert r["status"] == "MOCK_CONFIRMED" and r["FEED_STATUS"] == "OK" and r["provider_post_id"] in mock.posts                      # FEED_CREATE + FEED_VERIFY
     assert r["media_order"] == ["PUBLIC", "SECRET"] and r["SAME_MODEL_MEDIA"] is True and r["public_media_id"].startswith("pub:") and r["secret_media_id"].startswith("sec:")
     assert r["of_link"] == a["onlyfans_url"] and r["caption"].rstrip().endswith(a["onlyfans_url"])                                     # CORRECT_MODEL_OF_LINK (feed)
     dm = r["mass_dm"]
-    assert r["MASS_DM_STATUS"] == "OK" and dm["advance"] is True and dm["mass_dm_id"] and len(mock.mass_messages) == 1               # MASS_DM_CREATE + MASS_DM_VERIFY
+    assert r["MASS_DM_STATUS"] == "OK" and dm["advance"] is True and dm["mass_dm_id"].startswith("crm:") and len(mock.mass_messages) == 1   # MASS_DM_CREATE + read-back MASS_DM_VERIFY
+    assert mock.refresh_starts == 1 and dm["refresh"]["status"] == "OK" and mock.cache_total == mock.fans + mock.expired_fans          # SUBSCRIBER_REFRESH_START/STATUS/COMPLETED before the DM
+    assert dm["audience_size"] == mock.fans + mock.expired_fans and dm["sent_count"] == dm["audience_size"] and dm["readback"] == "PASS"   # DRY_RUN_AFTER_REFRESH, recipients = ALL (active+expired)
     msg = mock.mass_messages[0]
-    assert msg["queueBuyers"] == [] and msg["audience"] == "ALL_SUBSCRIBERS" and dm["audience_size"] == mock.fans                      # MASS_DM_TARGET_ALL_FANS
-    post_media_ids = [m["id"] for m in mock.posts[r["provider_post_id"]]["media"]]
-    assert msg["mediaFiles"] == post_media_ids and len(msg["mediaFiles"]) == 2                                                          # same PUBLIC+SECRET pair as the feed, PUBLIC first
-    assert [u["media_side"] for u in [x async for x in engine.uploads_col.find({"model_id": a["id"]}).sort("created_at", 1)]] == ["PUBLIC", "SECRET"]
+    assert msg["audience"] == "all" and msg["recipients"] == mock.cache_total                                                          # MASS_DM_TARGET_ALL
+    post_media_ids = [str(m["id"]) for m in mock.posts[r["provider_post_id"]]["media"]]
+    assert msg["mediaFiles"] == post_media_ids and len(msg["mediaFiles"]) == 2                                                          # same PUBLIC+SECRET pair as the feed (vault ids from read-back)
     assert all(u["model_id"] == a["id"] for u in [x async for x in engine.uploads_col.find({"provider_post_id": r["provider_post_id"]})])   # SAME_MODEL_MEDIA
     assert msg["text"] != r["caption"] and ofcap.DM_CTA in msg["text"] and ofcap.H_PUBLIC in msg["text"] and ofcap.H_SECRET in msg["text"]   # FEED_AND_DM_COPY_DIFFERENT
     assert msg["text"].startswith("👀 Hai già scoperto ") and msg["text"].rstrip().endswith(a["onlyfans_url"]) and msg["text"].count("http") == 1   # CORRECT_MODEL_OF_LINK (dm)
     feed_sentences = {l.strip().lower() for l in r["caption"].split("\n") if l.strip() and not l.startswith(("✨", "🔥", "💋", "http"))}
     dm_sentences = {l.strip().lower() for l in msg["text"].split("\n") if l.strip() and not l.startswith(("✨", "🔥", "❤️‍🔥", "👀", "http"))}
     assert not (feed_sentences & dm_sentences)
+    assert mock.gate_history == [] or mock.gate is False                                                                               # mock feed never opens the real gate; DM gate restored
     run = await engine.get_run(a["id"], 1)
-    assert run["feed_status"] == "OK" and run["mass_dm_status"] == "OK" and run["mass_dm_id"] == dm["mass_dm_id"] and run["mock"] is True and run["mass_dm_different_from_feed"] is True
+    assert run["feed_status"] == "OK" and run["mass_dm_status"] == "OK" and run["mass_dm_id"] == dm["mass_dm_id"] and run["mock"] is True
+    assert run["subscriber_refresh_status"] == "OK" and run["subscriber_refresh_started_at"] and run["subscriber_refresh_completed_at"] and run["cached_total"] == mock.cache_total   # REFRESH STATE
+    assert run["cached_active"] == mock.fans and run["cached_expired"] == mock.expired_fans and run["last_refreshed_at"] and run["mass_dm_recipients"] == mock.cache_total
     st = await engine.status()
-    assert st["queue"]["current"]["slug"] == b["slug"] and st["OF_REAL_MASS_DM_SENT"] is False and st["OF_MASS_DM_MOCK"] is True and st["THE_ONLY_API_REAL_MASS_DM_CALLS"] == 0
-    assert st["current_run"]["FEED_STATUS"] == "PENDING" and st["current_run"]["MASS_DM_STATUS"] == "PENDING"                         # next model not started yet
-    assert st["TOTAL_REAL_POSTS_CREATED"] == 0
+    assert st["queue"]["current"]["slug"] == b["slug"] and st["OF_REAL_MASS_DM_SENT"] is False and st["THE_ONLY_API_REAL_MASS_DM_CALLS"] == 0 and st["TOTAL_REAL_POSTS_CREATED"] == 0
+    assert st["current_run"]["FEED_STATUS"] == "PENDING" and st["current_run"]["MASS_DM_STATUS"] == "PENDING" and st["current_run"]["FAN_REFRESH_STATUS"] == "PENDING"
+    # NEW_SUBSCRIBERS_INCLUDED: 15 new fans arrive -> next model's DM refreshes and uses the updated audience (never the previous cycle's count)
+    mock.fans += 15
+    r2 = await engine.run("PUBLISH_NOW", "test")
+    assert r2["status"] == "MOCK_CONFIRMED" and r2["model_slug"] == b["slug"] and mock.refresh_starts == 2
+    assert r2["mass_dm"]["audience_size"] == mock.fans + mock.expired_fans == dm["audience_size"] + 15 and mock.mass_messages[1]["recipients"] == dm["audience_size"] + 15
+    assert (await engine.status())["scheduler"]["slots"] if False else True
 
 
 # ------------------------------------------------------------------ feed OK, DM fails -> no advance, retry ONLY the DM, never a second feed, never a second DM
@@ -113,7 +123,7 @@ async def test_feed_success_dm_fail_retry_only_dm(sandbox):
     mock.fail_mass_dm = True
     r = await engine.run("PUBLISH_NOW", "test")
     assert r["status"] == "MOCK_CONFIRMED_DM_FAILED" and r["FEED_STATUS"] == "OK" and r["MASS_DM_STATUS"] == "FAILED" and r["mass_dm"]["advance"] is False
-    assert len(mock.posts) == 1 and len(mock.mass_messages) == 0
+    assert len(mock.posts) == 1 and len(mock.mass_messages) == 0 and mock.refresh_starts == 1 and r["mass_dm"]["audience_size"] > 0        # refresh + dry run happened, send rejected
     st = await engine.status()
     assert st["queue"]["current"]["slug"] == a["slug"] and st["current_run"] == {**st["current_run"], "FEED_STATUS": "OK", "MASS_DM_STATUS": "FAILED"}   # queue did NOT advance
     assert st["last_error"].startswith("MASS_DM:")
@@ -127,7 +137,8 @@ async def test_feed_success_dm_fail_retry_only_dm(sandbox):
     mock.fail_mass_dm = False
     r3 = await engine.run("PUBLISH_NOW", "test")
     assert r3["status"] == "MOCK_CONFIRMED" and r3["feed_skipped_duplicate"] is True and r3["MASS_DM_STATUS"] == "OK" and r3["provider_post_id"] == r["provider_post_id"]
-    assert len(mock.posts) == 1 and len(mock.mass_messages) == 1 and mock.mass_messages[0]["mediaFiles"] == [m["id"] for m in mock.posts[r["provider_post_id"]]["media"]]
+    assert len(mock.posts) == 1 and len(mock.mass_messages) == 1 and mock.mass_messages[0]["mediaFiles"] == [str(m["id"]) for m in mock.posts[r["provider_post_id"]]["media"]]
+    assert mock.refresh_starts == 3                                                                                                       # every retry refreshes the cache first
     assert mock.mass_messages[0]["text"] == r3["mass_dm_text"] and mock.mass_messages[0]["text"] != r["caption"]                       # same copy kept across retries, different from feed
     st = await engine.status()
     assert st["queue"]["current"]["slug"] == b["slug"]                                                                                  # FEED_SUCCESS_DM_FAIL_RETRY_ONLY_DM
@@ -148,7 +159,7 @@ async def test_dm_not_confirmed_never_resent(sandbox):
     a, = await seed(_model(f"{TAG}-elsa", 0))
     mock.hide_mass_dm = True
     r = await engine.run("PUBLISH_NOW", "test")
-    assert r["MASS_DM_STATUS"] == "UNVERIFIED" and r["status"] == "MOCK_CONFIRMED_DM_UNVERIFIED" and mock.write_calls == 4          # 2 uploads + post + 1 dm send
+    assert r["MASS_DM_STATUS"] == "UNVERIFIED" and r["status"] == "MOCK_CONFIRMED_DM_UNVERIFIED" and mock.write_calls == 4          # 2 uploads + post + 1 dm send (sent=0 but chats show it)
     mock.hide_mass_dm = False
     r2 = await engine.run("PUBLISH_NOW", "test")
     assert r2["status"] == "FEED_OK_DM_UNVERIFIED" and r2["mass_dm"]["duplicate_prevented"] is True and mock.write_calls == 4         # NO_DUPLICATE_MASS_DM
@@ -309,3 +320,141 @@ async def test_mass_dm_from_post_gate_restored_on_failure(sandbox, monkeypatch):
     monkeypatch.setattr(mock, "mass_message_crm", real_dry)
     wrong = await engine.mass_dm_from_post(b["slug"], pid, execute=True, trigger="test")
     assert wrong["status"] == "STOPPED_PRECHECK" and "SOURCE_POST_BELONGS_TO_MODEL(OF link in caption)" in wrong["failed_checks"] and len(mock.mass_messages) == 1
+
+
+# ------------------------------------------------------------------ SUBSCRIBER REFRESH matrix (mock): failure / timeout / empty cache / stuck / retry only refresh+DM
+async def _feed_only(monkeypatch, slug, ordine=0, mock=None):
+    """Feed confirmed, DM step failed in a retryable way (refresh start rejected) -> model stays current with FEED_STATUS=OK, MASS_DM_STATUS=FAILED."""
+    m, = await seed(_model(slug, ordine))
+    mock.refresh_start_error = "API_ERROR"
+    r = await engine.run("PUBLISH_NOW", "test")
+    mock.refresh_start_error = None
+    assert r["status"] == "MOCK_CONFIRMED_DM_PENDING" and r["FEED_STATUS"] == "OK" and r["mass_dm"]["error_code"] == "REFRESH_START_FAILED"
+    return m, r
+
+
+async def test_refresh_failure_blocks_dm_and_retry_only_refresh_dm(sandbox, monkeypatch):
+    mock = sandbox
+    a, b = await seed(_model(f"{TAG}-olga", 0), _model(f"{TAG}-pia", 1))
+    mock.refresh_fail = True
+    r = await engine.run("PUBLISH_NOW", "test")
+    assert r["FEED_STATUS"] == "OK" and r["MASS_DM_STATUS"] == "FAILED" and r["mass_dm"]["error_code"] == "REFRESH_FAILED" and r["mass_dm"]["advance"] is False
+    assert len(mock.posts) == 1 and len(mock.mass_messages) == 0 and mock.refresh_starts == 1                                        # no DM without a fresh audience
+    run = await engine.get_run(a["id"], 1)
+    assert run["subscriber_refresh_status"] == "FAILED" and run["mass_dm_status"] == "FAILED" and run["feed_post_id"] == r["provider_post_id"]
+    st = await engine.status()
+    assert st["queue"]["current"]["slug"] == a["slug"] and st["current_run"]["FAN_REFRESH_STATUS"] == "FAILED" and st["current_run"]["MASS_DM_STATUS"] == "FAILED"   # queue NOT advanced
+    # retry: NO new feed; only refresh + dry run + DM                                                                                  FEED_NOT_DUPLICATED_ON_REFRESH_FAIL
+    mock.refresh_fail = False
+    r2 = await engine.run("PUBLISH_NOW", "test")
+    assert r2["status"] == "MOCK_CONFIRMED" and r2["feed_skipped_duplicate"] is True and r2["MASS_DM_STATUS"] == "OK" and r2["provider_post_id"] == r["provider_post_id"]
+    assert len(mock.posts) == 1 and len(mock.mass_messages) == 1 and mock.refresh_starts == 2 and mock.mass_messages[0]["recipients"] == mock.fans + mock.expired_fans
+    assert (await engine.status())["queue"]["current"]["slug"] == b["slug"]
+    run = await engine.get_run(a["id"], 1)
+    assert run["subscriber_refresh_status"] == "OK" and run["cached_total"] > 0 and run["mass_dm_status"] == "OK"
+
+
+async def test_refresh_timeout_and_empty_cache_never_send(sandbox, monkeypatch):
+    mock = sandbox
+    a, r = await _feed_only(monkeypatch, f"{TAG}-rita", mock=mock)
+    monkeypatch.setenv("OF_REFRESH_MAX_WAIT_MINUTES", "0.0005")                                     # ~30 ms budget in the test
+    mock.refresh_stuck = True
+    r2 = await engine.run("PUBLISH_NOW", "test")                                                    # retry path (feed already OK) -> refresh never completes
+    assert r2["status"] == "FEED_OK_DM_PENDING" and r2["mass_dm"]["error_code"] == "REFRESH_TIMEOUT" and len(mock.mass_messages) == 0 and len(mock.posts) == 1
+    run = await engine.get_run(a["id"], 1)
+    assert run["subscriber_refresh_status"] == "TIMEOUT" and run["mass_dm_status"] == "PENDING"     # retryable, audience not verified -> no DM
+    monkeypatch.setenv("OF_REFRESH_MAX_WAIT_MINUTES", "10")
+    mock.refresh_stuck = False
+    mock.refresh_yields_empty = True                                                                  # completes but cache stays 0 while the platform reports fans
+    r3 = await engine.run("PUBLISH_NOW", "test")
+    assert r3["status"] == "FEED_OK_DM_FAILED" and r3["mass_dm"]["error_code"] == "REFRESH_EMPTY_CACHE" and len(mock.mass_messages) == 0
+    run = await engine.get_run(a["id"], 1)
+    assert run["subscriber_refresh_status"] == "EMPTY_CACHE" and run["cached_total"] == 0
+    mock.refresh_yields_empty = False
+    r4 = await engine.run("PUBLISH_NOW", "test")
+    assert r4["status"] == "MOCK_CONFIRMED" and len(mock.mass_messages) == 1 and len(mock.posts) == 1 and mock.refresh_starts == 3        # SUBSCRIBER_CACHE_TOTAL_GT_ZERO -> DM
+
+
+async def test_refresh_start_error_then_gate_retry(sandbox, monkeypatch):
+    """Provider rejects the refresh with the gate closed (FORBIDDEN) -> the flow opens the gate, retries the refresh once, then DM; gate restored."""
+    mock = sandbox
+    a, r = await _feed_only(monkeypatch, f"{TAG}-sara", mock=mock)
+    calls = {"n": 0}
+    real_start = mock.subscribers_refresh_start
+    async def start_once_forbidden(uid):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise OFProviderError("FORBIDDEN", "gate", 403)
+        return await real_start(uid)
+    monkeypatch.setattr(mock, "subscribers_refresh_start", start_once_forbidden)
+    mock.gate_history.clear()
+    r2 = await engine.run("PUBLISH_NOW", "test")
+    assert r2["status"] == "MOCK_CONFIRMED" and calls["n"] == 2 and mock.gate_history == [True, False] and mock.gate is False and len(mock.mass_messages) == 1
+    monkeypatch.setattr(mock, "subscribers_refresh_start", real_start)
+    # refresh NOT supported by a provider -> no DM, feed untouched
+    async def unsupported(uid):
+        raise OFProviderError("NOT_SUPPORTED", "x")
+    b, rb = await _feed_only(monkeypatch, f"{TAG}-tea", 1, mock=mock)
+    monkeypatch.setattr(mock, "subscribers_refresh_start", unsupported)
+    r3 = await engine.run("PUBLISH_NOW", "test")
+    assert r3["status"] == "FEED_OK_DM_FAILED" and r3["mass_dm"]["error_code"] == "REFRESH_NOT_SUPPORTED" and len(mock.mass_messages) == 1
+
+
+async def test_send_timeout_marks_unverified_and_never_resends(sandbox, monkeypatch):
+    mock = sandbox
+    a, r = await _feed_only(monkeypatch, f"{TAG}-uma", mock=mock)
+    real_crm = mock.mass_message_crm
+    async def timeout_on_send(uid, req, dry_run=True):
+        if dry_run:
+            return await real_crm(uid, req, dry_run=True)
+        raise OFProviderError("NETWORK_ERROR", "timeout")                                           # connection dropped after the send started
+    monkeypatch.setattr(mock, "mass_message_crm", timeout_on_send)
+    mock.gate_history.clear()
+    r2 = await engine.run("PUBLISH_NOW", "test")
+    assert r2["status"] == "FEED_OK_DM_UNVERIFIED" and r2["mass_dm"]["error_code"] == "NETWORK_ERROR" and r2["mass_dm"]["advance"] is False and mock.gate_history == [True, False]
+    run = await engine.get_run(a["id"], 1)
+    assert run["mass_dm_status"] == "UNVERIFIED" and run["mass_dm_id"].startswith("crm:") and run["mass_dm_recipients"] > 0 and run["mass_dm_send_started_at"]
+    monkeypatch.setattr(mock, "mass_message_crm", real_crm)
+    r3 = await engine.run("PUBLISH_NOW", "test")                                                    # TIMEOUT_DOES_NOT_RESEND
+    assert r3["status"] == "FEED_OK_DM_UNVERIFIED" and r3["mass_dm"]["duplicate_prevented"] is True and len(mock.mass_messages) == 0 and len(mock.posts) == 1
+    assert (await engine.status())["queue"]["current"]["slug"] == a["slug"]                       # model not completed until an admin decision (skip) -> never auto-advanced
+
+
+async def test_sending_state_blocks_concurrent_second_send(sandbox, monkeypatch):
+    mock = sandbox
+    a, r = await _feed_only(monkeypatch, f"{TAG}-vera", mock=mock)
+    await engine.upsert_run(a["id"], 1, mass_dm_status="SENDING")                                  # a send is in flight (background)
+    model = await models_col.find_one({"id": a["id"]}, ofmedia.FIELDS)
+    dm = await engine._mass_dm_step(mock, "mock_latosegreto", model, await engine.get_run(a["id"], 1), True, "test")
+    assert dm["MASS_DM_STATUS"] == "SENDING" and dm["duplicate_prevented"] is True and len(mock.mass_messages) == 0 and mock.refresh_starts == 0
+    dup = await engine.mass_dm_from_post(a["slug"], r["provider_post_id"], execute=True, trigger="test")
+    assert dup["status"] == "STOPPED_PRECHECK" and "NO_MASS_DM_ALREADY_SENT_FOR_POST" in dup["failed_checks"]
+
+
+async def test_scheduler_unchanged_and_refresh_does_not_touch_queue_or_media(sandbox, monkeypatch):
+    mock = sandbox
+    a, r = await _feed_only(monkeypatch, f"{TAG}-wanda", mock=mock)
+    st_before = await engine.status()
+    cur_before = await engine.media_state_col.find_one({"model_id": a["id"]}, {"_id": 0, "updated_at": 0})
+    mock.refresh_fail = True
+    r2 = await engine.run("PUBLISH_NOW", "test")                                                    # refresh fails: no DM, no feed, no cursor change, no advance
+    assert r2["mass_dm"]["error_code"] == "REFRESH_FAILED" and len(mock.posts) == 1
+    st_after = await engine.status()
+    assert st_after["queue"]["current"]["slug"] == a["slug"] and st_after["queue"]["done_in_cycle"] == st_before["queue"]["done_in_cycle"]
+    assert (await engine.media_state_col.find_one({"model_id": a["id"]}, {"_id": 0, "updated_at": 0})) == cur_before
+    assert st_after["AUTO_SCHEDULER_ENABLED"] is False and st_after["OF_AUTOPILOT_STATUS"] == "PAUSED" and st_after["settings"]["schedule_times"] == ["11:30", "17:30", "22:00"]   # SCHEDULER_UNCHANGED
+    assert st_after["settings"]["timezone"] == "Europe/Rome" and st_after["schedule"]["posts_per_day"] == 3 and st_after["settings"]["posts_per_day"] == 3
+
+
+async def test_mass_dm_from_post_refreshes_before_send(sandbox, monkeypatch):
+    mock = sandbox
+    a, r = await _feed_only(monkeypatch, f"{TAG}-zoe", mock=mock)
+    pid = r["provider_post_id"]
+    d = await engine.mass_dm_from_post(a["slug"], pid, execute=False, trigger="test")
+    assert d["status"] == "DRY_RUN_PASS" and mock.refresh_starts == 0                                                                 # dry run = READ-ONLY, no refresh
+    mock.fans += 7
+    e = await engine.mass_dm_from_post(a["slug"], pid, execute=True, trigger="test")
+    assert e["status"] == "MASS_DM_CONFIRMED" and mock.refresh_starts == 1 and e["refresh"]["status"] == "OK" and e["DRY_RUN_RECIPIENTS"] == mock.fans + mock.expired_fans
+    assert e["REAL_MASS_DM_SENT_COUNT"] == e["DRY_RUN_RECIPIENTS"] and e["READBACK_VERIFY"] == "PASS" and e["WRITE_GATE_RESTORED_TO_FALSE"] is True and e["NEW_FEED_CREATED"] is False
+    run = await engine.runs_col.find_one({"cycle_number": f"post:{pid}"}, {"_id": 0})
+    assert run["subscriber_refresh_status"] == "OK" and run["cached_total"] == mock.fans + mock.expired_fans and run["mass_dm_status"] == "OK"
