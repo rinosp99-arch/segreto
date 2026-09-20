@@ -179,7 +179,7 @@ Sezione in Home con fascia orizzontale di teaser video verticali che scorre lent
 
 ## 3) Phase 14 — SEO AUTOPILOT READ_ONLY (Status: COMPLETED — PASS, PUBLIC_MUTATIONS=0)
 
-### Phase 25 — ATTIVAZIONE UFFICIALE OF AUTOPILOT (no catch-up, no run immediato, Vanessa chiusa DB-only) — Status: CODICE PRONTO in workspace, IN ATTESA DI DEPLOY/ATTIVAZIONE UTENTE (0 write reali)
+### Phase 25 — ATTIVAZIONE UFFICIALE OF AUTOPILOT — Status: COMPLETED IN PRODUZIONE 2026-09-20 23:49Z (ACTIVE, slot 09:30/14:30/20:30 Europe/Rome, NEXT_RUN 2026-09-21T09:30+02:00, NEXT_MODEL valeria-trapani, Vanessa chiusa, 0 write all'attivazione, gate false)
 - Fatto (agent-tested): `due_slot()` guard `activated_at` (nessun recupero slot passati), `/start` senza run immediato (`CATCH_UP_ENABLED=false`, `IMMEDIATE_RUN_TRIGGERED=false`, `next_run` futuro),
   `POST /mass-dm-test/{post_id}/close` DB-only (storico API_ERROR/UNVERIFIED preservato, `readback_confirmed=true`, duplicate protection, run di ciclo FEED OK + DM OK anche se il feed precede `of_model_runs`, coda → NEXT_MODEL non pubblicata),
   `/status` con `NEXT_MODEL` e `closed_runs`, adapter: `WRITES_DISABLED` ha precedenza su `REAL_TEST_LIMIT`.
