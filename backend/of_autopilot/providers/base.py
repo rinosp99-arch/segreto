@@ -141,7 +141,12 @@ class OFProviderAdapter(ABC):
 
     # ---------------- MASS MESSAGE (optional capability; guarded like every write) ----------------
     async def mass_message_audience_size(self, of_user_id: str) -> Optional[int]:
-        """Recipients of an ALL-subscribers mass message (read-like preview). None when the provider cannot tell."""
+        """Recipients of an ALL-subscribers mass message (exact preview for the send body). None when the provider cannot tell.
+        NOTE: on The Only API this is a POST behind the account write gate -> only meaningful once the gate is open."""
+        return None
+
+    async def subscribers_count(self, of_user_id: str) -> Optional[int]:
+        """READ-ONLY audience proxy for ALL subscribers (usable while the write gate is closed). None when unavailable."""
         return None
 
     async def get_mass_messages(self, of_user_id: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:

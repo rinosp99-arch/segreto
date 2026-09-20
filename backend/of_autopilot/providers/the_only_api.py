@@ -285,6 +285,12 @@ class TheOnlyAPIAdapter(OFProviderAdapter):
         v = (data or {}).get("size")
         return int(v) if isinstance(v, (int, float, str)) and str(v).isdigit() else None
 
+    async def subscribers_count(self, of_user_id: str) -> Optional[int]:
+        """READ: GET /api2/v2/users/me -> subscribersCount (all current subscribers of the account). Works with the write gate closed."""
+        me = await self.get_me(of_user_id)
+        v = (me or {}).get("subscribersCount")
+        return int(v) if isinstance(v, (int, float)) or (isinstance(v, str) and v.isdigit()) else None
+
     async def get_mass_messages(self, of_user_id: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
         data = _unwrap(await self._request("GET", f"{self.base}/api2/v2/messages/queue", of_user_id=of_user_id, params={"limit": limit, "offset": offset}))
         if isinstance(data, list):

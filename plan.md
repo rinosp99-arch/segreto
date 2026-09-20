@@ -187,7 +187,9 @@ stato in `of_model_runs` (key `post:<id>`) → gate off in finally + verifica RE
 - [x] Test mock: `tests/test_of_mass_dm.py` 8 PASS (dry run zero write, execute, duplicato STOP, modella errata STOP, post inesistente STOP, DM disabilitato STOP, gate ripristinato anche su FAIL)
 - [x] Dry run READ-ONLY reale dal workspace sul post 2759765107: SOURCE_POST_FOUND, account latosegreto, SOURCE_MEDIA_COUNT=2, VAULT_MEDIA_IDS_FOUND=2, HEALTHY, gate false (FAIL attesi solo per modello assente nel DB workspace e DM disabilitato)
 - [x] Utente: Secrets prod `OF_MASS_DM_ENABLED=true`, `OF_MASS_DM_MOCK=false` impostati (verificati via status prod). MA il redeploy dei Secrets ha ripubblicato il codice precedente: `POST /mass-dm-test` → 404 in prod (200 nel workspace). STOP a zero write.
-- [ ] Utente: ripubblicare l'ULTIMA versione del codice (Deploy/Publish della versione corrente, non solo Save & Redeploy dei Secrets) → "DEPLOY FATTO"
+- [x] Redeploy codice fatto: route disponibile in prod (200). Dry-run prod: 19/20 PASS; FAIL `MASS_DM_TARGET_ALL_FANS` perché `POST /api2/v2/messages/queue/size` è bloccato dal gate account (403 FORBIDDEN con `allow_of_write_actions=false`). STOP, zero write.
+- [x] Fix: audience pre-gate via READ `users/me.subscribersCount` (prod = 2301 subscriber); dopo apertura gate ri-controllo esatto `queue/size` (>0 altrimenti ABORT senza invio, gate ripristinato). Test mock 8 PASS, regressione 36 PASS.
+- [ ] Utente: nuovo Deploy dell'ultima versione → "DEPLOY FATTO" → dry-run → se tutti PASS → execute=true (1 solo DM) → report → STOP
 - [ ] Poi: dry run prod → se tutti PASS → execute=true (1 solo DM) → report → STOP
 
 ### Phase 22 — OF AUTOPILOT FEED + MASS MESSAGE (MOCK ONLY) — Status: COMPLETED in workspace (mock only; testing agent iteration_28 0 bug; OF_REAL_MASS_DM_SENT=false; scheduler OFF; no deploy)

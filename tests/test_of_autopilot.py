@@ -19,6 +19,8 @@ load_dotenv("/app/backend/.env")
 os.environ["OF_AUTOPILOT_MOCK"] = "true"
 os.environ["OF_REAL_POSTING_ENABLED"] = "false"
 os.environ["OF_AUTO_SCHEDULER_ENABLED"] = "false"
+os.environ["OF_MASS_DM_ENABLED"] = "false"          # feed-only suite: the mass DM step is covered by tests/test_of_mass_dm.py
+os.environ["OF_MASS_DM_MOCK"] = "true"
 
 from of_autopilot import engine, media as ofmedia, caption as ofcap, connection  # noqa: E402
 from of_autopilot.providers import the_only_api as toa  # noqa: E402

@@ -902,15 +902,16 @@ async def mass_dm_from_post(model_slug: str, post_id: str, execute: bool = False
         else:
             ck["SOURCE_POST_ACCOUNT=latosegreto"] = ck["SOURCE_MEDIA_COUNT=2"] = ck["VAULT_MEDIA_IDS_FOUND"] = ck["SOURCE_POST_BELONGS_TO_MODEL(OF link in caption)"] = False
         rep["VAULT_MEDIA_IDS_MASKED"] = [f"…{str(x)[-4:]}" for x in media_ids]
-        # audience (documented "all subscribers" size)
+        # audience ALL subscribers: READ proxy (users/me.subscribersCount) before the gate; the exact queue size is re-checked after the gate opens
         audience = None
         if dmp is not None and of_uid:
             try:
-                audience = await dmp.mass_message_audience_size(of_uid)
+                audience = await dmp.subscribers_count(of_uid)
             except OFProviderError as e:
                 rep["AUDIENCE_ERROR"] = e.code
         rep["AUDIENCE_SIZE"] = audience
-        ck["MASS_DM_TARGET_ALL_FANS(audience>0)"] = isinstance(audience, int) and audience > 0
+        rep["SUBSCRIBERS_COUNT"] = audience
+        ck["MASS_DM_TARGET_ALL_FANS(subscribers>0)"] = isinstance(audience, int) and audience > 0
         # copy (different from the feed text read back from the post)
         cap = None
         if model and of_url:
@@ -946,6 +947,17 @@ async def mass_dm_from_post(model_slug: str, post_id: str, execute: bool = False
         if not is_mock and await real_mass_dm_sent_count() >= REAL_MASS_DM_TEST_MAX:
             rep["status"], rep["REAL_MASS_DM_CREATE"] = "BLOCKED_HARD_CAP", "SKIPPED"
             return rep
+        # exact audience of the send body (documented queue/size, gate now open): must be > 0 or ABORT without sending
+        try:
+            exact = await dmp.mass_message_audience_size(of_uid)
+        except OFProviderError as e:
+            exact, rep["AUDIENCE_EXACT_ERROR"] = None, e.code
+        rep["AUDIENCE_COUNT"] = exact if isinstance(exact, int) else audience
+        if not is_mock and exact is not None and exact <= 0:
+            rep["status"], rep["REAL_MASS_DM_CREATE"] = "ABORTED_EMPTY_AUDIENCE", "SKIPPED"
+            await runs_col.update_one({"model_id": model["id"], "cycle_number": run_key}, {"$set": {"mass_dm_status": "FAILED", "mass_dm_error": "EMPTY_AUDIENCE", "updated_at": now_iso()}})
+            return rep
+        audience = exact if isinstance(exact, int) else audience
         base = dict(action_type="MASS_DM_TEST", model_id=model["id"], model_slug=model_slug, model_name=row["name"], trigger=trigger, mock=is_mock, of_link=of_url, feed_post_id=post_id, media_ids=media_ids, audience="ALL", audience_size=audience)
         try:
             res = await dmp.send_mass_message(of_uid, OFMassMessageRequest(text=cap["text"], media_ids=media_ids, price=None, audience="ALL"))

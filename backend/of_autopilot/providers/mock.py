@@ -113,6 +113,9 @@ class MockOFProvider(OFProviderAdapter):
     async def mass_message_audience_size(self, of_user_id: str):
         return self.fans
 
+    async def subscribers_count(self, of_user_id: str):
+        return self.fans
+
     async def get_mass_messages(self, of_user_id: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
         page = self.mass_messages[offset: offset + limit]
         return {"list": [dict(x) for x in page], "hasMore": offset + limit < len(self.mass_messages)}
