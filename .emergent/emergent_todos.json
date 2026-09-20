@@ -1,26 +1,18 @@
 [
   {
-    "content": "Inspect /tmp/prod_precheck.py and latest OF engine/routes/provider code (hard cap, no fallback, gate restore)",
+    "content": "Production READ-ONLY prechecks (19/19 PASS, OF_REAL_TEST_MAX_POSTS waived by user)",
     "status": "completed"
   },
   {
-    "content": "Compile + lint check backend OF package",
+    "content": "Single controlled real publish-now Vanessa Bella -> POST_CONFIRMED",
     "status": "completed"
   },
   {
-    "content": "Run production READ-ONLY prechecks (masked output)",
+    "content": "Gate restored false (verified by READ), scheduler false, TOTAL_REAL_POSTS_CREATED=1, no second post",
     "status": "completed"
   },
   {
-    "content": "PRECHECK FAIL: OF_REAL_TEST_MAX_POSTS missing in production env -> STOP, zero writes. Awaiting user redeploy with OF_REAL_TEST_MAX_POSTS=1",
-    "status": "in_progress"
-  },
-  {
-    "content": "After redeploy: re-run prechecks; if all PASS execute single controlled real post",
-    "status": "pending"
-  },
-  {
-    "content": "Verify gate restored false, scheduler false, total posts <= 1; final masked report",
-    "status": "pending"
+    "content": "plan.md updated, temp files removed, final report",
+    "status": "completed"
   }
 ]

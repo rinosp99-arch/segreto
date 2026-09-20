@@ -319,7 +319,8 @@ Confronto **INITIAL_HTML vs RENDERED_DOM vs GOOGLE_INSPECTION**:
 
 ## 3) Phase 14 — SEO AUTOPILOT READ_ONLY (Status: COMPLETED — PASS, PUBLIC_MUTATIONS=0)
 
-### Phase 20 — PRIMO POST REALE ONLYFANS CONTROLLATO (VANESSA BELLA, 1 solo post) — Status: STOPPED AT PRECHECK (0 write reali)
+### Phase 20 — PRIMO POST REALE ONLYFANS CONTROLLATO (VANESSA BELLA, 1 solo post) — Status: COMPLETED — REAL_TEST_POST=PASS (1 post reale, provider_post_id 2759765107, gate ripristinato false, scheduler OFF)
+Esito: utente ha rimosso il requisito bloccante OF_REAL_TEST_MAX_POSTS in produzione e autorizzato 1 tentativo. Pre-check 19/19 PASS -> publish-now unico -> POST_CONFIRMED (read-back: exists, account_ok, caption_ok, of_link_ok, media_count=2) -> write_gate restored=true verified_false=true -> TOTAL_REAL_POSTS_CREATED=1, SECOND_POST_CREATED=false, AUTOPILOT PAUSED. STOP: attesa revisione visiva utente su OnlyFans prima di qualsiasi automazione.
 Autorizzazione utente: 1 solo publish-now reale su `latosegreto`, Public+Secret Vanessa, caption IT + link OF DB, scheduler OFF, `OF_REAL_TEST_MAX_POSTS=1`, gate write temporaneo + ripristino false, STOP dopo il tentativo. Nessuna conferma extra se tutti i pre-check PASS.
 - [x] Codice: `engine.real_test_mode()` (candidato singolo, no fallback a modella successiva, SCHEDULE bloccato), hard cap DB (`real_posts_created`) + process (`_check_create_limit`), gate `set_write_gate` aperto solo pre-upload e ripristinato in ogni esito + verifica read (`_restore_gate`), `verify_real_post` (id/account/caption/link/media). Compile OK, lint F OK (solo 1 import inutilizzato in caption.py).
 - [x] Pre-check READ-ONLY produzione eseguiti (`/tmp/prod_precheck.py`, output mascherato):
