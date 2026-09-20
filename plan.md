@@ -189,7 +189,8 @@ stato in `of_model_runs` (key `post:<id>`) → gate off in finally + verifica RE
 - [x] Utente: Secrets prod `OF_MASS_DM_ENABLED=true`, `OF_MASS_DM_MOCK=false` impostati (verificati via status prod). MA il redeploy dei Secrets ha ripubblicato il codice precedente: `POST /mass-dm-test` → 404 in prod (200 nel workspace). STOP a zero write.
 - [x] Redeploy codice fatto: route disponibile in prod (200). Dry-run prod: 19/20 PASS; FAIL `MASS_DM_TARGET_ALL_FANS` perché `POST /api2/v2/messages/queue/size` è bloccato dal gate account (403 FORBIDDEN con `allow_of_write_actions=false`). STOP, zero write.
 - [x] Fix: audience pre-gate via READ `users/me.subscribersCount` (prod = 2301 subscriber); dopo apertura gate ri-controllo esatto `queue/size` (>0 altrimenti ABORT senza invio, gate ripristinato). Test mock 8 PASS, regressione 36 PASS.
-- [ ] Utente: nuovo Deploy dell'ultima versione → "DEPLOY FATTO" → dry-run → se tutti PASS → execute=true (1 solo DM) → report → STOP
+- [x] Utente "DEPLOY FATTO" (2°): dry-run prod eseguito 2 volte + polling 10 min → produzione risponde ancora con il codice PRECEDENTE (check `MASS_DM_TARGET_ALL_FANS(audience>0)`, `AUDIENCE_ERROR=FORBIDDEN`, nessun `SUBSCRIBERS_COUNT`) sebbene il fix sia in HEAD (commit 9e1f3a9). 19/20 PASS, STOP zero write.
+- [ ] Utente: verificare che il deploy sia partito dall'ultima versione (commit 9e1f3a9 o successivo) e completato → "DEPLOY FATTO" → dry-run → 20/20 → execute=true (1 solo DM) → report → STOP
 - [ ] Poi: dry run prod → se tutti PASS → execute=true (1 solo DM) → report → STOP
 
 ### Phase 22 — OF AUTOPILOT FEED + MASS MESSAGE (MOCK ONLY) — Status: COMPLETED in workspace (mock only; testing agent iteration_28 0 bug; OF_REAL_MASS_DM_SENT=false; scheduler OFF; no deploy)
