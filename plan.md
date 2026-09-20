@@ -319,6 +319,15 @@ Confronto **INITIAL_HTML vs RENDERED_DOM vs GOOGLE_INSPECTION**:
 
 ## 3) Phase 14 — SEO AUTOPILOT READ_ONLY (Status: COMPLETED — PASS, PUBLIC_MUTATIONS=0)
 
+### Phase 20 — PRIMO POST REALE ONLYFANS CONTROLLATO (VANESSA BELLA, 1 solo post) — Status: STOPPED AT PRECHECK (0 write reali)
+Autorizzazione utente: 1 solo publish-now reale su `latosegreto`, Public+Secret Vanessa, caption IT + link OF DB, scheduler OFF, `OF_REAL_TEST_MAX_POSTS=1`, gate write temporaneo + ripristino false, STOP dopo il tentativo. Nessuna conferma extra se tutti i pre-check PASS.
+- [x] Codice: `engine.real_test_mode()` (candidato singolo, no fallback a modella successiva, SCHEDULE bloccato), hard cap DB (`real_posts_created`) + process (`_check_create_limit`), gate `set_write_gate` aperto solo pre-upload e ripristinato in ogni esito + verifica read (`_restore_gate`), `verify_real_post` (id/account/caption/link/media). Compile OK, lint F OK (solo 1 import inutilizzato in caption.py).
+- [x] Pre-check READ-ONLY produzione eseguiti (`/tmp/prod_precheck.py`, output mascherato):
+  - PASS: CONNECTED · latosegreto · onlyfans · HEALTHY · `write_actions_allowed=false` · OF_REAL_WRITE_CALLS=0 · MOCK_MODE=false · OF_REAL_POSTING_ENABLED=true · AUTO_SCHEDULER=false · TOTAL_REAL_POSTS_CREATED=0 · coda 1/16 = VANESSA BELLA · link OF = quello atteso del DB · Public (photo, 200, image/jpeg, 396 KB) + Secret (photo, 200, image/jpeg, 135 KB) stesso model_id · SAME_MODEL=true · caption IT (LLM) con 1 solo link
+  - **FAIL: `OF_REAL_TEST_MAX_POSTS` NON presente nell'env di produzione → REAL_TEST_MODE=false, REAL_TEST_MAX_POSTS=None** → hard cap 1 non attivo e motore in modalità rotazione (potrebbe saltare a modella successiva). STOP: nessun gate aperto, nessun upload, nessun post.
+- [ ] Utente: aggiungere `OF_REAL_TEST_MAX_POSTS=1` all'env di produzione e ri-deployare → ripetere pre-check → se tutti PASS eseguire l'unico publish-now.
+
+
 ### Phase 19 — OF AUTOPILOT MOTORE COMPLETO (Status: COMPLETED in preview — MOCK, 0 write reali, nessun post reale)
 Decisioni utente: link OF reale della modella in caption; PUBBLICA ORA = post immediato (scheduler separato); HEAD reali sui nostri media; tutto MOCK.
 - [x] `of_autopilot/{media,caption,engine,jobs}.py` + `providers/mock.py` + base estesa (`upload_media_from_url`, `verify_post`) + routes complete; env `OF_AUTOPILOT_MOCK=true`

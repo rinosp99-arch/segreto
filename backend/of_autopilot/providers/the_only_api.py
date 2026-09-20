@@ -23,7 +23,7 @@ from .base import OFAccount, OFAccountHealth, OFMedia, OFPostRequest, OFPostResu
 PANEL_HOST = "https://theonlyapi.com"
 WHOAMI_URL = "https://api.theonlyapi.com/api/whoami"
 TIMEOUT_S = 40.0
-CALLS = {"read": 0, "write": 0}          # OF_REAL_WRITE_CALLS = CALLS["write"]
+CALLS = {"read": 0, "write": 0, "gate": 0, "upload": 0, "create": 0}          # OF_REAL_WRITE_CALLS = CALLS["write"] (includes gate/upload/create)
 MASK = "****"
 
 
@@ -189,6 +189,7 @@ class TheOnlyAPIAdapter(OFProviderAdapter):
 
     # ------------------------------------------------------------------ WRITE (guarded; blocked in this phase)
     async def upload_media(self, of_user_id: str, *, file_name: str, content: bytes, content_type: str) -> OFMedia:
+        CALLS["upload"] += 1
         data = await self._request("POST", f"{self.base}/accounts/{of_user_id}/media", write=True, files={"file": (file_name, content, content_type)})
         media = data.get("media") or {}
         if not media.get("processId"):
@@ -196,8 +197,21 @@ class TheOnlyAPIAdapter(OFProviderAdapter):
         kind = "video" if content_type.startswith("video/") else ("audio" if content_type.startswith("audio/") else ("gif" if content_type == "image/gif" else "photo"))
         return OFMedia(provider_ref=str(media["processId"]), kind=kind, raw=dict(media))      # COMPLETE object, never trimmed
 
+    # ------------------------------------------------------------------ panel write gate (documented PATCH polling)
+    async def set_write_gate(self, of_user_id: str, enabled: bool) -> Dict[str, Any]:
+        """PATCH /accounts/{of_user_id}/polling {"allow_of_write_actions": bool}. Panel setting only (no proxy/session/credentials).
+        Counted as a real write. Requires OF_REAL_POSTING_ENABLED=true."""
+        CALLS["gate"] += 1
+        return await self._request("PATCH", f"{self.base}/accounts/{of_user_id}/polling", write=True, json={"allow_of_write_actions": bool(enabled)})
+
+    async def get_write_gate(self, of_user_id: str) -> Optional[bool]:
+        polling = (await self.get_polling(of_user_id)).get("polling") or {}
+        v = polling.get("allow_of_write_actions")
+        return None if v is None else bool(v)
+
     async def upload_media_from_url(self, of_user_id: str, *, source_url: str, file_name: str, kind: str) -> OFMedia:
         """Documented JSON variant of POST /accounts/{of_user_id}/media: {"source_url": "https://..."} -> provider fetches the file server-side."""
+        CALLS["upload"] += 1
         data = await self._request("POST", f"{self.base}/accounts/{of_user_id}/media", write=True, json={"source_url": source_url})
         media = data.get("media") or {}
         if not media.get("processId"):
@@ -213,7 +227,15 @@ class TheOnlyAPIAdapter(OFProviderAdapter):
             body["scheduledDate"] = req.scheduled_at                                               # never postedAt
         return body
 
+    def _check_create_limit(self):
+        """HARD LIMIT (process-level, in addition to the engine DB-level check): OF_REAL_TEST_MAX_POSTS create calls at most."""
+        raw = (os.environ.get("OF_REAL_TEST_MAX_POSTS") or "").strip()
+        if raw.isdigit() and CALLS["create"] >= int(raw):
+            raise OFProviderError("REAL_TEST_LIMIT", f"limite post reali di test raggiunto ({raw})")
+
     async def create_post(self, of_user_id: str, req: OFPostRequest) -> OFPostResult:
+        self._check_create_limit()
+        CALLS["create"] += 1
         data = _unwrap(await self._request("POST", f"{self.base}/api2/v2/posts", of_user_id=of_user_id, write=True, json=self._post_body(req)))
         pid = data.get("id")
         return OFPostResult(post_id=str(pid) if pid is not None else None, scheduled=False, schedule_state="PUBLISHED" if pid is not None else "UNKNOWN", raw=data)
@@ -222,6 +244,8 @@ class TheOnlyAPIAdapter(OFProviderAdapter):
         """CREATE (isScheduled+scheduledDate) -> post id -> GET schedules -> id present ? SCHEDULE_CONFIRMED : SCHEDULE_NOT_CONFIRMED."""
         if not req.scheduled_at:
             raise OFProviderError("API_ERROR", "schedule_post richiede scheduled_at")
+        self._check_create_limit()
+        CALLS["create"] += 1
         data = _unwrap(await self._request("POST", f"{self.base}/api2/v2/posts", of_user_id=of_user_id, write=True, json=self._post_body(req)))
         pid = data.get("id")
         if pid is None:

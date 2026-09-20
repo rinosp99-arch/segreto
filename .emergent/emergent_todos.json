@@ -1,26 +1,26 @@
 [
   {
-    "content": "OF-A.1 media.py: eligibility, source resolution, real HEAD validation, video",
+    "content": "Inspect /tmp/prod_precheck.py and latest OF engine/routes/provider code (hard cap, no fallback, gate restore)",
     "status": "completed"
   },
   {
-    "content": "OF-A.2 providers: base extension, MockOFProvider, TheOnlyAPI source_url upload (guarded)",
+    "content": "Compile + lint check backend OF package",
     "status": "completed"
   },
   {
-    "content": "OF-A.3 caption + engine + jobs + routes + env",
+    "content": "Run production READ-ONLY prechecks (masked output)",
     "status": "completed"
   },
   {
-    "content": "OF-A.4 Admin UI expanded + adminApi",
-    "status": "completed"
+    "content": "PRECHECK FAIL: OF_REAL_TEST_MAX_POSTS missing in production env -> STOP, zero writes. Awaiting user redeploy with OF_REAL_TEST_MAX_POSTS=1",
+    "status": "in_progress"
   },
   {
-    "content": "OF-A.5 tests 23/23 + testing agent 61/61 + regression",
-    "status": "completed"
+    "content": "After redeploy: re-run prechecks; if all PASS execute single controlled real post",
+    "status": "pending"
   },
   {
-    "content": "OF-A.6 docs + plan + report",
-    "status": "completed"
+    "content": "Verify gate restored false, scheduler false, total posts <= 1; final masked report",
+    "status": "pending"
   }
 ]

@@ -457,3 +457,109 @@ def test_admin_api_contract():
     from v1_jobs import JOBS
     import of_autopilot.jobs  # noqa: F401
     assert "of_autopilot_tick" in JOBS and JOBS["of_autopilot_tick"]["interval_s"] == 300
+
+
+# ------------------------------------------------------------------ CONTROLLED REAL TEST protections (fake "real" provider: not MockOFProvider, zero network)
+class _FakeReal(OFProviderAdapter):
+    """Behaves like a real provider (engine treats it as non-mock) but records everything in memory."""
+    name = "FAKE_REAL"
+
+    def __init__(self):
+        self.inner = MockOFProvider()
+        self.creates = 0
+    async def test_connection(self): return {}
+    async def list_accounts(self): return await self.inner.list_accounts()
+    async def get_account(self, u): return await self.inner.get_account(u)
+    async def get_account_health(self, u): return await self.inner.get_account_health(u)
+    async def get_scheduled_posts(self, u, limit=10, offset=0): return await self.inner.get_scheduled_posts(u, limit, offset)
+    async def get_post(self, u, p): return await self.inner.get_post(u, p)
+    async def upload_media_from_url(self, u, **k): return await self.inner.upload_media_from_url(u, **k)
+    async def upload_media(self, u, **k): return await self.inner.upload_media(u, **k)
+    async def create_post(self, u, r):
+        self.creates += 1
+        return await self.inner.create_post(u, r)
+    async def schedule_post(self, u, r): return await self.inner.schedule_post(u, r)
+    async def delete_scheduled_post(self, u, p): raise OFProviderError("NOT_DOCUMENTED")
+    async def set_write_gate(self, u, enabled): return await self.inner.set_write_gate(u, enabled)
+    async def get_write_gate(self, u): return await self.inner.get_write_gate(u)
+
+
+@pytest.fixture
+async def real_test_env(sandbox, monkeypatch):
+    fake = _FakeReal()
+    engine.force_provider(fake)
+    monkeypatch.setenv("OF_AUTOPILOT_MOCK", "false")
+    monkeypatch.setenv("OF_REAL_POSTING_ENABLED", "true")
+    monkeypatch.setenv("OF_AUTO_SCHEDULER_ENABLED", "false")
+    monkeypatch.setenv("OF_REAL_TEST_MAX_POSTS", "1")
+    healthy = {"PROVIDER": "The Only API", "CONNECTION_STATUS": "CONNECTED", "ACCOUNT_STATUS": "HEALTHY", "ACCOUNT_USERNAME": "latosegreto"}
+
+    async def fake_discover(check_schedules=True):
+        return dict(healthy)
+    monkeypatch.setattr(connection, "discover", fake_discover)
+
+    async def fake_uid():
+        return "999"
+    monkeypatch.setattr(connection, "of_user_id", fake_uid)
+    yield fake
+    engine.force_provider(sandbox)
+
+
+async def test_real_test_hard_limit_gate_and_verify(real_test_env):
+    fake = real_test_env
+    a, b = await seed(_model(f"{TAG}-ra", ordine=1), _model(f"{TAG}-rb", ordine=2))
+    assert engine.real_test_mode() is True and engine.real_test_max_posts() == 1 and await engine.real_posts_created() == 0
+    r = await engine.run("PUBLISH_NOW", "admin")
+    assert r["status"] == "POST_CONFIRMED" and r["real_status"] == "POST_CONFIRMED" and r["model_slug"] == a["slug"] and r["mock"] is False
+    v = r["verification"]
+    assert v["ok"] and v["exists"] and v["account_ok"] and v["caption_ok"] and v["of_link_ok"] and v["media_ok"] and v["media_count"] == 2
+    assert fake.inner.gate_history == [True, False] and fake.inner.gate is False, "gate opened only for the write and restored"
+    assert r["write_gate"] == {"restored": True, "verified_false": True, "error": None}
+    assert fake.creates == 1 and await engine.real_posts_created() == 1
+    # SECOND POST MUST BE IMPOSSIBLE: readiness blocks before any upload/gate/create
+    r2 = await engine.run("PUBLISH_NOW", "admin")
+    assert r2["status"] == "FAILED" and r2["error_code"] == "REAL_TEST_LIMIT" and fake.creates == 1 and fake.inner.gate_history == [True, False]
+    assert len(fake.inner.uploads) == 2, "no further upload"
+    # scheduler path refused in real test mode
+    r3 = await engine.run("SCHEDULE", "scheduler", slot_id=f"{TAG}_rt", scheduled_at="2030-01-01T11:30:00+01:00")
+    assert r3["status"] == "FAILED" and r3["error_code"] in ("REAL_TEST_LIMIT", "REAL_TEST_MODE_IMMEDIATE_ONLY") and fake.creates == 1
+    st = await engine.get_state()
+    assert st["cycle_done"] == [a["id"]] and st["last_published"]["provider_post_id"] == r["provider_post_id"], "used model recorded, queue NOT auto-continued"
+    s = await engine.status()
+    assert s["REAL_TEST_MODE"] is True and s["REAL_TEST_MAX_POSTS"] == 1 and s["TOTAL_REAL_POSTS_CREATED"] == 1 and s["OF_REAL_POST_DONE"] is True and s["AUTO_SCHEDULER_ENABLED"] is False
+    assert toa.CALLS["write"] == 0, "the real The Only API adapter was never called"
+
+
+async def test_real_test_precheck_stop_no_next_model(real_test_env):
+    fake = real_test_env
+    bad = _model(f"{TAG}-bad", pub=[MISSING + "_x.jpg"], sec=[REAL_SITE_PHOTO], ordine=1)     # public unreachable on our host
+    good = _model(f"{TAG}-good", ordine=2)
+    await seed(bad, good)
+    r = await engine.run("PUBLISH_NOW", "admin")
+    assert r["status"] == "STOPPED_PRECHECK" and r["error_code"] == "NO_VALID_PUBLIC_MEDIA" and r["model_slug"] == bad["slug"]
+    assert fake.creates == 0 and not fake.inner.uploads and fake.inner.gate_history == [], "no gate, no upload, no create"
+    assert (await engine.get_state())["cycle_done"] == [], "no advance, no switch to the next model"
+    assert await engine.real_posts_created() == 0
+    # unhealthy account -> STOP before anything
+    fake2 = fake
+
+    async def unhealthy(check_schedules=True):
+        return {"PROVIDER": "The Only API", "CONNECTION_STATUS": "CONNECTED", "ACCOUNT_STATUS": "UNHEALTHY", "ACCOUNT_USERNAME": "latosegreto"}
+    connection.discover = unhealthy
+    r = await engine.run("PUBLISH_NOW", "admin")
+    assert r["status"] == "FAILED" and r["error_code"] == "ACCOUNT_UNHEALTHY" and fake2.creates == 0 and fake2.inner.gate_history == []
+
+
+def test_adapter_hard_create_limit_and_global_link(monkeypatch):
+    monkeypatch.setenv("OF_REAL_TEST_MAX_POSTS", "1")
+    a = toa.TheOnlyAPIAdapter()
+    before = toa.CALLS["create"]
+    monkeypatch.setitem(toa.CALLS, "create", 1)
+    with pytest.raises(OFProviderError) as ei:
+        a._check_create_limit()
+    assert ei.value.code == "REAL_TEST_LIMIT"
+    monkeypatch.setitem(toa.CALLS, "create", before)
+    # global Lato Segreto account is never a model link
+    assert ofmedia.valid_of_link("https://onlyfans.com/latosegreto") is None and ofmedia.valid_of_link("https://onlyfans.com/latosegreto/c28") is None
+    assert ofmedia.valid_of_link("https://onlyfans.com/vanessa_bellaaa/c9") == "https://onlyfans.com/vanessa_bellaaa/c9"
+    assert ofmedia.classify(_model("g-glob", of="https://onlyfans.com/latosegreto"))["status"] == "SKIPPED_NO_OF_LINK"

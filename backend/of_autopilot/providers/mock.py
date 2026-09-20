@@ -23,6 +23,8 @@ class MockOFProvider(OFProviderAdapter):
         self.hide_scheduled: bool = False
         self.hide_post: bool = False
         self.write_calls = 0                  # mock-internal counter (never a real write)
+        self.gate: bool = False
+        self.gate_history: List[bool] = []
 
     # ---------------- READ
     async def test_connection(self) -> Dict[str, Any]:
@@ -46,6 +48,14 @@ class MockOFProvider(OFProviderAdapter):
         if not p or self.hide_post:
             raise OFProviderError("NOT_FOUND", "mock: post non trovato", 404)
         return dict(p)
+
+    async def set_write_gate(self, of_user_id: str, enabled: bool) -> Dict[str, Any]:
+        self.gate = bool(enabled)
+        self.gate_history.append(self.gate)
+        return {"polling": {"allow_of_write_actions": self.gate}}
+
+    async def get_write_gate(self, of_user_id: str):
+        return self.gate
 
     # ---------------- WRITE (mock only)
     def _media_obj(self, name: str, kind: str, source: str) -> OFMedia:
@@ -73,7 +83,7 @@ class MockOFProvider(OFProviderAdapter):
         if self.fail_create:
             raise OFProviderError("API_ERROR", "mock: creazione post rifiutata", 500)
         pid = f"mock_of_{uuid.uuid4().hex[:10]}"
-        post = {"id": pid, "text": req.text, "media": [{"id": m.provider_ref, "type": m.kind} for m in req.media], "mediaFiles": [dict(m.raw) for m in req.media],
+        post = {"id": pid, "author": {"id": MOCK_OF_USER_ID, "username": "latosegreto"}, "text": req.text, "media": [{"id": m.provider_ref, "type": m.kind} for m in req.media], "mediaFiles": [dict(m.raw) for m in req.media],
                 "isScheduled": 1 if scheduled else 0, "scheduledDate": req.scheduled_at if scheduled else None, "postedAt": None if scheduled else datetime.now(timezone.utc).isoformat()}
         self.posts[pid] = post
         if scheduled and not self.hide_scheduled:

@@ -16,6 +16,7 @@ FIELDS = {"_id": 0, "id": 1, "slug": 1, "nome": 1, "nome_artistico": 1, "frase":
 PHOTO_EXT = (".jpg", ".jpeg", ".png", ".gif", ".webp")
 VIDEO_EXT = (".mp4", ".mov", ".m4v")            # formats accepted by OnlyFans / provider upload
 VALIDATION_TTL_S = 600
+GLOBAL_OF_USERNAME = os.environ.get("OF_EXPECTED_USERNAME", "latosegreto").strip().lower()
 VALIDATION_TIMEOUT_S = 20.0
 _cache: Dict[str, Tuple[float, dict]] = {}
 
@@ -42,6 +43,9 @@ def valid_of_link(url: Optional[str]) -> Optional[str]:
     except Exception:
         return None
     if (sp.netloc or "").lower() in ("onlyfans.com", "www.onlyfans.com") and len(sp.path.strip("/")) >= 1:
+        username = sp.path.strip("/").split("/")[0].lower()
+        if username == GLOBAL_OF_USERNAME:
+            return None                                 # global Lato Segreto account: never used as a model link
         return u
     return None
 

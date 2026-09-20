@@ -56,6 +56,21 @@ def auto_scheduler_enabled() -> bool:
     return connection.auto_scheduler_enabled()
 
 
+def real_test_max_posts() -> Optional[int]:
+    raw = (os.environ.get("OF_REAL_TEST_MAX_POSTS") or "").strip()
+    return int(raw) if raw.isdigit() else None
+
+
+def real_test_mode() -> bool:
+    """Controlled real test: single candidate, STOP on any pre-check failure, hard post limit, write gate opened only for the write."""
+    return (not mock_enabled()) and real_test_max_posts() is not None
+
+
+async def real_posts_created() -> int:
+    """Real (non-mock) create calls that returned a provider_post_id, any confirmation state (DB-level hard-limit source)."""
+    return await log_col.count_documents({"mock": {"$ne": True}, "provider_post_id": {"$nin": [None, ""]}, "action_type": {"$in": ["PUBLISH_NOW", "SCHEDULE"]}})
+
+
 def get_provider() -> OFProviderAdapter:
     """Writes go through here. MOCK -> MockOFProvider (process-wide, zero network). REAL -> OFProviderAdapter from connection (write-gated)."""
     global _mock_provider
@@ -261,13 +276,20 @@ async def upload_side(provider: OFProviderAdapter, of_user_id: str, model: dict,
 
 
 # ----------------------------------------------------------------------------------------------- readiness
-async def readiness() -> dict:
-    """MOCK: always operational (no network). REAL: needs CONNECTED + HEALTHY + OF_REAL_POSTING_ENABLED (never true in this phase)."""
-    conn = connection.public_view(await connection.saved())
+async def readiness(live: bool = False) -> dict:
+    """MOCK: always operational (no network). REAL: CONNECTED + HEALTHY (+ live re-check when live=True) + OF_REAL_POSTING_ENABLED
+    + hard limit not reached (real test mode)."""
     if mock_enabled():
-        return {"operational": True, "reason": None, "connection": conn}
-    ok = conn.get("CONNECTION_STATUS") == "CONNECTED" and conn.get("ACCOUNT_STATUS") == "HEALTHY" and connection.real_posting_enabled()
-    return {"operational": ok, "reason": None if ok else ("OF_REAL_POSTING_DISABLED" if not connection.real_posting_enabled() else conn.get("CONNECTION_STATUS")), "connection": conn}
+        return {"operational": True, "reason": None, "connection": connection.public_view(await connection.saved())}
+    if not connection.real_posting_enabled():
+        return {"operational": False, "reason": "OF_REAL_POSTING_DISABLED", "connection": connection.public_view(await connection.saved())}
+    conn = await connection.discover(check_schedules=False) if live else connection.public_view(await connection.saved())
+    if conn.get("CONNECTION_STATUS") != "CONNECTED" or conn.get("ACCOUNT_STATUS") != "HEALTHY" or (conn.get("ACCOUNT_USERNAME") or "").lower() != connection.EXPECTED_USERNAME:
+        return {"operational": False, "reason": f"ACCOUNT_{conn.get('ACCOUNT_STATUS')}" if conn.get("CONNECTION_STATUS") == "CONNECTED" else conn.get("CONNECTION_STATUS"), "connection": conn}
+    mx = real_test_max_posts()
+    if mx is not None and await real_posts_created() >= mx:
+        return {"operational": False, "reason": "REAL_TEST_LIMIT", "connection": conn}
+    return {"operational": True, "reason": None, "connection": conn}
 
 
 async def _of_user_id(is_mock: bool) -> Optional[str]:
@@ -313,12 +335,15 @@ async def run(action: str = "PUBLISH_NOW", trigger: str = "admin", slot_id: Opti
                 await _log(status="SKIP_DUPLICATE_SLOT", action_type=action, slot_id=slot_id, trigger=trigger, cycle_number=st["cycle_number"])
                 return {"status": "SKIP_DUPLICATE_SLOT", "slot_id": slot_id}
         await set_state(last_run=now_iso(), last_slot=slot_id or st.get("last_slot"))
-        ready = await readiness()
+        ready = await readiness(live=not mock_enabled())                      # REAL: live health check right before any write
         if not ready["operational"]:
             await set_state(last_error=ready["reason"])
             res = await _log(status="FAILED", action_type=action, error_code=ready["reason"], slot_id=slot_id, trigger=trigger, cycle_number=st["cycle_number"])
             await _finish_slot(slot_id, "FAILED")
-            return {"status": "FAILED", "error_code": ready["reason"], "log": res}
+            return {"status": "FAILED", "error_code": ready["reason"], "log": res, "ACCOUNT_STATUS": (ready.get("connection") or {}).get("ACCOUNT_STATUS")}
+        if action == "SCHEDULE" and real_test_mode():
+            await _finish_slot(slot_id, "FAILED")
+            return {"status": "FAILED", "error_code": "REAL_TEST_MODE_IMMEDIATE_ONLY"}
         q = await queue_view(st)
         eligible = q["eligible"]
         if not eligible:
@@ -332,7 +357,9 @@ async def run(action: str = "PUBLISH_NOW", trigger: str = "admin", slot_id: Opti
             await _finish_slot(slot_id, "FAILED")
             return {"status": "FAILED", "error_code": "OF_USER_ID_MISSING"}
         result = None
-        for _ in range(len(eligible)):                                        # bounded pass over the queue
+        single = real_test_mode()                                             # controlled real test: ONE candidate, never the next model
+        gate_opened = False
+        for _ in range(1 if single else len(eligible)):                       # bounded pass over the queue
             st = await get_state()
             cand = _next_from(eligible, set(st.get("cycle_done") or []), st.get("last_position", -1))
             if not cand:
@@ -343,14 +370,29 @@ async def run(action: str = "PUBLISH_NOW", trigger: str = "admin", slot_id: Opti
             # ---- 1) validate BOTH sides first (real HEAD on our storage) -> skip the model before any upload if a side has no valid media
             pub_sel = await select_valid(seqs["public"], cand["model_id"])
             if not pub_sel["item"]:
+                if single:
+                    result = await _fail(base, "STOPPED_PRECHECK", pub_sel["errors"], slot_id, error_code="NO_VALID_PUBLIC_MEDIA"); break
                 await _advance(st, eligible, cand["model_id"], False, None, "SKIPPED_NO_PUBLIC")
                 await _log(status="SKIPPED_NO_PUBLIC", **base, error_code="NO_VALID_PUBLIC_MEDIA", media_errors=pub_sel["errors"])
                 continue
             sec_sel = await select_valid(seqs["secret"], cand["model_id"])
             if not sec_sel["item"]:
+                if single:
+                    result = await _fail(base, "STOPPED_PRECHECK", sec_sel["errors"], slot_id, error_code="NO_VALID_SECRET_MEDIA"); break
                 await _advance(st, eligible, cand["model_id"], False, None, "SKIPPED_NO_SECRET")
                 await _log(status="SKIPPED_NO_SECRET", **base, error_code="NO_VALID_SECRET_MEDIA", media_errors=sec_sel["errors"])
                 continue
+            if pub_sel["item"]["model_id"] != cand["model_id"] or sec_sel["item"]["model_id"] != cand["model_id"]:
+                result = await _fail(base, "STOPPED_PRECHECK", [], slot_id, error_code="SAME_MODEL_MEDIA_FAILED"); break
+            mx = real_test_max_posts()
+            if not is_mock and mx is not None and await real_posts_created() >= mx:                   # HARD LIMIT before any upload
+                result = await _fail(base, "BLOCKED", [], slot_id, error_code="REAL_TEST_LIMIT"); break
+            if not is_mock and hasattr(provider, "set_write_gate"):                                    # open the panel write gate ONLY now
+                try:
+                    await provider.set_write_gate(of_uid, True)
+                    gate_opened = True
+                except OFProviderError as e:
+                    result = await _fail(base, "FAILED", [{"stage": "WRITE_GATE", "reason": e.code}], slot_id, error_code=f"WRITE_GATE_{e.code}"); break
             # ---- 2) upload PUBLIC then SECRET (complete media objects); any upload failure -> NO advance
             pub = await upload_side(provider, of_uid, model, seqs["public"], is_mock)
             if not pub["media"]:
@@ -366,7 +408,9 @@ async def run(action: str = "PUBLISH_NOW", trigger: str = "admin", slot_id: Opti
             req = OFPostRequest(text=cap["text"], media=[pub["media"], sec["media"]], scheduled_at=scheduled_at if action == "SCHEDULE" else None)   # PUBLIC first
             info = {**base, "public_media_id": pub["item"]["id"], "secret_media_id": sec["item"]["id"], "public_source_url": pub["item"]["source_url"], "secret_source_url": sec["item"]["source_url"],
                     "public_media_type": pub["item"]["type"], "secret_media_type": sec["item"]["type"], "caption_source": cap["source"], "scheduled_at": req.scheduled_at}
-            # ---- create / schedule + verify
+            # ---- create / schedule + verify (hard limit re-checked right before the create write)
+            if not is_mock and mx is not None and await real_posts_created() >= mx:
+                result = await _fail(info, "BLOCKED", [], slot_id, error_code="REAL_TEST_LIMIT"); break
             try:
                 if action == "SCHEDULE":
                     pr = await provider.schedule_post(of_uid, req)
@@ -374,7 +418,8 @@ async def run(action: str = "PUBLISH_NOW", trigger: str = "admin", slot_id: Opti
                     real_status = "SCHEDULE_CONFIRMED" if confirmed else "SCHEDULE_NOT_CONFIRMED"
                 else:
                     pr = await provider.create_post(of_uid, req)
-                    confirmed = bool(pr.post_id) and await provider.verify_post(of_uid, pr.post_id)
+                    verify = await verify_real_post(provider, of_uid, pr, cap["text"], cand["of_url"], [pub["media"], sec["media"]])
+                    confirmed = verify["ok"]
                     real_status = "POST_CONFIRMED" if confirmed else "POST_NOT_CONFIRMED"
             except OFProviderError as e:
                 for u in (pub["upload_id"], sec["upload_id"]):
@@ -382,6 +427,8 @@ async def run(action: str = "PUBLISH_NOW", trigger: str = "admin", slot_id: Opti
                 result = await _fail(info, "FAILED", [{"stage": "CREATE", "reason": e.code}], slot_id, error_code=e.code)
                 break
             info["provider_post_id"] = pr.post_id
+            if action == "PUBLISH_NOW":
+                info["verification"] = verify
             if not confirmed:                                                                           # 200 but not verifiable -> NO advance
                 await set_state(last_error=real_status)
                 res = await _log(status=real_status, **info, error_code=real_status)
@@ -404,9 +451,59 @@ async def run(action: str = "PUBLISH_NOW", trigger: str = "admin", slot_id: Opti
         if result is None:
             result = {"status": "FAILED", "error_code": "NO_PUBLISHABLE_MODEL"}
             await _finish_slot(slot_id, "FAILED")
+        if gate_opened:                                                                                # ALWAYS restore the gate (PASS or FAIL) and verify by READ
+            result["write_gate"] = await _restore_gate(provider, of_uid)
         return result
     finally:
         await release_lock(owner)
+
+
+async def _restore_gate(provider: OFProviderAdapter, of_uid: str) -> dict:
+    out = {"restored": False, "verified_false": None, "error": None}
+    try:
+        await provider.set_write_gate(of_uid, False)
+        out["restored"] = True
+    except OFProviderError as e:
+        out["error"] = e.code
+    try:
+        out["verified_false"] = (await provider.get_write_gate(of_uid)) is False
+    except OFProviderError as e:
+        out["error"] = out["error"] or e.code
+    await set_state(write_gate_restored=out)
+    return out
+
+
+async def verify_real_post(provider: OFProviderAdapter, of_uid: str, pr, caption: str, of_url: str, medias: list) -> dict:
+    """HTTP 200 is not enough: READ the post back and check id, author/account, caption + OF link, media presence."""
+    out = {"ok": False, "post_id": pr.post_id, "exists": False, "account_ok": None, "caption_ok": None, "of_link_ok": None, "media_ok": None, "media_count": None, "detail": None}
+    if not pr.post_id:
+        out["detail"] = "NO_POST_ID"
+        return out
+    try:
+        data = await provider.get_post(of_uid, pr.post_id)
+    except OFProviderError as e:
+        out["detail"] = f"READ_{e.code}"
+        return out
+    if not data or str(data.get("id")) != str(pr.post_id):
+        out["detail"] = "ID_MISMATCH"
+        return out
+    out["exists"] = True
+    author = data.get("author") or {}
+    author_id, author_name = str(author.get("id") or data.get("authorId") or ""), str(author.get("username") or "").lower()
+    out["account_ok"] = True if (isinstance(provider, MockOFProvider) or not (author_id or author_name)) else (author_id == str(of_uid) or author_name == connection.EXPECTED_USERNAME)
+    import re as _re
+    norm = lambda t: _re.sub(r"<[^>]+>|\s+", " ", str(t or "")).strip().lower()
+    text = norm(data.get("text") or data.get("rawText") or "")
+    first_line = norm(caption.split("\n")[0])
+    out["caption_ok"] = bool(text) and (first_line in text or norm(caption)[:60] in text)
+    out["of_link_ok"] = of_url.lower().replace("https://", "") in (text + " " + norm(data.get("rawText") or ""))
+    media = data.get("media") or data.get("mediaFiles") or []
+    out["media_count"] = len(media) if isinstance(media, list) else (data.get("mediaCount") or 0)
+    out["media_ok"] = (out["media_count"] or 0) >= len(medias)
+    out["ok"] = bool(out["exists"] and out["account_ok"] and out["caption_ok"] and out["of_link_ok"] and out["media_ok"])
+    if not out["ok"]:
+        out["detail"] = "VERIFY_FIELDS_FAILED"
+    return out
 
 
 async def _fail(base: dict, status: str, errors: list, slot_id: Optional[str], error_code: Optional[str] = None, **extra) -> dict:
@@ -508,7 +605,9 @@ async def status() -> dict:
         "OF_AUTOPILOT_STATUS": autopilot, "enabled": bool(st["enabled"]), "AUTO_SCHEDULER_ENABLED": auto_scheduler_enabled(), "MOCK_MODE": mock_enabled(), "mock_mode": mock_enabled(),
         "OF_REAL_POSTING_ENABLED": connection.real_posting_enabled(), "REAL_POSTING": "ON" if connection.real_posting_enabled() else "OFF", "AUTO_SCHEDULER": "ON" if auto_scheduler_enabled() else "OFF",
         "PROVIDER": conn.get("PROVIDER"), "CONNECTION_STATUS": conn.get("CONNECTION_STATUS"), "ACCOUNT_USERNAME": conn.get("ACCOUNT_USERNAME"), "ACCOUNT_STATUS": conn.get("ACCOUNT_STATUS"), "connection": conn,
-        "THE_ONLY_API_REAL_WRITE_CALLS": toa.CALLS["write"], "OF_REAL_POST_DONE": await log_col.count_documents({"status": {"$in": ["POST_CONFIRMED", "SCHEDULE_CONFIRMED"]}, "mock": {"$ne": True}}) > 0,
+        "THE_ONLY_API_REAL_WRITE_CALLS": toa.CALLS["write"], "REAL_WRITE_BREAKDOWN": {k: toa.CALLS[k] for k in ("gate", "upload", "create")},
+        "REAL_TEST_MODE": real_test_mode(), "REAL_TEST_MAX_POSTS": real_test_max_posts(), "TOTAL_REAL_POSTS_CREATED": await real_posts_created(), "write_gate_restored": st.get("write_gate_restored"),
+        "OF_REAL_POST_DONE": await log_col.count_documents({"status": {"$in": ["POST_CONFIRMED", "SCHEDULE_CONFIRMED"]}, "mock": {"$ne": True}}) > 0,
         "queue": {"position": q["position"], "total": q["n_eligible"], "cycle_number": st["cycle_number"], "done_in_cycle": q["n_done_in_cycle"],
                   "current": {"slug": nxt["slug"], "name": nxt["name"], "n_public": nxt["n_public"], "n_secret": nxt["n_secret"], "of_url": nxt["of_url"]} if nxt else None,
                   "order": [{"slug": r["slug"], "name": r["name"], "done": r["model_id"] in set(st.get("cycle_done") or [])} for r in q["eligible"]],
