@@ -434,9 +434,13 @@ def test_admin_api_contract():
         assert requests.post(f"{BASE}/api/admin/of-autopilot/{ep}", timeout=15).status_code in (401, 403), ep
     h = {"Authorization": f"Bearer {_token()}"}
     s = requests.get(f"{BASE}/api/admin/of-autopilot/status", headers=h, timeout=60).json()
-    assert s["MOCK_MODE"] is True and s["OF_REAL_POSTING_ENABLED"] is False and s["AUTO_SCHEDULER_ENABLED"] is False and s["REAL_POSTING"] == "OFF" and s["AUTO_SCHEDULER"] == "OFF"
-    assert s["OF_AUTOPILOT_STATUS"] in ("PAUSED", "READY") and s["PROVIDER"] == "The Only API" and s["CONNECTION_STATUS"] == "CONNECTED" and s["ACCOUNT_USERNAME"] == "latosegreto" and s["ACCOUNT_STATUS"] == "HEALTHY"
-    assert s["THE_ONLY_API_REAL_WRITE_CALLS"] == 0 and s["OF_REAL_POST_DONE"] is False
+    # The running server may be configured MOCK (dev) or REAL (production-like). The contract is: flags are booleans, labels are
+    # consistent with them and this READ-ONLY test never changes any provider write counter.
+    assert isinstance(s["MOCK_MODE"], bool) and isinstance(s["OF_REAL_POSTING_ENABLED"], bool) and isinstance(s["AUTO_SCHEDULER_ENABLED"], bool)
+    assert s["REAL_POSTING"] == ("ON" if s["OF_REAL_POSTING_ENABLED"] else "OFF") and s["AUTO_SCHEDULER"] == ("ON" if s["AUTO_SCHEDULER_ENABLED"] else "OFF")
+    assert s["MASS_DM_TARGET"] == "FAN" and s["CATCH_UP_ENABLED"] is False
+    assert s["OF_AUTOPILOT_STATUS"] in ("PAUSED", "READY", "ACTIVE") and s["PROVIDER"] == "The Only API" and s["CONNECTION_STATUS"] == "CONNECTED" and s["ACCOUNT_USERNAME"] == "latosegreto" and s["ACCOUNT_STATUS"] == "HEALTHY"
+    writes_before = (s["THE_ONLY_API_REAL_WRITE_CALLS"], s["THE_ONLY_API_REAL_MASS_DM_CALLS"], s["TOTAL_REAL_POSTS_CREATED"])
     assert s["settings"] == {"posts_per_day": 3, "schedule_times": ["11:30", "17:30", "22:00"], "timezone": "Europe/Rome", "use_ai_copy": True} or s["settings"]["timezone"] == "Europe/Rome"
     assert s["queue"]["total"] >= 1 and s["schedule"]["next_slot"]["slot_id"].startswith("of_")
     for k in ("skipped_no_public", "skipped_no_secret", "skipped_no_of_link", "excluded"):
@@ -444,7 +448,9 @@ def test_admin_api_contract():
     p = requests.get(f"{BASE}/api/admin/of-autopilot/preview", headers=h, timeout=180).json()
     assert p["status"] == "PREVIEW" and p["public"]["side"] == "PUBLIC" and p["secret"]["side"] == "SECRET" and p["SAME_MODEL_MEDIA"] is True and p["media_order"] == ["PUBLIC", "SECRET"]
     assert p["public_validation"]["ok"] and p["secret_validation"]["ok"] and p["public"]["source_url"].startswith("https://") and p["of_url"].startswith("https://onlyfans.com/") and p["caption"].endswith(p["of_url"])
-    assert p["provider"] == "MOCK" and p["account"] == "latosegreto" and p["writes"] == 0
+    assert p["provider"] == ("MOCK" if s["MOCK_MODE"] else "The Only API") and p["account"] == "latosegreto" and p["writes"] == 0
+    s2 = requests.get(f"{BASE}/api/admin/of-autopilot/status", headers=h, timeout=60).json()
+    assert (s2["THE_ONLY_API_REAL_WRITE_CALLS"], s2["THE_ONLY_API_REAL_MASS_DM_CALLS"], s2["TOTAL_REAL_POSTS_CREATED"]) == writes_before, "status/preview must be zero-write"
     # no route can enable real posting; no upload route
     for ep in ("enable-real-posting", "upload", "schedule", "real-posting"):
         assert requests.post(f"{BASE}/api/admin/of-autopilot/{ep}", headers=h, json={}, timeout=15).status_code in (404, 405), ep
@@ -558,9 +564,15 @@ def test_adapter_hard_create_limit_and_global_link(monkeypatch):
     a = toa.TheOnlyAPIAdapter()
     before = toa.CALLS["create"]
     monkeypatch.setitem(toa.CALLS, "create", 1)
+    monkeypatch.setenv("OF_REAL_POSTING_ENABLED", "false")
+    with pytest.raises(OFProviderError) as ei:
+        a._check_create_limit()
+    assert ei.value.code == "WRITES_DISABLED"                    # the write gate has precedence over the test budget
+    monkeypatch.setenv("OF_REAL_POSTING_ENABLED", "true")
     with pytest.raises(OFProviderError) as ei:
         a._check_create_limit()
     assert ei.value.code == "REAL_TEST_LIMIT"
+    monkeypatch.setenv("OF_REAL_POSTING_ENABLED", "false")
     monkeypatch.setitem(toa.CALLS, "create", before)
     # global Lato Segreto account is never a model link
     assert ofmedia.valid_of_link("https://onlyfans.com/latosegreto") is None and ofmedia.valid_of_link("https://onlyfans.com/latosegreto/c28") is None

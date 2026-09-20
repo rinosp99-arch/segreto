@@ -53,8 +53,12 @@ async def start(admin=Depends(get_current_admin)):
     ready = await engine.readiness()
     if not ready["operational"]:
         raise HTTPException(409, f"OF Autopilot non operativo: {ready['reason']}")
-    await engine.set_state(enabled=True)
-    return {"enabled": True, "AUTO_SCHEDULER_ENABLED": engine.auto_scheduler_enabled(), "MOCK_MODE": engine.mock_enabled(),
+    await engine.set_state(enabled=True, activated_at=engine.now_iso())          # NO catch-up: only slots strictly after this instant are ever prepared
+    st = await engine.get_state()
+    sch = await engine.schedule_view(st)
+    await engine.set_state(next_run=(sch["next_slot"] or {}).get("at"))
+    return {"enabled": True, "AUTO_SCHEDULER_ENABLED": engine.auto_scheduler_enabled(), "MOCK_MODE": engine.mock_enabled(), "activated_at": st.get("activated_at"),
+            "CATCH_UP_ENABLED": False, "IMMEDIATE_RUN_TRIGGERED": False, "next_run": (sch["next_slot"] or {}).get("at"),
             "note": None if engine.auto_scheduler_enabled() else "Master switch OF_AUTO_SCHEDULER_ENABLED=false: lo scheduler resta fermo"}
 
 
@@ -88,6 +92,20 @@ async def mass_dm_test(body: MassDmTest, admin=Depends(get_current_admin)):
     r = await engine.mass_dm_from_post(body.model_slug.strip().lower(), body.provider_post_id, execute=body.execute, trigger="admin")
     if r.get("status") == "LOCKED":
         raise HTTPException(409, "Pubblicazione già in corso")
+    return r
+
+
+class CloseRun(BaseModel):
+    reason: str = "MASS_DM_READBACK_CONFIRMED"
+
+
+@router.post("/mass-dm-test/{post_id}/close")
+async def mass_dm_close(post_id: str, body: CloseRun, admin=Depends(get_current_admin)):
+    """Admin decision, ZERO provider writes: a mass DM left UNVERIFIED (provider error after the send) but confirmed by real read-back is closed as OK.
+    Keeps provider_response / error history and the duplicate protection (marker stays)."""
+    r = await engine.close_mass_dm_run(post_id, body.reason, trigger="admin")
+    if r.get("status") == "NOT_FOUND":
+        raise HTTPException(404, "Run non trovata")
     return r
 
 

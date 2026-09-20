@@ -57,8 +57,10 @@ async def sandbox(monkeypatch):
         return items
     ofmedia.published_models = only_test
     writes_before, dm_before = toa.CALLS["write"], toa.CALLS["mass_dm"]
+    slots_before = {d["slot_id"] async for d in engine.slots_col.find({}, {"slot_id": 1})}
     yield mock
-    assert toa.CALLS["write"] == writes_before and toa.CALLS["mass_dm"] == dm_before == 0, "a REAL provider write / mass DM happened"
+    assert toa.CALLS["write"] == writes_before and toa.CALLS["mass_dm"] == dm_before, "a REAL provider write / mass DM happened"
+    await engine.slots_col.delete_many({"slot_id": {"$nin": list(slots_before)}})      # slots claimed by this test only (slot ids are global: of_<day>_<HH:MM>)
     ofmedia.published_models = orig
     engine.force_provider(None)
     ids = [m["id"] async for m in models_col.find({"_test_tag": TAG}, {"id": 1})]
@@ -484,6 +486,7 @@ async def test_real_adapter_fans_payload_shape_and_no_dry_run(monkeypatch):
     monkeypatch.setenv("OF_MASS_DM_MOCK", "false")
     ad = toa.TheOnlyAPIAdapter()
     assert ad.FANS_DRY_RUN_SUPPORTED is False
+    counters_before = dict(toa.CALLS)
     captured = {}
     async def fake_request(method, url, **kw):
         captured.update(method=method, url=url, json=kw.get("json"), write=kw.get("write"))
@@ -501,3 +504,142 @@ async def test_real_adapter_fans_payload_shape_and_no_dry_run(monkeypatch):
         return {"success": True, "status_code": 200, "data": {"list": [{"id": "following", "type": "following", "usersCount": 188}, {"id": "fans", "type": "fans", "name": "Fans", "usersCount": 2300}]}}
     monkeypatch.setattr(ad, "_request", fake_lists)
     assert await ad.get_fans_list("1") == {"id": "fans", "name": "Fans", "usersCount": 2300}
+    toa.CALLS.update(counters_before)                                                               # fake _request never hit the network: keep global counters clean
+
+
+def _safe_tz():
+    """A valid IANA zone whose local time is far from midnight (dynamic HH:MM slot tests must not cross the day boundary)."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    for name in ("Europe/Rome", "Asia/Tokyo", "America/Los_Angeles", "Pacific/Kiritimati", "Asia/Kolkata", "America/Sao_Paulo"):
+        if 2 <= datetime.now(ZoneInfo(name)).hour <= 20:
+            return name
+    return "Europe/Rome"
+
+
+# ------------------------------------------------------------------ activation: NO catch-up, close-by-readback (zero writes)
+async def test_activation_no_catch_up(sandbox, monkeypatch):
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    mock = sandbox
+    a, = await seed(_model(f"{TAG}-ada", 0))
+    await engine.set_state(timezone=_safe_tz())
+    st = await engine.get_state()
+    tz = ZoneInfo(st["timezone"])
+    now = datetime.now(tz)
+    # a slot 20 minutes ago (inside the 90' grace) would normally be "due" -> with activation now it must NOT be recovered
+    past = (now - timedelta(minutes=20)).strftime("%H:%M")
+    future = (now + timedelta(minutes=45)).strftime("%H:%M")                                        # beyond the 30' preparation lead
+    await engine.set_state(schedule_times=[past, future], posts_per_day=2, enabled=True, activated_at=None)
+    st = await engine.get_state()
+    due = await engine.due_slot(st)
+    assert due and past in due["slot_id"]                                                            # without activation guard the past slot is due (legacy)
+    await engine.set_state(activated_at=engine.now_iso())                                            # what POST /start does
+    st = await engine.get_state()
+    due2 = await engine.due_slot(st)
+    assert due2 is None or past not in due2["slot_id"]                                               # CATCH_UP_ENABLED = FALSE
+    monkeypatch.setenv("OF_AUTO_SCHEDULER_ENABLED", "true")
+    t = await engine.tick("test")
+    assert t["status"] == "NO_DUE_SLOT" and len(mock.posts) == 0                                     # IMMEDIATE_RUN_TRIGGERED = FALSE (past slot never recovered)
+    assert not await engine.slots_col.find_one({"slot_id": {"$regex": past}})
+    s = await engine.status()
+    assert s["CATCH_UP_ENABLED"] is False and s["MASS_DM_TARGET"] == "FAN" and s["activated_at"]
+
+
+async def test_close_mass_dm_run_by_readback_zero_writes(sandbox, monkeypatch):
+    mock = sandbox
+    a, r = await _feed_only(monkeypatch, f"{TAG}-bice", mock=mock)
+    pid = r["provider_post_id"]
+    async def net_error(uid, req):
+        raise OFProviderError("API_ERROR", "provider 5xx", 502)
+    monkeypatch.setattr(mock, "mass_message_fans", net_error)
+    e = await engine.mass_dm_from_post(a["slug"], pid, execute=True, trigger="test")
+    assert e["status"] == "MASS_DM_UNVERIFIED", e.get("failed_checks")
+    writes = mock.write_calls
+    monkeypatch.setattr(mock, "mass_message_fans", lambda uid, req: (_ for _ in ()).throw(AssertionError("no send allowed")))
+    c = await engine.close_mass_dm_run(pid, "MASS_DM_READBACK_CONFIRMED", trigger="test")
+    assert c["status"] == "CLOSED" and c["previous_mass_dm_status"] == "UNVERIFIED" and c["provider_response"] == "API_ERROR" and c["readback_confirmed"] is True and c["writes"] == 0
+    run = await engine.runs_col.find_one({"cycle_number": f"post:{pid}"}, {"_id": 0})
+    assert run["mass_dm_status"] == "OK" and run["closed_by_admin"] is True and run["provider_response"] == "API_ERROR" and run["previous_mass_dm_status"] == "UNVERIFIED" and run["mass_dm_id"]
+    assert mock.write_calls == writes and len(mock.posts) == 1                                       # zero writes, no new feed
+    logs = [l async for l in engine.log_col.find({"feed_post_id": pid})]
+    assert any(l["status"] == "MASS_DM_NOT_CONFIRMED" for l in logs) and any(l["status"] == "MASS_DM_CLOSED_BY_READBACK" for l in logs)   # error history preserved
+    dup = await engine.mass_dm_from_post(a["slug"], pid, execute=True, trigger="test")
+    assert dup["status"] == "STOPPED_PRECHECK" and "NO_MASS_DM_ALREADY_SENT_FOR_POST" in dup["failed_checks"]                             # duplicate protection stays
+    assert (await engine.close_mass_dm_run(pid, "x", trigger="test"))["status"] == "ALREADY_OK"
+    assert (await engine.close_mass_dm_run("nope", "x", trigger="test"))["status"] == "NOT_FOUND"
+
+
+async def test_close_legacy_run_current_model_advances_next_model_not_published(sandbox, monkeypatch):
+    """Production shape of the Vanessa closure: the model is still the queue candidate, its real feed pre-dates of_model_runs (no cycle run), the DM-only
+    run (post:<id>) is UNVERIFIED/API_ERROR. Closing by read-back: DB-only, history preserved, cycle run FEED OK + DM OK, queue -> NEXT_MODEL,
+    NOTHING published now, and the scheduler never produces a second feed/DM for the closed model."""
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    mock = sandbox
+    van, nxt = await seed(_model(f"{TAG}-van", 0), _model(f"{TAG}-nxt", 1))
+    pid = "2759765107"
+    await engine.runs_col.insert_one({"id": str(uuid.uuid4()), "model_id": van["id"], "cycle_number": f"post:{pid}", "model_slug": van["slug"], "model_name": van["nome_artistico"], "mock": False,
+                                      "action_type": "MASS_DM_TEST", "feed_status": "OK", "feed_post_id": pid, "of_link": van["onlyfans_url"], "mass_dm_status": "UNVERIFIED",
+                                      "mass_dm_error": "API_ERROR", "mass_dm_id": "crm:abc123", "mass_dm_attempts": 1, "created_at": engine.now_iso()})
+    st = await engine.get_state()
+    assert (await engine.queue_view(st))["next"]["model_id"] == van["id"] and await engine.get_run(van["id"], st["cycle_number"]) is None
+    monkeypatch.setattr(mock, "mass_message_fans", lambda uid, req: (_ for _ in ()).throw(AssertionError("no send allowed")))
+    monkeypatch.setattr(mock, "create_post", lambda uid, req: (_ for _ in ()).throw(AssertionError("no feed allowed")))
+    c = await engine.close_mass_dm_run(pid, "MASS_DM_READBACK_CONFIRMED", trigger="test")
+    assert c["status"] == "CLOSED" and c["queue_advanced"] is True and c["NEXT_MODEL"] == nxt["slug"] and c["writes"] == 0 and c["readback_confirmed"] is True
+    assert c["previous_mass_dm_status"] == "UNVERIFIED" and c["provider_response"] == "API_ERROR" and c["mass_dm_id"] == "crm:abc123"
+    legacy = await engine.runs_col.find_one({"cycle_number": f"post:{pid}"}, {"_id": 0})
+    assert legacy["mass_dm_status"] == "OK" and legacy["previous_mass_dm_status"] == "UNVERIFIED" and legacy["provider_response"] == "API_ERROR" and legacy["readback_confirmed"] is True
+    cyc = await engine.get_run(van["id"], st["cycle_number"])
+    assert cyc["feed_status"] == "OK" and cyc["feed_post_id"] == pid and cyc["mass_dm_status"] == "OK" and cyc["readback_confirmed"] is True and cyc["closed_by_admin"] is True
+    st = await engine.get_state()
+    assert van["id"] in st["cycle_done"] and st["last_published"]["provider_post_id"] == pid and len(mock.posts) == 0 and len(mock.mass_messages) == 0
+    s = await engine.status()
+    assert s["NEXT_MODEL"] == nxt["slug"] and s["closed_runs"][0]["model_slug"] == van["slug"] and s["closed_runs"][0]["provider_response"] == "API_ERROR"
+    # scheduler ON right after the closure: no due slot -> nothing happens (IMMEDIATE_RUN_TRIGGERED = FALSE)
+    await engine.set_state(timezone=_safe_tz())
+    st = await engine.get_state()
+    tz = ZoneInfo(st["timezone"])
+    now = datetime.now(tz)
+    far = (now + timedelta(minutes=120)).strftime("%H:%M")
+    await engine.set_state(schedule_times=[far], posts_per_day=1, enabled=True, activated_at=engine.now_iso())
+    monkeypatch.setenv("OF_AUTO_SCHEDULER_ENABLED", "true")
+    t = await engine.tick("test")
+    assert t["status"] == "NO_DUE_SLOT" and len(mock.posts) == 0 and len(mock.mass_messages) == 0
+    # the NEXT future official slot (inside the 30' preparation lead) -> SCHEDULE for NEXT_MODEL only, never for the closed model
+    soon = now + timedelta(minutes=10)
+    monkeypatch.setattr(mock, "create_post", MockOFProvider.create_post.__get__(mock))
+    await engine.set_state(schedule_times=[soon.strftime("%H:%M")], posts_per_day=1)
+    await engine.slots_col.delete_many({"slot_id": f"of_{soon.strftime('%Y-%m-%d')}_{soon.strftime('%H:%M')}"})                       # slot ids are global: drop residue of other tests
+    t2 = await engine.tick("test")
+    assert t2["status"].startswith("MOCK_CONFIRMED") and t2["model_slug"] == nxt["slug"] and t2["model_slug"] != van["slug"]
+    assert all(p["model_id"] != van["id"] for p in [u async for u in engine.uploads_col.find({"model_id": {"$in": [van["id"], nxt["id"]]}})])
+    assert (await engine.get_run(van["id"], 1))["feed_post_id"] == pid                                                                  # closed model untouched
+
+
+async def test_start_route_semantics_no_catch_up_next_run_future(sandbox, monkeypatch):
+    """What POST /start persists: activated_at + next_run strictly in the future; a slot 5' ago (inside grace) is never recovered by tick()."""
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    mock = sandbox
+    await seed(_model(f"{TAG}-cla", 0))
+    await engine.set_state(timezone=_safe_tz())
+    st = await engine.get_state()
+    tz = ZoneInfo(st["timezone"])
+    now = datetime.now(tz)
+    past = (now - timedelta(minutes=5)).strftime("%H:%M")
+    future = (now + timedelta(minutes=50)).strftime("%H:%M")
+    await engine.set_state(schedule_times=[past, future], posts_per_day=2)
+    await engine.set_state(enabled=True, activated_at=engine.now_iso())
+    st = await engine.get_state()
+    sch = await engine.schedule_view(st)
+    await engine.set_state(next_run=(sch["next_slot"] or {}).get("at"))
+    assert future in sch["next_slot"]["slot_id"] and datetime.fromisoformat(sch["next_slot"]["at"]) > now
+    monkeypatch.setenv("OF_AUTO_SCHEDULER_ENABLED", "true")
+    for _ in range(2):
+        t = await engine.tick("test")
+        assert t["status"] == "NO_DUE_SLOT"
+    assert len(mock.posts) == 0 and len(mock.mass_messages) == 0 and not await engine.slots_col.find_one({"slot_id": {"$regex": past}})
+    s = await engine.status()
+    assert s["OF_AUTOPILOT_STATUS"] == "ACTIVE" and s["CATCH_UP_ENABLED"] is False and s["next_run"] == sch["next_slot"]["at"] and s["last_run"] is None

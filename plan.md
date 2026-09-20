@@ -179,6 +179,13 @@ Sezione in Home con fascia orizzontale di teaser video verticali che scorre lent
 
 ## 3) Phase 14 — SEO AUTOPILOT READ_ONLY (Status: COMPLETED — PASS, PUBLIC_MUTATIONS=0)
 
+### Phase 25 — ATTIVAZIONE UFFICIALE OF AUTOPILOT (no catch-up, no run immediato, Vanessa chiusa DB-only) — Status: CODICE PRONTO in workspace, IN ATTESA DI DEPLOY/ATTIVAZIONE UTENTE (0 write reali)
+- Fatto (agent-tested): `due_slot()` guard `activated_at` (nessun recupero slot passati), `/start` senza run immediato (`CATCH_UP_ENABLED=false`, `IMMEDIATE_RUN_TRIGGERED=false`, `next_run` futuro),
+  `POST /mass-dm-test/{post_id}/close` DB-only (storico API_ERROR/UNVERIFIED preservato, `readback_confirmed=true`, duplicate protection, run di ciclo FEED OK + DM OK anche se il feed precede `of_model_runs`, coda → NEXT_MODEL non pubblicata),
+  `/status` con `NEXT_MODEL` e `closed_runs`, adapter: `WRITES_DISABLED` ha precedenza su `REAL_TEST_LIMIT`.
+- Test: admin contract env-aware (server MOCK o REAL, zero-write verificato), 4 test deterministici activation/closure, suite OF 52/52 (3 run stabili), compile/ruff F/esbuild OK, testing agent iteration_30: 0 bug.
+- Da fare (utente): deploy codice + env produzione (`OF_AUTO_SCHEDULER_ENABLED=true`, `OF_REAL_TEST_MAX_POSTS` rimossa, altre flag già true/false come da richiesta) → poi agent: `POST .../mass-dm-test/2759765107/close`, `POST /start`, verifiche READ-ONLY, report finale (formato richiesto) e STOP. Nessun publish-now, nessun tick manuale.
+
 ### Phase 23 — 1 SOLO MASS MESSAGE REALE DI TEST (Vanessa Bella, post 2759765107) — Status: ROUTE PRONTA, IN ATTESA DI REDEPLOY UTENTE (0 write reali)
 Decisione utente: via produzione (traccia in DB prod). Route admin `POST /api/admin/of-autopilot/mass-dm-test` {model_slug, provider_post_id, execute=false|true}
 → `engine.mass_dm_from_post`: pre-check READ-ONLY (account HEALTHY, gate false, post esistente/di latosegreto/media_count=2/vault id/link OF nel testo, DM abilitato, audience>0,

@@ -244,7 +244,10 @@ class TheOnlyAPIAdapter(OFProviderAdapter):
         return body
 
     def _check_create_limit(self):
-        """HARD LIMIT (process-level, in addition to the engine DB-level check): OF_REAL_TEST_MAX_POSTS create calls at most."""
+        """HARD LIMIT (process-level, in addition to the engine DB-level check): OF_REAL_TEST_MAX_POSTS create calls at most.
+        WRITES_DISABLED has precedence: a blocked call never consumes the budget nor increments any counter."""
+        if not writes_enabled():
+            raise OFProviderError("WRITES_DISABLED", "OF_REAL_POSTING_ENABLED=false: nessuna scrittura verso The Only API")
         raw = (os.environ.get("OF_REAL_TEST_MAX_POSTS") or "").strip()
         if raw.isdigit() and CALLS["create"] >= int(raw):
             raise OFProviderError("REAL_TEST_LIMIT", f"limite post reali di test raggiunto ({raw})")

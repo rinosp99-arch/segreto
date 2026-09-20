@@ -204,7 +204,10 @@ def test_admin_api_contract():
     s = r.json()
     for k in ("PROVIDER", "CONNECTION_STATUS", "ACCOUNT_STATUS", "ACCOUNT_USERNAME", "REAL_POSTING", "AUTO_SCHEDULER", "OF_REAL_WRITE_CALLS"):
         assert k in s, k
-    assert s["REAL_POSTING"] == "OFF" and s["AUTO_SCHEDULER"] == "OFF" and s["OF_REAL_POSTING_ENABLED"] is False and s["OF_AUTO_SCHEDULER_ENABLED"] is False
+    # server may run MOCK (dev) or REAL (production-like): labels must match the boolean flags; this test is READ-ONLY
+    assert isinstance(s["OF_REAL_POSTING_ENABLED"], bool) and isinstance(s["OF_AUTO_SCHEDULER_ENABLED"], bool)
+    assert s["REAL_POSTING"] == ("ON" if s["OF_REAL_POSTING_ENABLED"] else "OFF") and s["AUTO_SCHEDULER"] == ("ON" if s["OF_AUTO_SCHEDULER_ENABLED"] else "OFF")
+    writes_before = s["OF_REAL_WRITE_CALLS"]
     body = r.text
     if KEY:
         assert KEY not in body and CRM not in body
@@ -217,6 +220,7 @@ def test_admin_api_contract():
     # no route can enable real posting / trigger a real upload in this phase
     for ep in ("enable-real-posting", "upload", "schedule", "real-posting"):
         assert requests.post(f"{BASE}/api/admin/of-autopilot/{ep}", headers=h, timeout=15).status_code in (404, 405), ep
+    assert requests.get(f"{BASE}/api/admin/of-autopilot/connection", headers=h, timeout=60).json()["OF_REAL_WRITE_CALLS"] == writes_before
 
 
 # ------------------------------------------------------------------ Q/R/S other autopilots unchanged (read-only snapshot comparison around a discovery)

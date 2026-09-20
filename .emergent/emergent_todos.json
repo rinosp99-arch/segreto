@@ -1,22 +1,30 @@
 [
   {
-    "content": "Adapter/base/mock: subscribers refresh start/status/cached summary (documented endpoints), mock async pending->completed, knobs (fail/stuck/new fans)",
+    "content": "Run the 2 failing admin contract tests verbosely and diagnose",
+    "status": "completed"
+  },
+  {
+    "content": "Fix admin contract failures without regressing Fans target / no-catch-up",
+    "status": "completed"
+  },
+  {
+    "content": "Verify/add deterministic tests: no-catch-up, no immediate run, Vanessa closure DB-only, NEXT_MODEL not published",
+    "status": "completed"
+  },
+  {
+    "content": "Full OF regression (isolated) + py_compile + lint + esbuild",
+    "status": "completed"
+  },
+  {
+    "content": "Testing agent run and fix reported issues",
+    "status": "completed"
+  },
+  {
+    "content": "Update plan.md and OF_AUTOPILOT.md",
+    "status": "completed"
+  },
+  {
+    "content": "STOP and deliver pre-deploy report",
     "status": "in_progress"
-  },
-  {
-    "content": "Engine: shared _execute_mass_dm (gate -> refresh+wait -> dry_run>0 -> SENDING -> CRM send -> read-back -> status), used by cycle step + mass_dm_from_post; refresh state fields; vault-id wait; REFRESH_MAX_WAIT env",
-    "status": "pending"
-  },
-  {
-    "content": "Status/current_run + Admin UI: FAN REFRESH pill + Audience",
-    "status": "pending"
-  },
-  {
-    "content": "Mock tests (refresh ok/pending/fail/timeout/new fans/dry run/DM/retry-only-DM/timeout UNVERIFIED/duplicates/gate/scheduler unchanged) + regression + lint/esbuild",
-    "status": "pending"
-  },
-  {
-    "content": "Docs/plan update + report, STOP (no real DM, no deploy)",
-    "status": "pending"
   }
 ]

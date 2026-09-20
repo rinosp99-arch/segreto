@@ -896,7 +896,15 @@ async def due_slot(st: dict) -> Optional[dict]:
     """Slot to prepare now: within [slot - LEAD, slot + GRACE] and not yet claimed. scheduledDate = max(slot time, now + 2')."""
     tz = _tz(st)
     now = datetime.now(tz)
+    activated = None
+    if st.get("activated_at"):
+        try:
+            activated = datetime.fromisoformat(st["activated_at"]).astimezone(tz)
+        except ValueError:
+            activated = None
     for s in slots_for_day(st, now):
+        if activated and s["at"] <= activated:
+            continue                                                                  # NO catch-up: slots at/before activation are never recovered
         if s["at"] - timedelta(minutes=SLOT_LEAD_MIN) <= now <= s["at"] + timedelta(minutes=SLOT_GRACE_MIN):
             if not await slots_col.find_one({"slot_id": s["slot_id"]}):
                 return {"slot_id": s["slot_id"], "scheduled_at": max(s["at"], now + timedelta(minutes=2)).isoformat()}
@@ -942,7 +950,11 @@ async def status() -> dict:
         "REAL_TEST_MODE": real_test_mode(), "REAL_TEST_MAX_POSTS": real_test_max_posts(), "TOTAL_REAL_POSTS_CREATED": await real_posts_created(), "write_gate_restored": st.get("write_gate_restored"),
         "OF_REAL_POST_DONE": await log_col.count_documents({"status": {"$in": ["POST_CONFIRMED", "SCHEDULE_CONFIRMED"]}, "mock": {"$ne": True}}) > 0,
         "OF_MASS_DM_MOCK": mass_dm_mock(), "OF_MASS_DM_ENABLED": mass_dm_enabled(), "OF_REAL_MASS_DM_SENT": await runs_col.count_documents({"mock": {"$ne": True}, "mass_dm_id": {"$nin": [None, ""]}}) > 0,
-        "THE_ONLY_API_REAL_MASS_DM_CALLS": toa.CALLS["mass_dm"], "current_run": _run_view(cur_run),
+        "THE_ONLY_API_REAL_MASS_DM_CALLS": toa.CALLS["mass_dm"], "current_run": _run_view(cur_run), "MASS_DM_TARGET": "FAN", "CATCH_UP_ENABLED": False, "activated_at": st.get("activated_at"),
+        "NEXT_MODEL": nxt["slug"] if nxt else None,
+        "closed_runs": [{"model_slug": r.get("model_slug"), "feed_post_id": r.get("feed_post_id"), "previous_mass_dm_status": r.get("previous_mass_dm_status"), "provider_response": r.get("provider_response"),
+                         "readback_confirmed": r.get("readback_confirmed"), "closed_at": r.get("closed_at")}
+                        async for r in runs_col.find({"closed_by_admin": True, "previous_mass_dm_status": {"$exists": True}}, {"_id": 0}).sort("closed_at", -1).limit(5)],
         "queue": {"position": q["position"], "total": q["n_eligible"], "cycle_number": st["cycle_number"], "done_in_cycle": q["n_done_in_cycle"],
                   "current": {"slug": nxt["slug"], "name": nxt["name"], "n_public": nxt["n_public"], "n_secret": nxt["n_secret"], "of_url": nxt["of_url"]} if nxt else None,
                   "order": [{"slug": r["slug"], "name": r["name"], "done": r["model_id"] in set(st.get("cycle_done") or [])} for r in q["eligible"]],
@@ -1146,3 +1158,39 @@ async def mass_dm_from_post_background(model_slug: str, post_id: str, trigger: s
 async def mass_dm_job_view(post_id: str) -> dict:
     run = await runs_col.find_one({"cycle_number": _run_key(str(post_id))}, {"_id": 0})
     return {"job": MASS_DM_JOBS.get(str(post_id)), "run": run}
+
+
+async def close_mass_dm_run(post_id: str, reason: str, trigger: str = "admin") -> dict:
+    """Admin closure of a DM-only run (key post:<id>) confirmed by real read-back: mass_dm_status -> OK, provider error history preserved,
+    marker kept (duplicate protection stays). ZERO provider writes. If the run belongs to the current queue candidate (cycle run), the queue advances."""
+    key = _run_key(str(post_id))
+    run = await runs_col.find_one({"cycle_number": key}, {"_id": 0})
+    if not run:
+        return {"status": "NOT_FOUND", "post_id": post_id}
+    prev_status, prev_err = run.get("mass_dm_status"), run.get("mass_dm_error")
+    if prev_status == "OK":
+        return {"status": "ALREADY_OK", "post_id": post_id, "model_slug": run.get("model_slug"), "mass_dm_id": run.get("mass_dm_id")}
+    marker = run.get("mass_dm_id") or f"crm:closed:{uuid.uuid4().hex[:8]}"
+    await runs_col.update_one({"cycle_number": key}, {"$set": {"mass_dm_status": "OK", "mass_dm_id": marker, "closed_by_admin": True, "close_reason": reason, "closed_at": now_iso(),
+                              "provider_response": prev_err or prev_status, "previous_mass_dm_status": prev_status, "readback_confirmed": True, "mass_dm_confirmed_at": now_iso(), "updated_at": now_iso()}})
+    await _log(status="MASS_DM_CLOSED_BY_READBACK", action_type="MASS_DM_TEST", model_id=run.get("model_id"), model_slug=run.get("model_slug"), model_name=run.get("model_name"), trigger=trigger, mock=run.get("mock"),
+               feed_post_id=str(post_id), mass_dm_id=marker, provider_response=prev_err or prev_status, readback_confirmed=True, close_reason=reason)
+    st = await get_state()
+    q = await queue_view(st)
+    cur = q["next"]
+    advanced = False
+    if cur and cur["model_id"] == run.get("model_id"):
+        # The model is still the queue candidate: its cycle run becomes FEED OK (the post was verified by the DM-only pre-checks) + MASS DM OK,
+        # so the scheduler can NEVER produce a second feed/DM for it; the queue moves to the next valid model (nothing is published now).
+        cyc = await get_run(cur["model_id"], st["cycle_number"]) or {}
+        await upsert_run(cur["model_id"], st["cycle_number"], model_slug=cur["slug"], model_name=cur["name"], mock=run.get("mock"), action_type=cyc.get("action_type") or "PUBLISH_NOW",
+                         feed_status="OK", feed_post_id=cyc.get("feed_post_id") or str(post_id), feed_confirmed_at=cyc.get("feed_confirmed_at") or now_iso(), of_link=run.get("of_link"),
+                         mass_dm_status="OK", mass_dm_id=cyc.get("mass_dm_id") or marker, closed_by_admin=True, close_reason=reason, readback_confirmed=True, mass_dm_confirmed_at=now_iso())
+        pub_info = {"model_id": cur["model_id"], "model_slug": cur["slug"], "model_name": cur["name"], "provider_post_id": cyc.get("feed_post_id") or str(post_id), "action_type": cyc.get("action_type") or "PUBLISH_NOW",
+                    "status": "POST_CONFIRMED", "at": now_iso(), "cycle_number": st["cycle_number"], "slot_id": None}
+        await _advance(st, q["eligible"], cur["model_id"], True, pub_info, "POST_CONFIRMED")
+        advanced = True
+    st = await get_state()
+    q = await queue_view(st)
+    return {"status": "CLOSED", "post_id": str(post_id), "model_slug": run.get("model_slug"), "previous_mass_dm_status": prev_status, "provider_response": prev_err or prev_status, "readback_confirmed": True,
+            "mass_dm_id": marker, "queue_advanced": advanced, "NEXT_MODEL": (q["next"] or {}).get("slug"), "writes": 0}
