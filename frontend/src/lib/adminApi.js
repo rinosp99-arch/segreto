@@ -136,3 +136,15 @@ export const igApPause = () => api.post('/admin/instagram-autopilot/pause').then
 export const igApPublishNow = (dryRun = false) => api.post('/admin/instagram-autopilot/publish-now', null, { params: { dry_run: dryRun } }).then((r) => r.data);
 export const igApSkip = () => api.post('/admin/instagram-autopilot/skip').then((r) => r.data);
 export const igApSettings = (body) => api.patch('/admin/instagram-autopilot/settings', body).then((r) => r.data);
+
+// ---------------- X AUTOPILOT (independent queue, MOCK / NOT_CONNECTED) ----------------
+const xAp = (path, params) => api.get(`/admin/x-autopilot/${path}`, { params }).then((r) => r.data);
+export const xApStatus = () => xAp('status');
+export const xApLogs = (limit = 40) => xAp('logs', { limit });
+export const xApTestConnection = () => api.post('/admin/x-autopilot/test-connection').then((r) => r.data);
+export const xApStart = () => api.post('/admin/x-autopilot/start').then((r) => r.data);
+export const xApPause = () => api.post('/admin/x-autopilot/pause').then((r) => r.data);
+export const xApPreview = () => api.post('/admin/x-autopilot/preview').then((r) => r.data);
+export const xApPublishNow = () => api.post('/admin/x-autopilot/publish-now').then((r) => r.data);
+export const xApSkip = () => api.post('/admin/x-autopilot/skip').then((r) => r.data);
+export const xApSettings = (body) => api.patch('/admin/x-autopilot/settings', body).then((r) => r.data);

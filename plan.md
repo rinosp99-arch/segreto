@@ -319,6 +319,15 @@ Confronto **INITIAL_HTML vs RENDERED_DOM vs GOOGLE_INSPECTION**:
 
 ## 3) Phase 14 — SEO AUTOPILOT READ_ONLY (Status: COMPLETED — PASS, PUBLIC_MUTATIONS=0)
 
+### Phase 17 — X AUTOPILOT (Status: COMPLETED in preview — MOCK, X NOT_CONNECTED, scheduler OFF, 0 chiamate X, nessun post reale)
+Decisioni utente: FOTO+FOTO → SINGLE_POST (priorità 1); con video → THREAD (main PUBLIC + reply SECRET), thread = una sola pubblicazione logica; PARTIAL_FAILED/THREAD_SECRET_FAILED senza duplicati; X_SAFE leggero; CONNECTION_STATUS=NOT_CONNECTED separato da MOCK_MODE=TRUE.
+- [x] `backend/x_autopilot/` (MockXAdapter + RealXAdapter skeleton, media PUBLIC+SECRET con X-safe e link OF validato, copy IT contrasto + OF reale ≤280, engine con due cursori/lock/slot `x_*`, jobs tick 300s, routes `/api/admin/x-autopilot/*` incl. `preview`)
+- [x] env preview: `X_AUTOPILOT_MOCK=true`, `X_AUTO_SCHEDULER_ENABLED=false`, `X_ITALY_AUDIENCE_MODE=true` (nessuna credenziale X)
+- [x] Admin: `AdminXAutopilot.js` + nav + route + `adminApi.js` (xAp*)
+- [x] `tests/test_x_autopilot.py` 16/16 PASS · testing agent 37/37 PASS 0 bug (`test_reports/iteration_25_x_autopilot.json`) · regressione 136 PASS (failure preesistenti non correlate: telemetry password_scrubbing; test Telegram env preview)
+- [x] `X_AUTOPILOT.md`
+- Prossima fase (solo su richiesta utente): credenziali X, RealXAdapter operativo, MOCK=false, 1 post reale via PUBBLICA ORA, poi scheduler.
+
 ### Phase 16 — INSTAGRAM AUTOPILOT (Status: COMPLETED in preview — MOCK, Meta NOT_CONNECTED, scheduler OFF, 0 chiamate Meta, nessun post reale)
 Decisioni utente: CONNECTION_STATUS=NOT_CONNECTED + MOCK_MODE=TRUE mostrati separatamente; Telegram completamente fuori fase (non toccato).
 - [x] pacchetto `backend/instagram_autopilot/` (adapter Meta skeleton + MockMeta, media PUBLIC-only con filtro IG-safe, caption IT LLM/template + CTA "link in bio" + 3-6 hashtag, engine con coda/stato/cursori/lock/slot INDIPENDENTI `instagram_*`, jobs tick 300s nello scheduler esistente, routes `/api/admin/instagram-autopilot/*`)

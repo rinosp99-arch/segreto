@@ -1,22 +1,22 @@
 [
   {
-    "content": "IG.1 backend package (adapter mock, media public-only, caption IT)",
+    "content": "X.1 backend package: adapter (MockX/RealX skeleton), media (public+secret cursors, X_SAFE, pairing/thread), copy IT contrasto + OF reale",
     "status": "completed"
   },
   {
-    "content": "IG.2 engine indipendente + jobs/routes/server wiring/env",
+    "content": "X.2 engine indipendente (x_* collections, lock, slot, thread=1 item, partial failure) + jobs/routes/server/env",
     "status": "completed"
   },
   {
-    "content": "IG.3 Admin page/nav/API client",
+    "content": "X.3 Admin page X Autopilot + nav + route + adminApi + preview",
     "status": "completed"
   },
   {
-    "content": "IG.4 tests (16/16) + regressione + testing agent (PASS 0 bug)",
+    "content": "X.4 tests A-Y + thread cases (16/16), regressione, testing agent (37/37)",
     "status": "completed"
   },
   {
-    "content": "IG.5 documentazione INSTAGRAM_AUTOPILOT.md + plan.md + report",
+    "content": "X.5 docs X_AUTOPILOT.md, plan.md, report finale",
     "status": "completed"
   }
 ]
