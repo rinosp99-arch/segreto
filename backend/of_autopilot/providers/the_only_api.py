@@ -28,7 +28,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from .base import OFAccount, OFAccountHealth, OFMassMessageRequest, OFMassMessageResult, OFMedia, OFPostRequest, OFPostResult, OFProviderAdapter, OFProviderError
+from .base import OFAccount, OFAccountHealth, OFMassMessageRequest, OFMassMessageResult, OFMedia, OFPostRequest, OFPostResult, OFProviderAdapter, OFProviderError, real_test_max_posts_limit
 
 PANEL_HOST = "https://theonlyapi.com"
 WHOAMI_URL = "https://api.theonlyapi.com/api/whoami"
@@ -248,9 +248,9 @@ class TheOnlyAPIAdapter(OFProviderAdapter):
         WRITES_DISABLED has precedence: a blocked call never consumes the budget nor increments any counter."""
         if not writes_enabled():
             raise OFProviderError("WRITES_DISABLED", "OF_REAL_POSTING_ENABLED=false: nessuna scrittura verso The Only API")
-        raw = (os.environ.get("OF_REAL_TEST_MAX_POSTS") or "").strip()
-        if raw.isdigit() and CALLS["create"] >= int(raw):
-            raise OFProviderError("REAL_TEST_LIMIT", f"limite post reali di test raggiunto ({raw})")
+        mx = real_test_max_posts_limit()                                                             # None = disabled (missing/empty/0/negative)
+        if mx is not None and CALLS["create"] >= mx:
+            raise OFProviderError("REAL_TEST_LIMIT", f"limite post reali di test raggiunto ({mx})")
 
     async def create_post(self, of_user_id: str, req: OFPostRequest) -> OFPostResult:
         self._check_create_limit()

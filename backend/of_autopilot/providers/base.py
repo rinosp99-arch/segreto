@@ -5,9 +5,21 @@ Contract (vendor-neutral):
   WRITE : upload_media, create_post, schedule_post, delete_scheduled_post  (guarded by OF_REAL_POSTING_ENABLED; blocked in this phase)
 A scheduled post is SUCCESS only when `verify_scheduled(post_id)` finds it in the provider's schedule list (SCHEDULE_CONFIRMED),
 otherwise SCHEDULE_NOT_CONFIRMED and the caller must NOT advance blindly."""
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+
+def real_test_max_posts_limit() -> Optional[int]:
+    """OF_REAL_TEST_MAX_POSTS -> hard limit of real test posts, or None = limit DISABLED.
+    Missing / empty / non-integer / 0 / negative -> None (exactly like the variable is not set). Integer > 0 -> that maximum."""
+    raw = (os.environ.get("OF_REAL_TEST_MAX_POSTS") or "").strip()
+    try:
+        n = int(raw)
+    except ValueError:
+        return None
+    return n if n > 0 else None
 
 CONNECTION_STATUSES = ("CONNECTED", "NOT_CONNECTED", "ERROR")
 ACCOUNT_STATUSES = ("HEALTHY", "UNHEALTHY", "UNKNOWN")

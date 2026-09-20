@@ -23,7 +23,7 @@ from database import db
 from . import connection
 from .caption import build_caption, build_dm_caption
 from .media import fetch_bytes, roster, validate_media
-from .providers.base import OFMassMessageRequest, OFMedia, OFPostRequest, OFProviderAdapter, OFProviderError
+from .providers.base import OFMassMessageRequest, OFMedia, OFPostRequest, OFProviderAdapter, OFProviderError, real_test_max_posts_limit
 from .providers.mock import MOCK_OF_USER_ID, MockOFProvider
 from .providers import the_only_api as toa
 
@@ -60,8 +60,8 @@ def auto_scheduler_enabled() -> bool:
 
 
 def real_test_max_posts() -> Optional[int]:
-    raw = (os.environ.get("OF_REAL_TEST_MAX_POSTS") or "").strip()
-    return int(raw) if raw.isdigit() else None
+    """None = test limit DISABLED (variable missing, empty, 0 or negative). Integer > 0 = controlled real test with that maximum."""
+    return real_test_max_posts_limit()
 
 
 def real_test_mode() -> bool:

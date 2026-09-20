@@ -578,3 +578,58 @@ def test_adapter_hard_create_limit_and_global_link(monkeypatch):
     assert ofmedia.valid_of_link("https://onlyfans.com/latosegreto") is None and ofmedia.valid_of_link("https://onlyfans.com/latosegreto/c28") is None
     assert ofmedia.valid_of_link("https://onlyfans.com/vanessa_bellaaa/c9") == "https://onlyfans.com/vanessa_bellaaa/c9"
     assert ofmedia.classify(_model("g-glob", of="https://onlyfans.com/latosegreto"))["status"] == "SKIPPED_NO_OF_LINK"
+
+
+# ------------------------------------------------------------------ OF_REAL_TEST_MAX_POSTS semantics: missing / empty / 0 / negative = limit DISABLED, >0 = enabled
+@pytest.mark.parametrize("raw,expected", [(None, None), ("", None), ("  ", None), ("0", None), ("-1", None), ("abc", None), ("1", 1), ("5", 5)])
+def test_real_test_max_posts_parsing(monkeypatch, raw, expected):
+    if raw is None:
+        monkeypatch.delenv("OF_REAL_TEST_MAX_POSTS", raising=False)
+    else:
+        monkeypatch.setenv("OF_REAL_TEST_MAX_POSTS", raw)
+    assert engine.real_test_max_posts() == expected
+    monkeypatch.setenv("OF_AUTOPILOT_MOCK", "false")
+    assert engine.real_test_mode() is (expected is not None)
+    # adapter-level hard limit: disabled -> never REAL_TEST_LIMIT even with creates already counted
+    monkeypatch.setenv("OF_REAL_POSTING_ENABLED", "true")
+    monkeypatch.setitem(toa.CALLS, "create", 7)
+    a = toa.TheOnlyAPIAdapter()
+    if expected is None:
+        a._check_create_limit()                                              # no exception
+    else:
+        with pytest.raises(OFProviderError) as ei:
+            a._check_create_limit()
+        assert ei.value.code == "REAL_TEST_LIMIT"
+    monkeypatch.setenv("OF_REAL_POSTING_ENABLED", "false")
+
+
+async def test_real_test_max_posts_zero_equals_unset(real_test_env, monkeypatch):
+    """OF_REAL_TEST_MAX_POSTS=0 must behave EXACTLY like the variable is not set: readiness OK even after real posts, SCHEDULE allowed
+    (no REAL_TEST_LIMIT, no REAL_TEST_MODE_IMMEDIATE_ONLY), /start-like activation and tick not blocked."""
+    fake = real_test_env
+    a, b = await seed(_model(f"{TAG}-za", ordine=1), _model(f"{TAG}-zb", ordine=2))
+    for raw in ("0", None):
+        if raw is None:
+            monkeypatch.delenv("OF_REAL_TEST_MAX_POSTS", raising=False)
+        else:
+            monkeypatch.setenv("OF_REAL_TEST_MAX_POSTS", raw)
+        assert engine.real_test_max_posts() is None and engine.real_test_mode() is False
+        # readiness with a real post already counted (production situation: 1 real post done)
+        async def one_post():
+            return 1
+        monkeypatch.setattr(engine, "real_posts_created", one_post)
+        ready = await engine.readiness()
+        assert ready["operational"] is True and ready["reason"] is None and ready["reason"] != "REAL_TEST_LIMIT"
+    # SCHEDULE path allowed (fake real provider, zero network): never REAL_TEST_MODE_IMMEDIATE_ONLY / REAL_TEST_LIMIT
+    monkeypatch.setenv("OF_REAL_TEST_MAX_POSTS", "0")
+    r = await engine.run("SCHEDULE", "scheduler", slot_id=f"{TAG}_zero", scheduled_at="2030-01-01T11:30:00+01:00")
+    assert r.get("error_code") not in ("REAL_TEST_LIMIT", "REAL_TEST_MODE_IMMEDIATE_ONLY"), r
+    assert r["status"] in ("SCHEDULE_CONFIRMED", "SCHEDULE_CONFIRMED_DM_PENDING", "SCHEDULE_CONFIRMED_DM_DISABLED", "SCHEDULE_CONFIRMED_DM_MOCK_ONLY") or r["status"].startswith("SCHEDULE_CONFIRMED"), r
+    assert fake.inner.gate_history[-1] is False and toa.CALLS["write"] == 0
+    s = await engine.status()
+    assert s["REAL_TEST_MODE"] is False and s["REAL_TEST_MAX_POSTS"] is None
+    # scheduler tick with 0: not blocked by the test limit (no due slot right now -> NO_DUE_SLOT, never REAL_TEST_*)
+    await engine.set_state(enabled=True, activated_at=engine.now_iso())
+    monkeypatch.setenv("OF_AUTO_SCHEDULER_ENABLED", "true")
+    t = await engine.tick("test")
+    assert t.get("error_code") not in ("REAL_TEST_LIMIT", "REAL_TEST_MODE_IMMEDIATE_ONLY") and t["status"] in ("NO_DUE_SLOT", "MASS_DM_PENDING") or t["status"].startswith("SCHEDULE_CONFIRMED")

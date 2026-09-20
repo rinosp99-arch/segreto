@@ -184,7 +184,7 @@ Sezione in Home con fascia orizzontale di teaser video verticali che scorre lent
   `POST /mass-dm-test/{post_id}/close` DB-only (storico API_ERROR/UNVERIFIED preservato, `readback_confirmed=true`, duplicate protection, run di ciclo FEED OK + DM OK anche se il feed precede `of_model_runs`, coda → NEXT_MODEL non pubblicata),
   `/status` con `NEXT_MODEL` e `closed_runs`, adapter: `WRITES_DISABLED` ha precedenza su `REAL_TEST_LIMIT`.
 - Test: admin contract env-aware (server MOCK o REAL, zero-write verificato), 4 test deterministici activation/closure, suite OF 52/52 (3 run stabili), compile/ruff F/esbuild OK, testing agent iteration_30: 0 bug.
-- Da fare (utente): deploy codice + env produzione (`OF_AUTO_SCHEDULER_ENABLED=true`, `OF_REAL_TEST_MAX_POSTS` rimossa, altre flag già true/false come da richiesta) → poi agent: `POST .../mass-dm-test/2759765107/close`, `POST /start`, verifiche READ-ONLY, report finale (formato richiesto) e STOP. Nessun publish-now, nessun tick manuale.
+- Da fare (utente): deploy codice + env produzione (`OF_AUTO_SCHEDULER_ENABLED=true`, `OF_REAL_TEST_MAX_POSTS=0` (=disabilitato, equivalente a non impostata; parser unico, 9 test deterministici, suite OF 61/61), altre flag già true/false come da richiesta) → poi agent: `POST .../mass-dm-test/2759765107/close`, `POST /start`, verifiche READ-ONLY, report finale (formato richiesto) e STOP. Nessun publish-now, nessun tick manuale.
 
 ### Phase 23 — 1 SOLO MASS MESSAGE REALE DI TEST (Vanessa Bella, post 2759765107) — Status: ROUTE PRONTA, IN ATTESA DI REDEPLOY UTENTE (0 write reali)
 Decisione utente: via produzione (traccia in DB prod). Route admin `POST /api/admin/of-autopilot/mass-dm-test` {model_slug, provider_post_id, execute=false|true}
