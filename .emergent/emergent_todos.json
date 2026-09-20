@@ -1,26 +1,26 @@
 [
   {
-    "content": "OF.1 Secrets in backend/.env (git-ignored) + env flags",
+    "content": "OF-A.1 media.py: eligibility, source resolution, real HEAD validation, video",
     "status": "completed"
   },
   {
-    "content": "OF.2 Official The Only API docs verified",
+    "content": "OF-A.2 providers: base extension, MockOFProvider, TheOnlyAPI source_url upload (guarded)",
     "status": "completed"
   },
   {
-    "content": "OF.3 of_autopilot providers + connection + routes + server wiring",
+    "content": "OF-A.3 caption + engine + jobs + routes + env",
     "status": "completed"
   },
   {
-    "content": "OF.4 READ-ONLY discovery: CONNECTED, latosegreto/onlyfans, HEALTHY, of_user_id, schedules",
+    "content": "OF-A.4 Admin UI expanded + adminApi",
     "status": "completed"
   },
   {
-    "content": "OF.5 Admin minimal card + nav + route + api",
+    "content": "OF-A.5 tests 23/23 + testing agent 61/61 + regression",
     "status": "completed"
   },
   {
-    "content": "OF.6 tests A-S (7/7) + testing agent (29/29) + regression + docs/report",
+    "content": "OF-A.6 docs + plan + report",
     "status": "completed"
   }
 ]

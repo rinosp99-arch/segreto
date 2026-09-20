@@ -196,6 +196,14 @@ class TheOnlyAPIAdapter(OFProviderAdapter):
         kind = "video" if content_type.startswith("video/") else ("audio" if content_type.startswith("audio/") else ("gif" if content_type == "image/gif" else "photo"))
         return OFMedia(provider_ref=str(media["processId"]), kind=kind, raw=dict(media))      # COMPLETE object, never trimmed
 
+    async def upload_media_from_url(self, of_user_id: str, *, source_url: str, file_name: str, kind: str) -> OFMedia:
+        """Documented JSON variant of POST /accounts/{of_user_id}/media: {"source_url": "https://..."} -> provider fetches the file server-side."""
+        data = await self._request("POST", f"{self.base}/accounts/{of_user_id}/media", write=True, json={"source_url": source_url})
+        media = data.get("media") or {}
+        if not media.get("processId"):
+            raise OFProviderError("API_ERROR", "upload senza media.processId")
+        return OFMedia(provider_ref=str(media["processId"]), kind=kind, raw=dict(media))      # COMPLETE object, never trimmed
+
     def _post_body(self, req: OFPostRequest) -> Dict[str, Any]:
         body: Dict[str, Any] = {"text": req.text}
         if req.media:

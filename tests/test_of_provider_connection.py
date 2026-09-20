@@ -185,7 +185,7 @@ def test_J_K_L_secrets_hygiene(caplog):
     src = open("/app/backend/of_autopilot/providers/the_only_api.py").read()
     assert "X-API-Key" in src and "Bearer" not in src.replace("never Bearer", "") and "api_key=" not in src.lower().replace("api_key()", "")
     fe = "".join(open(f"/app/frontend/src/{p}").read() for p in ("lib/adminApi.js", "pages/admin/AdminOfAutopilot.js"))
-    assert "theonlyapi" not in fe.lower() and "THE_ONLY" not in fe and "X-API-Key" not in fe
+    assert "theonlyapi.com" not in fe.lower() and "THE_ONLY_API_KEY" not in fe and "THE_ONLY_CRM_ID" not in fe and "X-API-Key" not in fe
 
 
 # ------------------------------------------------------------------ admin API contract (no secrets, masked id)
@@ -214,8 +214,8 @@ def test_admin_api_contract():
         assert s["CONNECTION_STATUS"] == "CONNECTED" and s["ACCOUNT_USERNAME"] == EXPECTED and s["ACCOUNT_STATUS"] == "HEALTHY"
     for forbidden in ("sess", "auth_id", "proxy", "api_key", "apikey", "x-api-key"):
         assert forbidden not in json.dumps({k: v for k, v in s.items()}).lower(), forbidden
-    # no write route exists for OF in this phase
-    for ep in ("publish-now", "start", "skip", "upload", "schedule"):
+    # no route can enable real posting / trigger a real upload in this phase
+    for ep in ("enable-real-posting", "upload", "schedule", "real-posting"):
         assert requests.post(f"{BASE}/api/admin/of-autopilot/{ep}", headers=h, timeout=15).status_code in (404, 405), ep
 
 

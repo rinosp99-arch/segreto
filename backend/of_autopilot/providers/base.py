@@ -97,7 +97,19 @@ class OFProviderAdapter(ABC):
     @abstractmethod
     async def delete_scheduled_post(self, of_user_id: str, post_id: str) -> Dict[str, Any]: ...
 
+    async def upload_media_from_url(self, of_user_id: str, *, source_url: str, file_name: str, kind: str) -> OFMedia:
+        """Preferred path: the provider fetches the media from OUR storage (https source_url). Providers may override."""
+        raise OFProviderError("NOT_SUPPORTED", "upload da source_url non supportato da questo provider")
+
     # ---------------- fail-safe verification ----------------
+    async def verify_post(self, of_user_id: str, post_id: str) -> bool:
+        """Immediate post: CREATE -> post id -> GET post -> exists ? POST_CONFIRMED : POST_NOT_CONFIRMED (read-only)."""
+        try:
+            data = await self.get_post(of_user_id, post_id)
+        except OFProviderError:
+            return False
+        return bool(data) and str((data or {}).get("id")) == str(post_id)
+
     async def verify_scheduled(self, of_user_id: str, post_id: str, pages: int = 5, page_size: int = 50) -> bool:
         """CREATE -> post id -> GET schedules -> id present ? SCHEDULE_CONFIRMED : SCHEDULE_NOT_CONFIRMED (read-only)."""
         for p in range(pages):

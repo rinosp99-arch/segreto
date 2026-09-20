@@ -319,6 +319,14 @@ Confronto **INITIAL_HTML vs RENDERED_DOM vs GOOGLE_INSPECTION**:
 
 ## 3) Phase 14 — SEO AUTOPILOT READ_ONLY (Status: COMPLETED — PASS, PUBLIC_MUTATIONS=0)
 
+### Phase 19 — OF AUTOPILOT MOTORE COMPLETO (Status: COMPLETED in preview — MOCK, 0 write reali, nessun post reale)
+Decisioni utente: link OF reale della modella in caption; PUBBLICA ORA = post immediato (scheduler separato); HEAD reali sui nostri media; tutto MOCK.
+- [x] `of_autopilot/{media,caption,engine,jobs}.py` + `providers/mock.py` + base estesa (`upload_media_from_url`, `verify_post`) + routes complete; env `OF_AUTOPILOT_MOCK=true`
+- [x] media source = DB/storage Lato Segreto, due cursori, SAME_MODEL guard, validazione reale, video, source_url + file fallback, media object completo, cursori solo dopo conferma
+- [x] Admin `AdminOfAutopilot.js` espansa (stato, KPI, Attiva/Pausa/Anteprima/Pubblica ora MOCK/Salta, impostazioni, rotazione, log) — nessun controllo real posting
+- [x] test 23/23 (`test_of_autopilot.py` 16 + connessione 7) · testing agent 61/61 PASS 0 bug (`iteration_27_of_autopilot_mock.json`) · regressione 153 PASS
+- STOP: primo post reale solo su autorizzazione esplicita.
+
 ### Phase 18 — ONLYFANS PROVIDER CONNECTION (The Only API) (Status: COMPLETED — READ-ONLY PASS; OF_REAL_WRITE_CALLS=0; nessun post/upload/schedule)
 - [x] secrets solo in `backend/.env` (git-ignored): THE_ONLY_API_KEY/CRM_ID; `THE_ONLY_OF_USER_ID` auto-scoperto; `OF_PROVIDER=the_only_api`, `OF_CONNECTION_ENABLED=true`, `OF_REAL_POSTING_ENABLED=false`, `OF_AUTO_SCHEDULER_ENABLED=false`
 - [x] `backend/of_autopilot/` : `providers/base.py` (OFProviderAdapter astratto), `providers/the_only_api.py` (X-API-Key only, redazione log, write-guard, unwrap passthrough), `connection.py` (discovery + STOP rule), `routes.py` (`/api/admin/of-autopilot/connection|test-connection`)

@@ -46,6 +46,7 @@ from instagram_autopilot.routes import router as instagram_autopilot_router
 from x_autopilot import jobs as x_autopilot_jobs  # noqa: F401
 from x_autopilot.routes import router as x_autopilot_router
 # OnlyFans provider connection (The Only API) — READ-ONLY phase, secrets backend-only
+from of_autopilot import jobs as of_autopilot_jobs  # noqa: F401
 from of_autopilot.routes import router as of_autopilot_router
 from v1_dashboard import dashboard_router
 

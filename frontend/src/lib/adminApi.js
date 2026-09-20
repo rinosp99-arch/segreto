@@ -152,3 +152,11 @@ export const xApSettings = (body) => api.patch('/admin/x-autopilot/settings', bo
 // ---------------- ONLYFANS AUTOPILOT (provider connection, READ-ONLY phase) ----------------
 export const ofApConnection = () => api.get('/admin/of-autopilot/connection').then((r) => r.data);
 export const ofApTestConnection = () => api.post('/admin/of-autopilot/test-connection').then((r) => r.data);
+export const ofApStatus = () => api.get('/admin/of-autopilot/status').then((r) => r.data);
+export const ofApPreview = () => api.get('/admin/of-autopilot/preview').then((r) => r.data);
+export const ofApLogs = (limit = 40) => api.get('/admin/of-autopilot/logs', { params: { limit } }).then((r) => r.data);
+export const ofApStart = () => api.post('/admin/of-autopilot/start').then((r) => r.data);
+export const ofApPause = () => api.post('/admin/of-autopilot/pause').then((r) => r.data);
+export const ofApPublishNow = () => api.post('/admin/of-autopilot/publish-now').then((r) => r.data);
+export const ofApSkip = () => api.post('/admin/of-autopilot/skip').then((r) => r.data);
+export const ofApSettings = (body) => api.patch('/admin/of-autopilot/settings', body).then((r) => r.data);
