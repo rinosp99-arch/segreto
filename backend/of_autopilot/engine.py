@@ -8,10 +8,11 @@ MOCK (OF_AUTOPILOT_MOCK=true): MockOFProvider for every write; the real adapter 
 
 Collections: of_autopilot_state · of_model_media_state · of_media_uploads · of_autopilot_logs · of_autopilot_slots · of_autopilot_locks.
 """
+import json
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 from pymongo.errors import DuplicateKeyError
@@ -876,7 +877,7 @@ async def mass_dm_from_post(model_slug: str, post_id: str, execute: bool = False
         sent = await real_mass_dm_sent_count()
         rep["TOTAL_REAL_MASS_DM_SENT"] = sent
         ck[f"TOTAL_REAL_MASS_DM_SENT<{REAL_MASS_DM_TEST_MAX}"] = is_mock or sent < REAL_MASS_DM_TEST_MAX
-        prev = await runs_col.find_one({"feed_post_id": post_id, "$or": [{"mass_dm_id": {"$nin": [None, ""]}}, {"mass_dm_status": {"$in": ["OK", "UNVERIFIED"]}}]}, {"_id": 0})
+        prev = await runs_col.find_one({"feed_post_id": post_id, "$or": [{"mass_dm_id": {"$nin": [None, ""]}}, {"mass_dm_status": {"$in": ["OK", "UNVERIFIED", "SENDING"]}}]}, {"_id": 0})
         ck["NO_MASS_DM_ALREADY_SENT_FOR_POST"] = prev is None                              # any run (cycle or test) that already sent a DM for this post -> STOP
         # source post read-back
         post, media_ids, text = None, [], ""
@@ -933,12 +934,16 @@ async def mass_dm_from_post(model_slug: str, post_id: str, execute: bool = False
             rep["failed_checks"] = [k for k, v in ck.items() if not v]
             await _log(status="MASS_DM_TEST_STOPPED", action_type="MASS_DM_TEST", model_slug=model_slug, source_post_id=post_id, mock=is_mock, trigger=trigger, error_code="PRECHECK_FAIL", failed_checks=rep["failed_checks"])
             return rep
-        # ---------------- the ONE write
+        # ---------------- the ONE write (CRM mass DM, audience.type=all, provider dry_run first)
         run_key = _run_key(post_id)
+        rep["AUDIENCE_TYPE"] = "all"
         await runs_col.update_one({"model_id": model["id"], "cycle_number": run_key}, {"$set": {"model_slug": model_slug, "model_name": row["name"], "mock": is_mock, "action_type": "MASS_DM_TEST", "feed_status": "OK",
                                   "feed_post_id": post_id, "feed_media_ids": media_ids, "feed_caption": text, "of_link": of_url, "mass_dm_text": cap["text"], "mass_dm_copy_source": cap["source"],
-                                  "mass_dm_different_from_feed": True, "mass_dm_status": "PENDING", "updated_at": now_iso()},
+                                  "mass_dm_different_from_feed": True, "mass_dm_status": "SENDING", "mass_dm_audience_type": "all", "updated_at": now_iso()},
                                   "$setOnInsert": {"id": str(uuid.uuid4()), "model_id": model["id"], "cycle_number": run_key, "created_at": now_iso(), "mass_dm_attempts": 0}}, upsert=True)
+        run_filter = {"model_id": model["id"], "cycle_number": run_key}
+        base = dict(action_type="MASS_DM_TEST", model_id=model["id"], model_slug=model_slug, model_name=row["name"], trigger=trigger, mock=is_mock, of_link=of_url, feed_post_id=post_id, media_ids=media_ids, audience="all")
+        req = OFMassMessageRequest(text=cap["text"], media_ids=media_ids, price=None, audience="ALL")
         if hasattr(provider, "set_write_gate"):
             await provider.set_write_gate(of_uid, True)
             gate_opened = True
@@ -946,37 +951,66 @@ async def mass_dm_from_post(model_slug: str, post_id: str, execute: bool = False
         # re-check right before the send: still no real DM ever sent (hard cap 1)
         if not is_mock and await real_mass_dm_sent_count() >= REAL_MASS_DM_TEST_MAX:
             rep["status"], rep["REAL_MASS_DM_CREATE"] = "BLOCKED_HARD_CAP", "SKIPPED"
+            await runs_col.update_one(run_filter, {"$set": {"mass_dm_status": "FAILED", "mass_dm_error": "HARD_CAP", "updated_at": now_iso()}})
             return rep
-        # exact audience of the send body (documented queue/size, gate now open): must be > 0 or ABORT without sending
+        # provider dry_run (sends nothing): audience resolved by the provider for the IDENTICAL body -> recipients must be > 0
         try:
-            exact = await dmp.mass_message_audience_size(of_uid)
+            dry = await dmp.mass_message_crm(of_uid, req, dry_run=True)
         except OFProviderError as e:
-            exact, rep["AUDIENCE_EXACT_ERROR"] = None, e.code
-        rep["AUDIENCE_COUNT"] = exact if isinstance(exact, int) else audience
-        if not is_mock and exact is not None and exact <= 0:
-            rep["status"], rep["REAL_MASS_DM_CREATE"] = "ABORTED_EMPTY_AUDIENCE", "SKIPPED"
-            await runs_col.update_one({"model_id": model["id"], "cycle_number": run_key}, {"$set": {"mass_dm_status": "FAILED", "mass_dm_error": "EMPTY_AUDIENCE", "updated_at": now_iso()}})
+            rep.update(status="ABORTED_DRY_RUN_ERROR", REAL_MASS_DM_CREATE="SKIPPED", error_code=e.code)
+            await runs_col.update_one(run_filter, {"$set": {"mass_dm_status": "FAILED", "mass_dm_error": f"DRY_RUN_{e.code}", "updated_at": now_iso()}})
             return rep
-        audience = exact if isinstance(exact, int) else audience
-        base = dict(action_type="MASS_DM_TEST", model_id=model["id"], model_slug=model_slug, model_name=row["name"], trigger=trigger, mock=is_mock, of_link=of_url, feed_post_id=post_id, media_ids=media_ids, audience="ALL", audience_size=audience)
+        recipients = dry.get("recipients")
+        rep["DRY_RUN_RECIPIENTS"] = recipients
+        rep["DRY_RUN_SAMPLE_MASKED"] = [f"…{str(f.get('fan_of_user_id'))[-3:]}" for f in (dry.get("sample") or [])[:3]]
+        rep["AUDIENCE_COUNT"] = recipients
+        dry_ok = bool(dry.get("success")) and dry.get("dry_run") is True and (dry.get("sent") or 0) == 0 and isinstance(recipients, int) and recipients > 0
+        if not dry_ok:
+            rep.update(status="ABORTED_EMPTY_AUDIENCE" if (isinstance(recipients, int) and recipients <= 0) else "ABORTED_DRY_RUN_INVALID", REAL_MASS_DM_CREATE="SKIPPED")
+            await runs_col.update_one(run_filter, {"$set": {"mass_dm_status": "FAILED", "mass_dm_error": "EMPTY_AUDIENCE" if (isinstance(recipients, int) and recipients <= 0) else "DRY_RUN_INVALID", "mass_dm_recipients": recipients, "updated_at": now_iso()}})
+            return rep
+        sample_ids = [str(f.get("fan_of_user_id")) for f in (dry.get("sample") or []) if f.get("fan_of_user_id")][:5]
+        await runs_col.update_one(run_filter, {"$set": {"mass_dm_recipients": recipients, "mass_dm_sample_ids": sample_ids, "mass_dm_send_started_at": now_iso(), "updated_at": now_iso()}, "$inc": {"mass_dm_attempts": 1}})
+        # ---- THE real send: identical body, dry_run=false (serial loop inside the request; may take minutes)
+        send_error, definitive_fail = None, False
         try:
-            res = await dmp.send_mass_message(of_uid, OFMassMessageRequest(text=cap["text"], media_ids=media_ids, price=None, audience="ALL"))
+            res = await dmp.mass_message_crm(of_uid, req, dry_run=False)
         except OFProviderError as e:
-            await runs_col.update_one({"model_id": model["id"], "cycle_number": run_key}, {"$set": {"mass_dm_status": "FAILED", "mass_dm_error": e.code, "updated_at": now_iso()}, "$inc": {"mass_dm_attempts": 1}})
-            await _log(status="MASS_DM_FAILED", **base, error_code=e.code)
-            rep.update(status="FAILED", REAL_MASS_DM_CREATE="FAIL", error_code=e.code)
-            return rep
-        rep["REAL_MASS_DM_CREATE"] = "PASS"
-        rep["MASS_DM_ID_RECEIVED"] = bool(res.message_id)
-        rep["MASS_DM_ID"] = res.message_id
-        confirmed = bool(res.message_id) and res.state == "MASS_DM_CONFIRMED"
-        status = "OK" if confirmed else ("UNVERIFIED" if res.message_id else "FAILED")
-        rep["REAL_MASS_DM_VERIFY"] = "PASS" if confirmed else "FAIL"
+            res, send_error = None, e.code
+            # rejected before any send (4xx / local gates) = definitive FAIL (retry allowed); timeout / 5xx = AMBIGUOUS (may have sent) -> never retry
+            definitive_fail = e.code in ("WRITES_DISABLED", "FORBIDDEN", "MASS_DM_DISABLED", "NOT_SUPPORTED", "NOT_CONFIGURED", "UNAUTHORIZED", "NOT_FOUND") or (e.code == "API_ERROR" and e.status is not None and e.status < 500)
+        if res is not None:
+            sent = res.get("sent")
+            ok = bool(res.get("success")) and res.get("dry_run") is False and isinstance(sent, int) and sent > 0
+            rep.update(REAL_MASS_DM_CREATE="PASS" if ok else "FAIL", REAL_MASS_DM_SENT_COUNT=sent, MASS_DM_ID_RECEIVED=False, MASS_DM_ID=None)
+        else:
+            ok, sent = False, None
+            rep.update(REAL_MASS_DM_CREATE=("FAIL" if definitive_fail else "UNKNOWN_" + str(send_error)), REAL_MASS_DM_SENT_COUNT=None, MASS_DM_ID_RECEIVED=False, MASS_DM_ID=None, error_code=send_error)
+        # ---- READ-back verification on the sample recipients' conversations (documented GET chats/{fan}/messages)
+        verified, checked = False, 0
+        needle = of_url.lower().replace("https://", "")
+        for fid in sample_ids[:3]:
+            try:
+                page = await dmp.get_chat_messages(of_uid, fid, limit=20)
+                checked += 1
+                blob = json.dumps(page, ensure_ascii=False).lower()
+                if needle in blob and "hai già scoperto" in blob:
+                    verified = True
+                    break
+            except OFProviderError:
+                continue
+        rep["READBACK_VERIFY"] = "PASS" if verified else ("FAIL" if checked else "UNAVAILABLE")
+        rep["REAL_MASS_DM_VERIFY"] = rep["READBACK_VERIFY"]
+        confirmed = ok and verified
+        status = "OK" if confirmed else ("UNVERIFIED" if (ok or verified or (res is None and not definitive_fail)) else "FAILED")
+        marker = f"crm:{uuid.uuid4().hex[:12]}" if status in ("OK", "UNVERIFIED") else None          # no queue id on the CRM path: marker = "a send happened / may have happened" -> never twice
         rep["REAL_MASS_DM_CONFIRMED"] = "PASS" if confirmed else "FAIL"
-        await runs_col.update_one({"model_id": model["id"], "cycle_number": run_key}, {"$set": {"mass_dm_status": status, "mass_dm_id": res.message_id, "mass_dm_error": None if confirmed else "MASS_DM_NOT_CONFIRMED",
-                                  "mass_dm_confirmed_at": now_iso() if confirmed else None, "mass_dm_audience_size": res.audience_size or audience, "updated_at": now_iso()}, "$inc": {"mass_dm_attempts": 1}})
-        await _log(status=("MOCK_DM_CONFIRMED" if is_mock else "MASS_DM_CONFIRMED") if confirmed else "MASS_DM_NOT_CONFIRMED", **base, mass_dm_id=res.message_id, mass_dm_text=cap["text"], error_code=None if confirmed else "MASS_DM_NOT_CONFIRMED")
-        rep["status"] = "MASS_DM_CONFIRMED" if confirmed else ("MASS_DM_UNVERIFIED" if res.message_id else "MASS_DM_FAILED")
+        await runs_col.update_one(run_filter, {"$set": {"mass_dm_status": status, "mass_dm_id": marker, "mass_dm_sent_count": sent, "mass_dm_recipients": recipients, "mass_dm_error": None if confirmed else (send_error or ("NOT_VERIFIED" if ok else "SEND_FAILED")),
+                                  "mass_dm_confirmed_at": now_iso() if confirmed else None, "mass_dm_audience_size": recipients, "mass_dm_readback": rep["READBACK_VERIFY"], "updated_at": now_iso()}})
+        await _log(status=("MOCK_DM_CONFIRMED" if is_mock else "MASS_DM_CONFIRMED") if confirmed else ("MASS_DM_NOT_CONFIRMED" if status == "UNVERIFIED" else "MASS_DM_FAILED"), **base, mass_dm_id=marker, mass_dm_text=cap["text"],
+                   recipients=recipients, sent=sent, error_code=None if confirmed else (send_error or ("NOT_VERIFIED" if ok else "SEND_FAILED")))
+        rep["status"] = "MASS_DM_CONFIRMED" if confirmed else ("MASS_DM_UNVERIFIED" if status == "UNVERIFIED" else "MASS_DM_FAILED")
+        rep["MASS_DM_MARKER"] = marker
         return rep
     finally:
         if gate_opened and provider is not None:
@@ -986,3 +1020,21 @@ async def mass_dm_from_post(model_slug: str, post_id: str, execute: bool = False
         rep["TOTAL_REAL_MASS_DM_SENT"] = await real_mass_dm_sent_count()
         rep["OF_AUTO_SCHEDULER_ENABLED"] = auto_scheduler_enabled()
         await release_lock(owner)
+
+
+MASS_DM_JOBS: Dict[str, dict] = {}     # post_id -> last result of a background execute (process-local); the durable state is of_model_runs
+
+
+async def mass_dm_from_post_background(model_slug: str, post_id: str, trigger: str = "admin") -> None:
+    try:
+        rep = await mass_dm_from_post(model_slug, post_id, execute=True, trigger=trigger)
+    except Exception as e:                                  # noqa: BLE001 — never lose the outcome of a real send
+        rep = {"status": "INTERNAL_ERROR", "error": type(e).__name__}
+    rep["finished_at"] = now_iso()
+    MASS_DM_JOBS[str(post_id)] = rep
+    await runs_col.update_one({"cycle_number": _run_key(str(post_id))}, {"$set": {"last_result": {k: v for k, v in rep.items() if k != "MASS_DM_TEXT"}, "updated_at": now_iso()}})
+
+
+async def mass_dm_job_view(post_id: str) -> dict:
+    run = await runs_col.find_one({"cycle_number": _run_key(str(post_id))}, {"_id": 0})
+    return {"job": MASS_DM_JOBS.get(str(post_id)), "run": run}

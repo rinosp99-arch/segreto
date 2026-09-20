@@ -156,6 +156,13 @@ class OFProviderAdapter(ABC):
     async def send_mass_message(self, of_user_id: str, req: OFMassMessageRequest) -> OFMassMessageResult:
         raise OFProviderError("NOT_SUPPORTED", "mass message non supportato da questo provider")
 
+    async def mass_message_crm(self, of_user_id: str, req: OFMassMessageRequest, dry_run: bool = True) -> Dict[str, Any]:
+        """Provider-side mass DM with explicit audience.type and dry_run preview -> {success, dry_run, recipients, sent, sample}."""
+        raise OFProviderError("NOT_SUPPORTED", "mass message CRM non supportato da questo provider")
+
+    async def get_chat_messages(self, of_user_id: str, fan_id: str, limit: int = 20) -> Dict[str, Any]:
+        raise OFProviderError("NOT_SUPPORTED", "lettura chat non supportata da questo provider")
+
     async def verify_mass_message(self, of_user_id: str, message_id: str, pages: int = 3, page_size: int = 50) -> bool:
         """SEND -> id -> GET mass messages -> id present ? MASS_DM_CONFIRMED : MASS_DM_NOT_CONFIRMED (read-only)."""
         for p in range(pages):

@@ -13,6 +13,9 @@ Documented endpoints used:
   POST {base}/api2/v2/messages/queue        (header user-id)       WRITE -> OnlyFans mass message (queue) {text, mediaFiles:[vault ids], price, queueBuyers:[]=ALL subscribers}
   GET  {base}/api2/v2/messages/queue        (header user-id)       {list:[...], hasMore}  (verification of a mass message by id)
   POST {base}/api2/v2/messages/queue/size   (header user-id)       {size} audience preview for the same queueBuyers (no send)
+  POST {base}/accounts/{of_user_id}/messages/mass  (CRM)          {text, price, mediaFiles:[vault ids], audience:{type: all|active|expired}, dry_run}
+                                                                  dry_run=true -> {recipients, sent:0, sample} (no send); dry_run=false -> serial send inside the request
+  GET  {base}/accounts/{of_user_id}/chats/{fan_id}/messages       read-back of a recipient's conversation (verification)
   Delete scheduled post: NOT documented -> never called (NOT_DOCUMENTED).
 Mass message writes are additionally blocked unless OF_MASS_DM_ENABLED=true AND OF_MASS_DM_MOCK=false (MASS_DM_DISABLED, no network).
 All WRITE methods are blocked while OF_REAL_POSTING_ENABLED != true and never reach the network. OF_REAL_WRITE_CALLS counts real write HTTP calls."""
@@ -125,8 +128,9 @@ class TheOnlyAPIAdapter(OFProviderAdapter):
         else:
             assert method.upper() == "GET" or read_post, "read path must be GET"          # read_post: documented POST that only computes (queue/size)
             CALLS["read"] += 1
+        timeout = kw.pop("timeout", self.timeout)
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as c:
+            async with httpx.AsyncClient(timeout=timeout) as c:
                 r = await c.request(method, url, headers=self._headers(of_user_id), **kw)
         except httpx.HTTPError as e:
             raise OFProviderError("NETWORK_ERROR", scrub(str(e))[:200])
@@ -266,6 +270,33 @@ class TheOnlyAPIAdapter(OFProviderAdapter):
         if not writes_enabled():
             raise OFProviderError("WRITES_DISABLED", "OF_REAL_POSTING_ENABLED=false")
         raise OFProviderError("NOT_DOCUMENTED", "The Only API non documenta un endpoint di cancellazione post programmato: nessuna richiesta inviata")
+
+    # ------------------------------------------------------------------ MASS MESSAGE (CRM, documented): /accounts/{id}/messages/mass with audience.type + dry_run
+    MASS_SEND_TIMEOUT_S = 3600.0        # the real send is a serial loop inside one HTTP request (up to 5,000 recipients)
+
+    async def mass_message_crm(self, of_user_id: str, req: OFMassMessageRequest, dry_run: bool = True) -> Dict[str, Any]:
+        """POST {base}/accounts/{of_user_id}/messages/mass. audience.type from req.audience ('ALL' -> 'all', 'ACTIVE' -> 'active').
+        dry_run=True resolves the audience and sends NOTHING -> {success, dry_run, recipients, sent, sample}. dry_run=False = THE real send."""
+        self._mass_guard()
+        if not req.text and not req.media_ids:
+            raise OFProviderError("API_ERROR", "message requires text or mediaFiles")
+        a_type = {"ALL": "all", "ACTIVE": "active", "EXPIRED": "expired"}.get(str(req.audience).upper())
+        if not a_type:
+            raise OFProviderError("NOT_SUPPORTED", "audience.type deve essere all | active | expired")
+        body: Dict[str, Any] = {"text": req.text, "price": float(req.price) if (req.price or 0) > 0 else 0, "mediaFiles": [str(x) for x in req.media_ids], "audience": {"type": a_type}, "dry_run": bool(dry_run)}
+        url = f"{self.base}/accounts/{of_user_id}/messages/mass"
+        if dry_run:
+            data = await self._request("POST", url, of_user_id=of_user_id, read_post=True, json=body)          # documented: "Preview only — no messages were sent."
+        else:
+            CALLS["mass_dm"] += 1
+            data = await self._request("POST", url, of_user_id=of_user_id, write=True, json=body, timeout=self.MASS_SEND_TIMEOUT_S)
+        data = _unwrap(data) if isinstance(data, dict) and "data" in data and "recipients" not in data else data
+        return data if isinstance(data, dict) else {"raw": data}
+
+    async def get_chat_messages(self, of_user_id: str, fan_id: str, limit: int = 20) -> Dict[str, Any]:
+        """GET {base}/accounts/{of_user_id}/chats/{fan_id}/messages (read-only) -> conversation page."""
+        data = await self._request("GET", f"{self.base}/accounts/{of_user_id}/chats/{fan_id}/messages", of_user_id=of_user_id, params={"limit": limit})
+        return _unwrap(data) if isinstance(data, dict) else {"list": data}
 
     # ------------------------------------------------------------------ MASS MESSAGE (documented OnlyFans passthrough: /api2/v2/messages/queue)
     def _mass_guard(self):

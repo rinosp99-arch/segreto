@@ -29,7 +29,9 @@ class MockOFProvider(OFProviderAdapter):
         self.mass_messages: List[dict] = []   # sent mass DMs (mock queue list)
         self.fail_mass_dm: bool = False
         self.hide_mass_dm: bool = False
-        self.fans: int = 418                  # mock audience size (ALL subscribers)
+        self.fans: int = 418                  # mock audience size (active subscribers)
+        self.expired_fans: int = 57           # extra recipients when audience.type = all
+        self.chats: Dict[str, List[dict]] = {}   # fan_id -> messages (read-back verification)
 
     # ---------------- READ
     async def test_connection(self) -> Dict[str, Any]:
@@ -119,6 +121,28 @@ class MockOFProvider(OFProviderAdapter):
     async def get_mass_messages(self, of_user_id: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
         page = self.mass_messages[offset: offset + limit]
         return {"list": [dict(x) for x in page], "hasMore": offset + limit < len(self.mass_messages)}
+
+    async def mass_message_crm(self, of_user_id: str, req: OFMassMessageRequest, dry_run: bool = True) -> Dict[str, Any]:
+        if not req.text and not req.media_ids:
+            raise OFProviderError("API_ERROR", "mock: message requires text or mediaFiles", 400)
+        a_type = {"ALL": "all", "ACTIVE": "active", "EXPIRED": "expired"}.get(str(req.audience).upper())
+        if not a_type:
+            raise OFProviderError("NOT_SUPPORTED", "mock: audience.type non valido")
+        recipients = self.fans + (self.expired_fans if a_type == "all" else 0) if a_type != "expired" else self.expired_fans
+        sample = [{"fan_of_user_id": f"fan{i}", "username": f"fan{i}"} for i in range(min(10, recipients))]
+        if dry_run:
+            return {"success": True, "dry_run": True, "recipients": recipients, "sent": 0, "sample": sample, "note": "Preview only — no messages were sent."}
+        self.write_calls += 1
+        if self.fail_mass_dm:
+            raise OFProviderError("API_ERROR", "mock: mass message rifiutato (validation)", 400)
+        msg = {"id": f"mock_crm_{uuid.uuid4().hex[:10]}", "text": req.text, "mediaFiles": [str(x) for x in req.media_ids], "audience": a_type, "recipients": recipients, "createdAt": datetime.now(timezone.utc).isoformat(), "mock": True, "crm": True}
+        self.mass_messages.append(msg)
+        for f in sample:
+            self.chats.setdefault(f["fan_of_user_id"], []).append({"id": msg["id"], "text": req.text, "mediaCount": len(req.media_ids), "fromUser": {"id": of_user_id}})
+        return {"success": True, "dry_run": False, "recipients": recipients, "sent": 0 if self.hide_mass_dm else recipients, "sample": sample}
+
+    async def get_chat_messages(self, of_user_id: str, fan_id: str, limit: int = 20) -> Dict[str, Any]:
+        return {"list": list(self.chats.get(fan_id, []))[-limit:], "hasMore": False}
 
     async def send_mass_message(self, of_user_id: str, req: OFMassMessageRequest) -> OFMassMessageResult:
         self.write_calls += 1

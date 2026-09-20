@@ -73,3 +73,8 @@ Per ogni modella della coda: FEED post → `FEED_STATUS=OK` (verifica read-back)
 `POST /api/admin/of-autopilot/mass-dm-test` `{model_slug, provider_post_id, execute}` — `execute=false` = solo pre-check READ-ONLY + anteprima copy (zero write);
 `execute=true` = se tutti i check PASS: gate on → **1** mass message a tutti i subscriber con i vault id del post → verifica READ → stato in `of_model_runs` (`post:<id>`) → gate off + verifica.
 Hard cap: 1 mass DM reale totale (`REAL_MASS_DM_TEST_MAX`), nessun nuovo feed, nessuna altra modella, STOP su qualsiasi check FAIL.
+
+### Mass DM reale via CRM (modalità scelta dopo il test)
+Il passthrough `queueBuyers: []` su OnlyFans risolve 0 destinatari (`queue/size`=0) → il test è stato abortito in sicurezza. La route `mass-dm-test` ora usa la modalità CRM documentata
+`POST /accounts/{id}/messages/mass` con `audience.type=all` e `dry_run:true` (recipients + campione, nessun invio) → stesso body `dry_run:false`. Nessun queue id: verifica via `GET chats/{fan}/messages`
+sui fan campione; marker `crm:<id>` in `of_model_runs` → mai un secondo invio (anche dopo timeout: stato `UNVERIFIED`). `background=true` + `GET /mass-dm-test/{post_id}` per invii lunghi.

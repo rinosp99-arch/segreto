@@ -195,6 +195,26 @@ async def test_real_adapter_mass_dm_blocked_without_network(monkeypatch):
         ad._queue_buyers(OFMassMessageRequest(text="x", audience="vip"))
 
 
+async def test_mass_dm_from_post_unverified_never_resent(sandbox, monkeypatch):
+    mock = sandbox
+    monkeypatch.setenv("OF_MASS_DM_ENABLED", "false")
+    a, = await seed(_model(f"{TAG}-nora", 0))
+    r = await engine.run("PUBLISH_NOW", "test")
+    pid = r["provider_post_id"]
+    monkeypatch.setenv("OF_MASS_DM_ENABLED", "true")
+    async def net_error(uid, req, dry_run=True):
+        if dry_run:
+            return {"success": True, "dry_run": True, "recipients": 5, "sent": 0, "sample": [{"fan_of_user_id": "fanX", "username": "x"}]}
+        raise OFProviderError("NETWORK_ERROR", "timeout")                                              # connection dropped during the serial send
+    monkeypatch.setattr(mock, "mass_message_crm", net_error)
+    e = await engine.mass_dm_from_post(a["slug"], pid, execute=True, trigger="test")
+    assert e["status"] == "MASS_DM_UNVERIFIED" and e["REAL_MASS_DM_CREATE"].startswith("UNKNOWN_") and e["READBACK_VERIFY"] == "FAIL" and e["WRITE_GATE_RESTORED_TO_FALSE"] is True
+    run = await engine.runs_col.find_one({"cycle_number": f"post:{pid}"}, {"_id": 0})
+    assert run["mass_dm_status"] == "UNVERIFIED" and run["mass_dm_id"].startswith("crm:")
+    e2 = await engine.mass_dm_from_post(a["slug"], pid, execute=True, trigger="test")               # NEVER a blind retry
+    assert e2["status"] == "STOPPED_PRECHECK" and "NO_MASS_DM_ALREADY_SENT_FOR_POST" in e2["failed_checks"] and e2["WRITE_GATE_ENABLED"] is False
+
+
 async def test_dm_caption_format_and_difference():
     m = _model("dm-copy")
     of = m["onlyfans_url"]
@@ -228,13 +248,14 @@ async def test_mass_dm_from_existing_post_mock(sandbox, monkeypatch):
     assert mock.write_calls == writes_before and len(mock.mass_messages) == 0 and mock.gate_history == []
     # 2) EXECUTE = gate on -> ONE mass DM -> verify -> saved -> gate off (verified)
     e = await engine.mass_dm_from_post(a["slug"], pid, execute=True, trigger="test")
-    assert e["status"] == "MASS_DM_CONFIRMED" and e["REAL_MASS_DM_CREATE"] == "PASS" and e["MASS_DM_ID_RECEIVED"] and e["REAL_MASS_DM_VERIFY"] == "PASS" and e["REAL_MASS_DM_CONFIRMED"] == "PASS"
+    assert e["status"] == "MASS_DM_CONFIRMED" and e["REAL_MASS_DM_CREATE"] == "PASS" and e["READBACK_VERIFY"] == "PASS" and e["REAL_MASS_DM_CONFIRMED"] == "PASS"
+    assert e["AUDIENCE_TYPE"] == "all" and e["DRY_RUN_RECIPIENTS"] == mock.fans + mock.expired_fans and e["REAL_MASS_DM_SENT_COUNT"] == mock.fans + mock.expired_fans   # ALL = active + expired
     assert e["WRITE_GATE_ENABLED"] is True and e["WRITE_GATE_RESTORED_TO_FALSE"] is True and mock.gate_history == [True, False] and mock.gate is False
-    assert e["NEW_FEED_CREATED"] is False and len(mock.posts) == posts_before and len(mock.mass_messages) == 1 and mock.write_calls == writes_before + 1
+    assert e["NEW_FEED_CREATED"] is False and len(mock.posts) == posts_before and len(mock.mass_messages) == 1 and mock.write_calls == writes_before + 1   # dry_run is not a write
     msg = mock.mass_messages[0]
-    assert msg["mediaFiles"] == [m["id"] for m in mock.posts[pid]["media"]] and msg["queueBuyers"] == [] and msg["text"] == e["MASS_DM_TEXT"] and msg["text"].count("http") == 1
+    assert msg["mediaFiles"] == [str(m["id"]) for m in mock.posts[pid]["media"]] and msg["audience"] == "all" and msg["text"] == e["MASS_DM_TEXT"] and msg["text"].count("http") == 1
     run = await engine.runs_col.find_one({"cycle_number": f"post:{pid}"}, {"_id": 0})
-    assert run and run["mass_dm_status"] == "OK" and run["mass_dm_id"] == e["MASS_DM_ID"] and run["feed_post_id"] == pid and run["model_id"] == a["id"] and run["mock"] is True
+    assert run and run["mass_dm_status"] == "OK" and run["mass_dm_id"] == e["MASS_DM_MARKER"] and run["mass_dm_sent_count"] == e["REAL_MASS_DM_SENT_COUNT"] and run["feed_post_id"] == pid and run["mock"] is True
     assert e["TOTAL_REAL_MASS_DM_SENT"] == 0                                                        # mock never counts as real
     # 3) second call for the same post -> STOP before any write (no duplicate)
     e2 = await engine.mass_dm_from_post(a["slug"], pid, execute=True, trigger="test")
@@ -265,12 +286,26 @@ async def test_mass_dm_from_post_gate_restored_on_failure(sandbox, monkeypatch):
     mock.gate_history.clear()
     mock.fail_mass_dm = True
     e = await engine.mass_dm_from_post(a["slug"], pid, execute=True, trigger="test")
-    assert e["status"] == "FAILED" and e["REAL_MASS_DM_CREATE"] == "FAIL" and e["WRITE_GATE_RESTORED_TO_FALSE"] is True and mock.gate_history == [True, False], e.get("failed_checks")
+    assert e["status"] == "MASS_DM_FAILED" and e["REAL_MASS_DM_CREATE"] == "FAIL" and e["WRITE_GATE_RESTORED_TO_FALSE"] is True and mock.gate_history == [True, False], e.get("failed_checks")
     run = await engine.runs_col.find_one({"cycle_number": f"post:{pid}"}, {"_id": 0})
     assert run["mass_dm_status"] == "FAILED" and not run.get("mass_dm_id")
     # retry allowed after a FAILED (no id) -> exactly one DM; wrong post for a model -> STOP
     mock.fail_mass_dm = False
     e2 = await engine.mass_dm_from_post(a["slug"], pid, execute=True, trigger="test")
     assert e2["status"] == "MASS_DM_CONFIRMED" and len(mock.mass_messages) == 1 and mock.mass_messages[0]["text"].rstrip().endswith(a["onlyfans_url"])
+    # empty audience -> ABORT before any send, gate restored
+    mock.gate_history.clear()
+    mock.fans, mock.expired_fans = 0, 0
+    ea = await engine.mass_dm_from_post(b["slug"], rb["provider_post_id"], execute=True, trigger="test")
+    assert ea["status"] == "STOPPED_PRECHECK" and "MASS_DM_TARGET_ALL_FANS(subscribers>0)" in ea["failed_checks"]        # read proxy already 0 -> STOP before gate
+    mock.fans, mock.expired_fans = 3, 0
+    monkeypatch.setattr(mock, "subscribers_count", lambda uid: __import__("asyncio").sleep(0, result=3))
+    real_dry = mock.mass_message_crm
+    async def zero_dry(uid, req, dry_run=True):
+        return {"success": True, "dry_run": True, "recipients": 0, "sent": 0, "sample": []} if dry_run else await real_dry(uid, req, dry_run)
+    monkeypatch.setattr(mock, "mass_message_crm", zero_dry)
+    ea = await engine.mass_dm_from_post(b["slug"], rb["provider_post_id"], execute=True, trigger="test")
+    assert ea["status"] == "ABORTED_EMPTY_AUDIENCE" and ea["REAL_MASS_DM_CREATE"] == "SKIPPED" and ea["WRITE_GATE_RESTORED_TO_FALSE"] is True and mock.gate_history == [True, False] and len(mock.mass_messages) == 1
+    monkeypatch.setattr(mock, "mass_message_crm", real_dry)
     wrong = await engine.mass_dm_from_post(b["slug"], pid, execute=True, trigger="test")
     assert wrong["status"] == "STOPPED_PRECHECK" and "SOURCE_POST_BELONGS_TO_MODEL(OF link in caption)" in wrong["failed_checks"] and len(mock.mass_messages) == 1

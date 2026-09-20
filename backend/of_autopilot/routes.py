@@ -1,4 +1,5 @@
 """Admin API /api/admin/of-autopilot/* (existing admin JWT). Never returns credentials. No route can enable real posting."""
+import asyncio
 import re
 from typing import List, Optional
 
@@ -16,6 +17,7 @@ class MassDmTest(BaseModel):
     model_slug: str
     provider_post_id: str
     execute: bool = False               # False = READ-ONLY dry run (pre-checks + copy preview). True = the ONE real/mock mass message
+    background: bool = False            # True = run the execute in a background task (the real send can take minutes) and poll GET /mass-dm-test/{post_id}
 
 
 class Settings(BaseModel):
@@ -77,10 +79,22 @@ async def publish_now(admin=Depends(get_current_admin)):
 @router.post("/mass-dm-test")
 async def mass_dm_test(body: MassDmTest, admin=Depends(get_current_admin)):
     """DM-only test from an EXISTING confirmed feed post: never a new feed, never another model, hard cap 1 real mass DM, gate restored in finally."""
+    if body.execute and body.background:
+        if str(body.provider_post_id) in engine.MASS_DM_JOBS and not engine.MASS_DM_JOBS[str(body.provider_post_id)].get("finished_at"):
+            raise HTTPException(409, "Invio già in corso")
+        engine.MASS_DM_JOBS[str(body.provider_post_id)] = {"status": "RUNNING", "started_at": engine.now_iso()}
+        asyncio.create_task(engine.mass_dm_from_post_background(body.model_slug.strip().lower(), body.provider_post_id, "admin"))
+        return {"status": "STARTED", "poll": f"/api/admin/of-autopilot/mass-dm-test/{body.provider_post_id}"}
     r = await engine.mass_dm_from_post(body.model_slug.strip().lower(), body.provider_post_id, execute=body.execute, trigger="admin")
     if r.get("status") == "LOCKED":
         raise HTTPException(409, "Pubblicazione già in corso")
     return r
+
+
+@router.get("/mass-dm-test/{post_id}")
+async def mass_dm_test_status(post_id: str, admin=Depends(get_current_admin)):
+    """READ-ONLY: outcome of a (background) mass-dm-test for a post + the durable of_model_runs state."""
+    return await engine.mass_dm_job_view(post_id)
 
 
 @router.post("/skip")
