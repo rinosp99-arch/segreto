@@ -203,6 +203,11 @@ stato in `of_model_runs` (key `post:<id>`) → gate off in finally + verifica RE
 - Note: `REAL_MASS_DM_SENT_COUNT` sconosciuto (risposta persa); provider ha risolto 500 destinatari su 2671 in cache (possibile cap per invio del provider) — da chiarire con The Only API prima dell'automazione.
 - [ ] Poi: dry run prod → se tutti PASS → execute=true (1 solo DM) → report → STOP
 
+### Phase 24 — ANALISI TARGET "FAN" (READ-ONLY, nessun invio) — Status: COMPLETED (analisi), implementazione in attesa di OK utente
+- OnlyFans UI "FAN" = lista di sistema OF `id="fans"` (GET /api2/v2/lists, READ): usersCount **2300** (≈ users/me.subscribersCount 2301). Altre liste: following 188, muted 283, tagged 23, custom.
+- Equivalente API documentato (OpenAPI The Only API, `POST /accounts/{id}/messages/mass`): `userLists: ["fans"]` ("Target segment(s), e.g. ["active"] or specific list IDs") + `excludedLists: []`. La variante `audience.type=all` (docs page) risolve dalla **cache subscriber del provider** e ha restituito 500 = limite pagina della CRM (`/fans`,`/subscribers` limit max 500) → causa del cap 500 (non è l'audience OF).
+- EXACT_UI_FAN_BEHAVIOR_REPLICATED = FAIL (invio precedente: audience.type=all → 500). Prossimo passo proposto: target `userLists:["fans"]` (id letto da GET lists e verificato usersCount>0), refresh subscriber mantenuto, verifica via GET /api2/v2/messages/queue o read-back, test mock, poi deploy. Nessun invio finché non autorizzato.
+
 ### Phase 22 — OF AUTOPILOT FEED + MASS MESSAGE (MOCK ONLY) — Status: COMPLETED in workspace (mock only; testing agent iteration_28 0 bug; OF_REAL_MASS_DM_SENT=false; scheduler OFF; no deploy)
 **Obiettivo:** per ogni modella della coda:
 1) FEED POST → verifica `FEED_CONFIRMED`
