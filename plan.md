@@ -319,6 +319,13 @@ Confronto **INITIAL_HTML vs RENDERED_DOM vs GOOGLE_INSPECTION**:
 
 ## 3) Phase 14 — SEO AUTOPILOT READ_ONLY (Status: COMPLETED — PASS, PUBLIC_MUTATIONS=0)
 
+### Phase 21 — OF CAPTION STYLE v2 (brand format ✨ LATO PUBBLICO / 🔥 LATO SEGRETO) — Status: COMPLETED in workspace (solo copy, motore intatto, 0 post reali)
+- [x] Solo `backend/of_autopilot/caption.py`: struttura fissa NOME → ✨ LATO PUBBLICO → 🔥 LATO SEGRETO (+emoji) → hook/domanda → 💋 Scoprila su OnlyFans: + link OF reale dal DB (deterministico, fuori dalla parte creativa)
+- [x] LLM: JSON {public, secret, hook}, solo dati reali (nome, frase, bio, categorie, tag, stile→aggettivi), emoji e stile hook suggeriti per ciclo, validazione hard (FORBIDDEN, inglese, URL/@, lunghezza) → fallback
+- [x] Fallback deterministico combinabile: 13 public · 13 secret · 12 hook · 5 emoji, diversi per modella e per ciclo
+- [x] `tests/test_of_caption_style.py` 4 PASS (10 check richiesti) · suite OF: caption/engine test PASS; 4 failure ambientali pre-esistenti/non legate al copy (backend workspace in modalità reale + OF_REAL_TEST_MAX_POSTS=1 nell'env: `admin_api_contract` x2, `writes_blocked` x2 — passano con env mock)
+- [x] 5 anteprime LLM su 5 modelle mostrate all'utente; STOP (nessun publish). Produzione: richiede redeploy per usare il nuovo copy.
+
 ### Phase 20 — PRIMO POST REALE ONLYFANS CONTROLLATO (VANESSA BELLA, 1 solo post) — Status: COMPLETED — REAL_TEST_POST=PASS (1 post reale, provider_post_id 2759765107, gate ripristinato false, scheduler OFF)
 Esito: utente ha rimosso il requisito bloccante OF_REAL_TEST_MAX_POSTS in produzione e autorizzato 1 tentativo. Pre-check 19/19 PASS -> publish-now unico -> POST_CONFIRMED (read-back: exists, account_ok, caption_ok, of_link_ok, media_count=2) -> write_gate restored=true verified_false=true -> TOTAL_REAL_POSTS_CREATED=1, SECOND_POST_CREATED=false, AUTOPILOT PAUSED. STOP: attesa revisione visiva utente su OnlyFans prima di qualsiasi automazione.
 Autorizzazione utente: 1 solo publish-now reale su `latosegreto`, Public+Secret Vanessa, caption IT + link OF DB, scheduler OFF, `OF_REAL_TEST_MAX_POSTS=1`, gate write temporaneo + ripristino false, STOP dopo il tentativo. Nessuna conferma extra se tutti i pre-check PASS.
