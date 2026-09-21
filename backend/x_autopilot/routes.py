@@ -112,8 +112,13 @@ async def start(admin=Depends(get_current_admin)):
     conn = await xapi.connection_status()
     if not conn["operational"]:
         raise HTTPException(409, f"X non connessa: {conn['CONNECTION_STATUS']}")
-    await engine.set_state(enabled=True)
+    # Activation is DB-only: enabled + activated_at (no catch-up boundary) + next_run. NO run, NO tick, NO write here: the first post happens at the next FUTURE slot.
+    await engine.set_state(enabled=True, activated_at=engine.now_iso())
+    st = await engine.get_state()
+    sch = await engine.schedule_view(st)
+    await engine.set_state(next_run=(sch["next_slot"] or {}).get("at"))
     return {"enabled": True, "AUTO_SCHEDULER_ENABLED": engine.auto_scheduler_enabled(), "MOCK_MODE": xapi.mock_enabled(), "CONNECTION_STATUS": conn["CONNECTION_STATUS"],
+            "activated_at": st.get("activated_at"), "next_run": (sch["next_slot"] or {}).get("at"), "CATCH_UP_ENABLED": False, "IMMEDIATE_RUN_TRIGGERED": False,
             "note": None if engine.auto_scheduler_enabled() else "Master switch X_AUTO_SCHEDULER_ENABLED=false: lo scheduler resta fermo"}
 
 

@@ -73,3 +73,12 @@ account `@latosegreto` read-write, probe crediti (1 READ v2: 402 ⇒ STOP), pros
 Write: marker SENDING → upload PUBLIC → upload SECRET → media ids → UNA `POST /2/tweets` → read-back (`GET /2/tweets/{id}`: esiste, autore = account, 2 media, testo, link OF) → PUBLISHED (coda avanza 1 volta) | UNVERIFIED (mai reinvio; `verify` cerca tra i post recenti).
 Test: `tests/test_x_real_test.py` (7) — suite X 31/31; testing agent iteration_32 (0 bug).
 Produzione: richiede deploy + Secrets `X_CONSUMER_KEY/X_CONSUMER_SECRET/X_BEARER_TOKEN`, `X_AUTOPILOT_MOCK=false`, `X_REAL_POSTING_ENABLED=true`, `X_AUTO_SCHEDULER_ENABLED=false`, poi OAuth ("Collega account X") sul DB di produzione.
+
+## ATTIVAZIONE UFFICIALE (produzione) — invarianti
+- **Nessun catch-up**: `POST /start` salva `activated_at` (+ `next_run`); `due_slot()` ignora slot con orario ≤ `activated_at` anche se dentro la grace di 90'. `CATCH_UP_ENABLED=false`, `IMMEDIATE_RUN_TRIGGERED=false` (nessun run/tick in `/start`).
+- **Scheduler reale (publish_next, is_mock=False)**: marker `SENDING` in `x_real_runs` (`<model_id>:<cycle>`) PRIMA del create → `POST /2/tweets` → **read-back** (`GET /2/tweets/{id}`: esiste, autore `@latosegreto`, media = 2 per SINGLE_POST / 1 per THREAD main, testo, link OF) → `PUBLISHED` e avanzamento; read-back KO → `UNVERIFIED` (consumata, `POST /real-test/verify` la ri-verifica solo in lettura).
+  Create in timeout/5xx (`NETWORK_ERROR`/`API_ERROR`) → `UNVERIFIED`, mai reinvio, ricerca tra i post recenti, modella consumata, slot chiuso. Errori definitivi (`WRITES_DISABLED/NOT_CONNECTED/INVALID_TOKEN/FORBIDDEN/CREDITS_DEPLETED/RATE_LIMITED/MEDIA_REJECTED`) → `FAILED`, slot chiuso, modella NON consumata.
+  Marker già `SENDING/UNVERIFIED/PUBLISHED` per modella+ciclo → `DUPLICATE_PREVENTED` (consumata, nessun write). Thread = 1 item; coda circolare; nuove PUBLISHED entrano, inactive saltate.
+- **Hard cap test**: `HARD_CAP=1` esiste SOLO nella route manuale `/real-test`; lo scheduler non la usa (`TEST_HARD_CAP_ENABLED=false` in `/status`).
+- **Un solo scheduler reale**: produzione `X_AUTOPILOT_MOCK=false`, `X_REAL_POSTING_ENABLED=true`, `X_AUTO_SCHEDULER_ENABLED=true`; workspace/preview `X_AUTOPILOT_MOCK=true`, `X_REAL_POSTING_ENABLED=false`, `X_AUTO_SCHEDULER_ENABLED=false`.
+- Slot: 12:30 / 18:30 / 22:00 Europe/Rome. Test: `tests/test_x_real_test.py` (11) — suite X 35/35; testing agent iteration_33 (0 bug).

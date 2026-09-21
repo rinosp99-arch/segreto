@@ -30,6 +30,10 @@ DEFAULTS = {"enabled": False, "posts_per_day": 3, "schedule_times": ["12:30", "1
 MAX_ATTEMPTS_PER_SIDE = 3
 LOCK_TTL_S = 180
 SLOT_GRACE_MIN = 90
+real_runs_col = db["x_real_runs"]                     # idempotency markers for REAL writes: {id: "<model_id>:<cycle>", status: SENDING|PUBLISHED|UNVERIFIED|FAILED|UPLOAD_FAILED}
+REAL_RUN_BLOCKING = ("SENDING", "UNVERIFIED", "PUBLISHED")
+DEFINITIVE_CREATE_ERRORS = ("WRITES_DISABLED", "NOT_CONNECTED", "INVALID_TOKEN", "FORBIDDEN", "CREDITS_DEPLETED", "RATE_LIMITED", "MEDIA_REJECTED")
+CATCH_UP_ENABLED = False
 SKIP_STATUSES = ("SKIPPED_NO_PUBLIC_MEDIA", "SKIPPED_NO_SECRET_MEDIA", "SKIPPED_NO_OF_LINK", "SKIPPED_NOT_X_SAFE")
 
 
@@ -224,9 +228,17 @@ async def publish_next(trigger: str = "scheduler", slot_id: Optional[str] = None
             if not cand:
                 break
             model = next(x for x in q["roster"]["models"] if x["id"] == cand["model_id"])
+            run_id = f"{cand['model_id']}:{st['cycle_number']}"
+            if not is_mock and await real_runs_col.find_one({"id": run_id, "status": {"$in": list(REAL_RUN_BLOCKING)}}):
+                # a REAL write for this model/cycle already started (SENDING/UNVERIFIED/PUBLISHED): never a second one -> consume and stop this slot
+                await _advance(st, eligible, cand["model_id"], False, None, "DUPLICATE_PREVENTED")
+                res = await _log(status="DUPLICATE_PREVENTED", model_id=cand["model_id"], model_slug=cand["slug"], model_name=cand["name"], cycle_number=st["cycle_number"], trigger=trigger, slot_id=slot_id)
+                await _finish_slot(slot_id, "DUPLICATE_PREVENTED")
+                result = {"status": "DUPLICATE_PREVENTED", "model_slug": cand["slug"], "log": res}
+                break
             prep = await _prepare(cand, model, st, slot_id)
             cp = prep["copy"]
-            errors, main_res, reply_res, used, fmt, infra = [], None, None, None, None, False
+            errors, main_res, reply_res, used, fmt, infra, unverified = [], None, None, None, None, False, None
             for pub, sec in prep["pairs"]:
                 assert pub["side"] == "PUBLIC" and sec["side"] == "SECRET"
                 try:
@@ -248,11 +260,22 @@ async def publish_next(trigger: str = "scheduler", slot_id: Optional[str] = None
                 payloads = xapi.build_payloads(model, pub, sec, cp["text"], cp["reply_text"], slot_id, st["cycle_number"])
                 fmt = payloads["format"]
                 main = {**payloads["main"], "media_ids": [pub_mid] + ([sec_mid] if fmt == "SINGLE_POST" else [])}
+                if not is_mock:                        # SENDING marker BEFORE the create (idempotency)
+                    await real_runs_col.update_one({"id": run_id}, {"$set": {"id": run_id, "status": "SENDING", "started_at": now_iso(), "model_id": cand["model_id"], "model_slug": cand["slug"], "model_name": cand["name"],
+                                                    "of_url": cand["of_url"], "text": cp["text"], "format": fmt, "public_media_id": pub["id"], "secret_media_id": sec["id"], "media_ids": main["media_ids"],
+                                                    "trigger": trigger, "slot_id": slot_id, "cycle_number": st["cycle_number"], "create_started_at": now_iso()}}, upsert=True)
                 try:
                     main_res = await adapter.create_post(main)
                 except xapi.XError as e:
                     errors.append({"side": "MAIN", "error_code": e.code, "detail": e.description[:160]})
                     infra = e.code in ("NOT_CONNECTED", "INVALID_TOKEN")
+                    if not is_mock:
+                        if e.code in DEFINITIVE_CREATE_ERRORS:
+                            await real_runs_col.update_one({"id": run_id}, {"$set": {"status": "FAILED", "error": e.code, "finished_at": now_iso()}})
+                            infra = True               # a REAL definitive create error stops the slot (no other model is tried in this slot)
+                        else:                          # timeout / 5xx AFTER the create started: NEVER resend -> UNVERIFIED, READ-back only
+                            await real_runs_col.update_one({"id": run_id}, {"$set": {"status": "UNVERIFIED", "error": e.code, "finished_at": now_iso()}})
+                            unverified = {"pub": pub, "sec": sec, "fmt": fmt, "error_code": e.code}
                     break
                 used = (pub, sec)
                 if fmt == "THREAD":
@@ -262,6 +285,33 @@ async def publish_next(trigger: str = "scheduler", slot_id: Optional[str] = None
                     except xapi.XError as e:
                         errors.append({"side": "REPLY", "media_id": sec["id"], "error_code": "THREAD_SECRET_FAILED", "detail": e.description[:160]})
                 break
+            if unverified:                             # consumed (never a second attempt for this model/cycle); verify via READ (recent posts)
+                pub, sec, fmt = unverified["pub"], unverified["sec"], unverified["fmt"]
+                await mark_media_used(cand["model_id"], cand["public"], cand["secret"], pub, sec, st["cycle_number"])
+                rb = await _readback_recent(adapter, run_id, cp["text"])
+                status_ = "PUBLISHED" if rb.get("ok") else "UNVERIFIED"
+                info = {"model_id": cand["model_id"], "model_slug": cand["slug"], "model_name": cand["name"], "public_media_id": pub["id"], "secret_media_id": sec["id"], "public_media_type": pub["type"],
+                        "secret_media_type": sec["type"], "format": fmt, "x_post_id": rb.get("post_id"), "x_reply_id": None, "of_url": cand["of_url"], "at": now_iso(), "cycle_number": st["cycle_number"], "slot_id": slot_id}
+                await _advance(st, eligible, cand["model_id"], status_ == "PUBLISHED", info, status_)
+                res = await _log(status=status_, **{k: v for k, v in info.items() if k != "at"}, error_code=unverified["error_code"], trigger=trigger, copy_source=cp["source"], media_errors=errors or None, mock=False, readback=rb)
+                await _finish_slot(slot_id, status_)
+                result = {"status": status_, **info, "error_code": unverified["error_code"], "readback": rb, "log": res}
+                break
+            if main_res and not is_mock:               # READ-back BEFORE advancing: exists, author, media, text, OF link
+                pub, sec = used
+                rb = await _readback_post(adapter, main_res.get("id"), cp["text"], cand["of_url"], 2 if fmt == "SINGLE_POST" else 1)
+                verified = bool(rb.get("ok"))
+                await real_runs_col.update_one({"id": run_id}, {"$set": {"status": "PUBLISHED" if verified else "UNVERIFIED", "post_id": str(main_res.get("id")), "reply_id": (reply_res or {}).get("id"), "readback": rb, "finished_at": now_iso()}})
+                if not verified:
+                    partial = fmt == "THREAD" and reply_res is None
+                    await mark_media_used(cand["model_id"], cand["public"], cand["secret"], pub, None if partial else sec, st["cycle_number"])
+                    info = {"model_id": cand["model_id"], "model_slug": cand["slug"], "model_name": cand["name"], "public_media_id": pub["id"], "secret_media_id": sec["id"], "public_media_type": pub["type"],
+                            "secret_media_type": sec["type"], "format": fmt, "x_post_id": main_res.get("id"), "x_reply_id": (reply_res or {}).get("id"), "of_url": cand["of_url"], "at": now_iso(), "cycle_number": st["cycle_number"], "slot_id": slot_id}
+                    await _advance(st, eligible, cand["model_id"], False, info, "UNVERIFIED")
+                    res = await _log(status="UNVERIFIED", **{k: v for k, v in info.items() if k != "at"}, error_code="READBACK_FAILED", trigger=trigger, copy_source=cp["source"], media_errors=errors or None, mock=False, readback=rb)
+                    await _finish_slot(slot_id, "UNVERIFIED")
+                    result = {"status": "UNVERIFIED", **info, "readback": rb, "log": res}
+                    break
             if main_res:
                 pub, sec = used
                 partial = fmt == "THREAD" and reply_res is None
@@ -272,7 +322,7 @@ async def publish_next(trigger: str = "scheduler", slot_id: Optional[str] = None
                         "of_url": cand["of_url"], "at": now_iso(), "cycle_number": st["cycle_number"], "slot_id": slot_id}
                 await _advance(st, eligible, cand["model_id"], not partial, info, status_)     # ONE advance per model (thread = one item)
                 res = await _log(status=status_, **{k: v for k, v in info.items() if k != "at"}, error_code="THREAD_SECRET_FAILED" if partial else None, trigger=trigger,
-                                 copy_source=cp["source"], media_errors=errors or None, mock=is_mock)
+                                 copy_source=cp["source"], media_errors=errors or None, mock=is_mock, readback=None if is_mock else {"ok": True})
                 await _finish_slot(slot_id, status_)
                 result = {"status": status_, **info, "text": cp["text"], "hashtags": cp["hashtags"], "copy_source": cp["source"], "media_order": ["PUBLIC", "SECRET"], "media_errors": errors, "log": res}
                 break
@@ -311,6 +361,47 @@ async def skip_current(trigger: str = "admin") -> dict:
         await release_lock(owner)
 
 
+# ----------------------------------------------------------------------------------------------- READ-back helpers (real mode)
+def _verify_post_data(data: dict, text: str, of_url: str, expected_media: int) -> dict:
+    t = (data or {}).get("data") or {}
+    inc = (data or {}).get("includes") or {}
+    users = {u.get("id"): u for u in (inc.get("users") or [])}
+    author = (users.get(str(t.get("author_id") or "")) or {}).get("username")
+    urls = [u.get("expanded_url") or u.get("unwound_url") or "" for u in ((t.get("entities") or {}).get("urls") or [])]
+    needle = (of_url or "").lower().rstrip("/")
+    of_ok = bool(needle) and (any(needle in (u or "").lower() for u in urls) or needle in (t.get("text") or "").lower())
+    first_line = ((text or "").split("\n")[0] or "").strip().lower()
+    text_ok = bool(first_line) and first_line in (t.get("text") or "").lower()
+    media_count = len(inc.get("media") or []) or len(((t.get("attachments") or {}).get("media_keys") or []))
+    account_ok = (author or "").lower() == "latosegreto"
+    return {"exists": bool(t.get("id")), "post_id": t.get("id"), "account_ok": account_ok, "author_username": author, "media_count": media_count, "expected_media": expected_media,
+            "text_ok": text_ok, "of_link_ok": of_ok, "ok": bool(t.get("id")) and account_ok and media_count == expected_media and text_ok and of_ok}
+
+
+async def _readback_post(adapter, post_id, text: str, of_url: str, expected_media: int) -> dict:
+    try:
+        return _verify_post_data(await adapter.read_post(str(post_id)), text, of_url, expected_media)
+    except xapi.XError as e:
+        return {"ok": False, "exists": None, "post_id": str(post_id), "error": e.code}
+
+
+async def _readback_recent(adapter, run_id: str, text: str) -> dict:
+    """UNVERIFIED create (no id returned): look for our text among the account's recent posts. Found -> the run becomes PUBLISHED."""
+    user_id = ((await xapi.xauth.auth_col.find_one({"id": "identity"}, {"_id": 0, "user_id": 1})) or {}).get("user_id")
+    if not user_id:
+        return {"ok": False, "via": "recent", "error": "NO_IDENTITY"}
+    try:
+        recent = await adapter.recent_posts(user_id, 5)
+    except xapi.XError as e:
+        return {"ok": False, "via": "recent", "error": e.code}
+    first_line = ((text or "").split("\n")[0] or "").strip().lower()
+    for t in recent:
+        if first_line and first_line in (t.get("text") or "").lower():
+            await real_runs_col.update_one({"id": run_id}, {"$set": {"status": "PUBLISHED", "post_id": str(t.get("id")), "readback": {"ok": True, "via": "recent"}}})
+            return {"ok": True, "via": "recent", "post_id": str(t.get("id"))}
+    return {"ok": False, "via": "recent"}
+
+
 # ----------------------------------------------------------------------------------------------- schedule
 def _tz(st: dict):
     try:
@@ -343,11 +434,25 @@ async def schedule_view(st: Optional[dict] = None) -> dict:
             "next_slot": {"slot_id": nxt["slot_id"], "at": nxt["at"].isoformat()} if nxt else None}
 
 
+def _activated_at(st: dict) -> Optional[datetime]:
+    raw = st.get("activated_at")
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
 async def due_slot(st: dict) -> Optional[str]:
+    """A slot is due from its time up to SLOT_GRACE_MIN after it. NO catch-up: slots at/before `activated_at` (set by /start) are never recovered."""
     tz = _tz(st)
     now = datetime.now(tz)
+    activated = _activated_at(st)
     for s in slots_for_day(st, now):
         if s["at"] <= now <= s["at"] + timedelta(minutes=SLOT_GRACE_MIN):
+            if activated and s["at"] <= activated:
+                continue
             if not await slots_col.find_one({"slot_id": s["slot_id"]}):
                 return s["slot_id"]
     return None
@@ -396,4 +501,7 @@ async def status() -> dict:
         "schedule": sch, "settings": {"posts_per_day": st["posts_per_day"], "schedule_times": st["schedule_times"], "timezone": st["timezone"], "use_ai_copy": st["use_ai_copy"], "italy_audience_mode": italy_mode(st)},
         "last_published": st.get("last_published"), "last_event": last, "last_run": st.get("last_run"), "last_success": st.get("last_success"), "next_run": (sch["next_slot"] or {}).get("at"),
         "next": {"model": nxt["name"] if nxt else None, "slot": sch["next_slot"]},
+        "activated_at": st.get("activated_at"), "CATCH_UP_ENABLED": CATCH_UP_ENABLED, "TEST_HARD_CAP_ENABLED": False, "NEXT_MODEL": nxt["slug"] if nxt else None,
+        "LAST_COMPLETED_MODEL": (st.get("last_published") or {}).get("model_slug"),
+        "real_runs": [r async for r in real_runs_col.find({}, {"_id": 0, "text": 0}).sort("started_at", -1).limit(3)],
     }

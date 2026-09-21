@@ -198,3 +198,79 @@ def test_admin_real_test_routes_contract():
     assert r["status"] == "STOPPED_GATES" and r["checks"]["MOCK_OFF"] is False and r["REAL_X_POSTS_CREATED"] == 0
     g = requests.get(f"{BASE}/api/admin/x-autopilot/real-test", headers=h, timeout=30).json()
     assert g["REAL_X_POSTS_CREATED"] == 0 and g["runs_started"] == 0
+
+
+# ------------------------------------------------------------------ OFFICIAL scheduler in REAL mode (FakeReal): no hard cap, marker, read-back, UNVERIFIED, duplicates, no catch-up
+async def test_scheduled_real_runs_not_capped_readback_and_markers(real_env, monkeypatch):
+    fake = real_env
+    a, b, c = await seed(_model(f"{TAG}-s1", ordine=1), _model(f"{TAG}-s2", ordine=2), _model(f"{TAG}-s3", ordine=3))
+    # two consecutive scheduled slots -> two REAL posts (no BLOCKED_HARD_CAP for the scheduler), each READ-verified before advancing
+    r1 = await engine.publish_next("scheduler", slot_id=f"{TAG}_slot1")
+    r2 = await engine.publish_next("scheduler", slot_id=f"{TAG}_slot2")
+    assert r1["status"] == "PUBLISHED" and r2["status"] == "PUBLISHED" and r1["model_slug"] == a["slug"] and r2["model_slug"] == b["slug"]
+    assert len(fake.posts) == 2 and fake.reads >= 2 and "BLOCKED_HARD_CAP" not in (r1["status"], r2["status"])
+    runs = {r["model_slug"]: r async for r in engine.real_runs_col.find({}, {"_id": 0})}
+    assert runs[a["slug"]]["status"] == "PUBLISHED" and runs[a["slug"]]["post_id"] == "19001" and runs[a["slug"]]["readback"]["ok"] and runs[a["slug"]]["media_ids"] == ["m1", "m2"]
+    assert (await engine.get_state())["cycle_done"] == [a["id"], b["id"]] and (await engine.queue_view())["next"]["model_id"] == c["id"]
+    assert await xapi.real_posts_created() == 2 and (await engine.status())["TEST_HARD_CAP_ENABLED"] is False
+    # existing blocking marker for the next model (e.g. a manual real-test already published it) -> DUPLICATE_PREVENTED, no write, model consumed
+    st = await engine.get_state()
+    await engine.real_runs_col.insert_one({"id": f"{c['id']}:{st['cycle_number']}", "status": "PUBLISHED", "model_slug": c["slug"], "started_at": engine.now_iso()})
+    r3 = await engine.publish_next("scheduler", slot_id=f"{TAG}_slot3")
+    st2 = await engine.get_state()
+    assert r3["status"] == "DUPLICATE_PREVENTED" and len(fake.posts) == 2 and st2["last_processed"]["model_id"] == c["id"] and st2["last_processed"]["status"] == "DUPLICATE_PREVENTED"
+    assert st2["cycle_number"] == st["cycle_number"] + 1 and st2["cycle_done"] == []              # 3/3 consumed -> new cycle (circular queue)
+
+
+async def test_scheduled_unverified_never_resent_and_definitive_stop(real_env):
+    fake = real_env
+    a, b = await seed(_model(f"{TAG}-n1", ordine=1), _model(f"{TAG}-n2", ordine=2))
+    fake.fail_create = "NETWORK_ERROR"                                                          # timeout after the create started
+    r = await engine.publish_next("scheduler", slot_id=f"{TAG}_u1")
+    assert r["status"] == "UNVERIFIED" and r["error_code"] == "NETWORK_ERROR" and not fake.posts and len(fake.uploads) == 2
+    st = await engine.get_state()
+    assert st["cycle_done"] == [a["id"]]                                                         # consumed: never a second attempt for this model/cycle
+    run = await engine.real_runs_col.find_one({"model_slug": a["slug"]}, {"_id": 0})
+    assert run["status"] == "UNVERIFIED" and run["readback"] is None if "readback" in run else True
+    assert (await engine.queue_view())["next"]["model_id"] == b["id"]                            # the slot did NOT continue with the next model
+    # definitive create error (e.g. FORBIDDEN) -> FAILED, slot stops, model NOT consumed (retry at a later slot)
+    fake.fail_create = "FORBIDDEN"
+    r = await engine.publish_next("scheduler", slot_id=f"{TAG}_u2")
+    assert r["status"] == "FAILED" and r["error_code"] == "FORBIDDEN" and not fake.posts
+    assert (await engine.get_state())["cycle_done"] == [a["id"]] and (await engine.real_runs_col.find_one({"model_slug": b["slug"]}))["status"] == "FAILED"
+    fake.fail_create = None
+    r = await engine.publish_next("scheduler", slot_id=f"{TAG}_u3")
+    assert r["status"] == "PUBLISHED" and r["model_slug"] == b["slug"] and len(fake.posts) == 1
+
+
+async def test_readback_failure_marks_unverified_and_advances(real_env):
+    fake = real_env
+    a, _b = await seed(_model(f"{TAG}-rb", ordine=1), _model(f"{TAG}-rb2", ordine=2))
+    fake.read_fail = True
+    r = await engine.publish_next("scheduler", slot_id=f"{TAG}_rb1")
+    assert r["status"] == "UNVERIFIED" and r["x_post_id"] == "19001" and len(fake.posts) == 1 and r["readback"]["error"] == "API_ERROR"
+    assert (await engine.get_state())["cycle_done"] == [a["id"]]
+    fake.read_fail = False
+    v = await realtest.verify_last("t")                                                          # READ-only re-verification closes it
+    assert v["status"] == "PUBLISHED" and v["readback"]["ok"] and len(fake.posts) == 1
+
+
+async def test_activation_no_catch_up_and_no_immediate_run(real_env, monkeypatch):
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    fake = real_env
+    await seed(_model(f"{TAG}-ac", ordine=1))
+    tz_name = next((n for n in ("Europe/Rome", "Asia/Tokyo", "America/Los_Angeles", "Pacific/Kiritimati", "Asia/Kolkata") if 2 <= datetime.now(ZoneInfo(n)).hour <= 20), "Europe/Rome")
+    await engine.set_state(timezone=tz_name)
+    now = datetime.now(ZoneInfo(tz_name))
+    past, future = (now - timedelta(minutes=20)).strftime("%H:%M"), (now + timedelta(minutes=45)).strftime("%H:%M")
+    await engine.set_state(schedule_times=[past, future], posts_per_day=2, enabled=True, activated_at=engine.now_iso())
+    monkeypatch.setenv("X_AUTO_SCHEDULER_ENABLED", "true")
+    for _ in range(2):
+        assert (await engine.tick("test"))["status"] == "NO_DUE_SLOT"                            # the 20'-old slot (inside grace) is NOT recovered
+    assert not fake.posts and not fake.uploads and not await engine.slots_col.find_one({"slot_id": {"$regex": past}})
+    s = await engine.status()
+    assert s["CATCH_UP_ENABLED"] is False and s["active"] is True and future in s["schedule"]["next_slot"]["slot_id"] and s["NEXT_MODEL"] is not None
+    await engine.set_state(activated_at=None)                                                    # without the boundary the same slot WOULD be due (proves the guard)
+    assert (await engine.due_slot(await engine.get_state())) is not None
+    await engine.set_state(enabled=False, timezone="Europe/Rome", schedule_times=["12:30", "18:30", "22:00"], posts_per_day=3)

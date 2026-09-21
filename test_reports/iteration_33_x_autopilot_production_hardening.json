@@ -1,0 +1,146 @@
+{
+  "summary": "X Autopilot production activation hardening verification completed. All 35 pytest tests passed. API endpoints verified with correct flags (CATCH_UP_ENABLED=false, TEST_HARD_CAP_ENABLED=false, MOCK_MODE=true). State toggling tested successfully (POST /start with no immediate run, POST /pause). Static code review confirmed real-mode safety: SENDING marker before create, proper error handling (NETWORK_ERROR->UNVERIFIED with readback, DEFINITIVE_ERRORS->FAILED), duplicate prevention, and no catch-up (due_slot skips slots <= activated_at).",
+  "backend_issues": {
+    "critical_bugs": [],
+    "flaky_endpoints": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "pytest: 35 tests passed (test_x_real_test.py, test_x_connection.py, test_x_autopilot.py)",
+    "GET /api/admin/x-autopilot/status: All required fields present and correct",
+    "CATCH_UP_ENABLED: false (verified)",
+    "TEST_HARD_CAP_ENABLED: false (verified)",
+    "MOCK_MODE: true (verified)",
+    "AUTO_SCHEDULER_ENABLED: false (verified)",
+    "REAL_X_POSTS_CREATED: 0 (unchanged across calls)",
+    "X_REAL_CALLS: 0 (unchanged across calls)",
+    "NEXT_MODEL: string present (francesca-rossi)",
+    "LAST_COMPLETED_MODEL: null (no posts yet)",
+    "activated_at: null initially, set after /start",
+    "next_run: future timestamp in Europe/Rome timezone",
+    "real_runs: empty list (0 items)",
+    "POST /start: Returns 200 with CATCH_UP_ENABLED=false, IMMEDIATE_RUN_TRIGGERED=false, activated_at set, next_run future",
+    "GET /status after /start: enabled=true, active=false (env master switch off), last_run unchanged (no immediate run)",
+    "POST /pause: Returns enabled=false",
+    "Static code review: SENDING marker upserted before adapter.create_post (line 263-266)",
+    "Static code review: NETWORK_ERROR/API_ERROR -> UNVERIFIED + _readback_recent + advance + slot finished (line 267-279, 288-299)",
+    "Static code review: DEFINITIVE_CREATE_ERRORS -> FAILED marker + slot stops (line 273-275, 329-333)",
+    "Static code review: PUBLISHED only after _readback_post ok (line 300-314)",
+    "Static code review: due_slot skips slots <= activated_at (line 454-455)",
+    "Static code review: Duplicate prevention via SENDING/UNVERIFIED/PUBLISHED marker check (line 232-238)",
+    "Static code review: Mock branch unchanged (verified no modifications to mock logic)"
+  ],
+  "test_report_links": [
+    "/app/tests/test_x_real_test.py",
+    "/app/tests/test_x_connection.py",
+    "/app/tests/test_x_autopilot.py"
+  ],
+  "action_item_for_main_agent": "",
+  "updated_files": [],
+  "success_percentage": {
+    "backend": "100%",
+    "frontend": "N/A (backend only testing)"
+  },
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_test_itself": false,
+  "detailed_verification": {
+    "pytest_execution": {
+      "command": "cd /app/backend && python -m pytest -q ../tests/test_x_real_test.py ../tests/test_x_connection.py ../tests/test_x_autopilot.py -p no:cacheprovider",
+      "result": "35 passed, 1 warning in 4.22s",
+      "test_breakdown": {
+        "test_x_real_test.py": "Tests for first controlled real post flow with FakeReal adapter (zero network)",
+        "test_x_connection.py": "Tests for OAuth 1.0a 3-legged flow, encrypted token storage, identity verification",
+        "test_x_autopilot.py": "Tests for MockXAdapter with eligibility, pairing, cursors, cycles, scheduling"
+      }
+    },
+    "api_verification": {
+      "endpoint": "GET /api/admin/x-autopilot/status",
+      "calls": 2,
+      "verification": {
+        "CATCH_UP_ENABLED": "false (hardcoded in engine.py line 36)",
+        "TEST_HARD_CAP_ENABLED": "false (returned in status() line 504)",
+        "MOCK_MODE": "true (X_AUTOPILOT_MOCK=true in .env)",
+        "AUTO_SCHEDULER_ENABLED": "false (X_AUTO_SCHEDULER_ENABLED=false in .env)",
+        "REAL_X_POSTS_CREATED": "0 (no real posts created)",
+        "X_REAL_CALLS": "0 (no real X API calls made)",
+        "counters_unchanged": "true (both calls returned identical values)"
+      }
+    },
+    "state_toggling": {
+      "POST_start": {
+        "response": {
+          "enabled": true,
+          "CATCH_UP_ENABLED": false,
+          "IMMEDIATE_RUN_TRIGGERED": false,
+          "activated_at": "set to current UTC timestamp",
+          "next_run": "future slot in Europe/Rome timezone",
+          "AUTO_SCHEDULER_ENABLED": false,
+          "MOCK_MODE": true
+        },
+        "verification": "No immediate run triggered, activated_at persisted, next_run calculated"
+      },
+      "GET_status_after_start": {
+        "enabled": true,
+        "active": false,
+        "last_run_unchanged": true,
+        "note": "active=false because X_AUTO_SCHEDULER_ENABLED=false (env master switch)"
+      },
+      "POST_pause": {
+        "enabled": false,
+        "verification": "State disabled successfully"
+      }
+    },
+    "static_code_review": {
+      "real_mode_branch": "engine.publish_next (is_mock=False)",
+      "findings": {
+        "SENDING_marker_before_create": {
+          "location": "line 263-266",
+          "verified": true,
+          "implementation": "await real_runs_col.update_one with status=SENDING before adapter.create_post"
+        },
+        "NETWORK_ERROR_handling": {
+          "location": "line 267-279, 288-299",
+          "verified": true,
+          "implementation": "Non-definitive errors (timeout/5xx) -> UNVERIFIED status, _readback_recent called, queue advances, slot finishes"
+        },
+        "DEFINITIVE_ERROR_handling": {
+          "location": "line 273-275, 329-333",
+          "verified": true,
+          "implementation": "DEFINITIVE_CREATE_ERRORS -> FAILED marker, infra=True, slot stops without trying next model"
+        },
+        "PUBLISHED_after_readback": {
+          "location": "line 300-314",
+          "verified": true,
+          "implementation": "_readback_post called before advancing, PUBLISHED only if readback ok=true"
+        },
+        "no_catch_up": {
+          "location": "line 447-458 (due_slot function)",
+          "verified": true,
+          "implementation": "if activated and s['at'] <= activated: continue (line 454-455)"
+        },
+        "duplicate_prevention": {
+          "location": "line 232-238",
+          "verified": true,
+          "implementation": "Check for existing SENDING/UNVERIFIED/PUBLISHED marker before any write, DUPLICATE_PREVENTED status if found"
+        },
+        "mock_branch_unchanged": {
+          "verified": true,
+          "note": "Mock logic remains intact, no modifications detected"
+        }
+      }
+    }
+  },
+  "environment_verification": {
+    "workspace_server": {
+      "X_AUTOPILOT_MOCK": "true",
+      "X_REAL_POSTING_ENABLED": "false",
+      "X_AUTO_SCHEDULER_ENABLED": "false"
+    },
+    "safety_gates": "All gates prevent real writes: mock mode active, real posting disabled, scheduler disabled",
+    "production_note": "Production deployment will be user-deployed separately with different environment variables"
+  }
+}

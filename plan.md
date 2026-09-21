@@ -179,6 +179,8 @@ Sezione in Home con fascia orizzontale di teaser video verticali che scorre lent
 
 ## 3) Phase 14 — SEO AUTOPILOT READ_ONLY (Status: COMPLETED — PASS, PUBLIC_MUTATIONS=0)
 
+### Phase 28 — X AUTOPILOT: ATTIVAZIONE UFFICIALE PRODUZIONE — Status: CODICE PRONTO (no catch-up, marker SENDING, read-back prima dell'avanzamento, UNVERIFIED no-resend, DUPLICATE_PREVENTED; 35/35 test, testing agent iteration_33 0 bug). IN ATTESA: utente imposta X_AUTO_SCHEDULER_ENABLED=true in produzione + redeploy → agent: /start (DB-only) + verifiche READ-ONLY + report. Vanessa done nel ciclo 1, NEXT_MODEL valeria-trapani.
+
 ### Phase 27 — X AUTOPILOT: PRIMO POST REALE CONTROLLATO IN PRODUZIONE — Status: COMPLETED 2026-09-21 ~02:10Z — post 2101859276016800070 (@latosegreto, Vanessa Bella, 2 foto, read-back PASS), REAL_X_POSTS_CREATED=1, hard cap attivo (2ª chiamata BLOCKED_HARD_CAP), scheduler OFF. Workspace: X_REAL_POSTING_ENABLED riportato a false.
 - Produzione al momento: codice X vecchio (auth/status e real-test 404), MOCK_MODE=true, nessun secret X. Prossima modella in coda X prod: vanessa-bella (10 public / 8 secret).
 
