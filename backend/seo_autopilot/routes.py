@@ -7,10 +7,79 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from auth import get_current_admin
 
-from . import engine, mode, store, render_audit
+from . import engine, mode, store, render_audit, executor
 
 router = APIRouter(prefix="/api/admin/seo-autopilot", tags=["SEO Autopilot (READ_ONLY)"])
 _bg: dict = {"task": None, "kind": None}
+_exec_bg: dict = {"task": None, "kind": None}
+
+
+# ================================================================= Phase 15: EXECUTION LAYER (FULL / production)
+@router.get("/production-status")
+async def production_status(admin=Depends(get_current_admin)):
+    st = await executor.production_status()
+    st["executing"] = bool(_exec_bg["task"] and not _exec_bg["task"].done())
+    st["executing_kind"] = _exec_bg["kind"] if st["executing"] else None
+    return st
+
+
+@router.post("/activate")
+async def activate(body: Optional[dict] = None, admin=Depends(get_current_admin)):
+    """Activate SEO Autopilot in FULL/production. DB-driven (no env change). Idempotent."""
+    body = body or {}
+    patch = {
+        "seo_autopilot_enabled": True,
+        "seo_autopilot_mode": "FULL",
+        "seo_auto_publish": bool(body.get("seo_auto_publish", True)),
+        "auto_publish_articles": bool(body.get("auto_publish_articles", True)),
+        "seo_max_articles_per_day": int(body.get("seo_max_articles_per_day", 1)),
+        "seo_target_country": body.get("seo_target_country", "IT"),
+        "seo_language": body.get("seo_language", "it"),
+    }
+    s = await executor.set_settings(patch)
+    await executor.enable_public_landings()
+    return {"activated": True, "settings": s}
+
+
+@router.post("/deactivate")
+async def deactivate(admin=Depends(get_current_admin)):
+    s = await executor.set_settings({"seo_autopilot_enabled": False, "seo_autopilot_mode": "READ_ONLY", "seo_auto_publish": False})
+    return {"activated": False, "settings": s}
+
+
+@router.post("/execute-now")
+async def execute_now(force: bool = False, admin=Depends(get_current_admin)):
+    if not force and not await executor.full_enabled():
+        raise HTTPException(409, "SEO Autopilot non è in FULL: usa /activate prima o passa force=true")
+    if _exec_bg["task"] and not _exec_bg["task"].done():
+        return {"started": False, "status": "already_running", "kind": _exec_bg["kind"]}
+    _exec_bg["task"] = asyncio.create_task(executor.run_execution("admin", force=force))
+    _exec_bg["kind"] = "execution"
+    return {"started": True, "kind": "execution"}
+
+
+@router.post("/maintenance-now")
+async def maintenance_now(admin=Depends(get_current_admin)):
+    if _exec_bg["task"] and not _exec_bg["task"].done():
+        return {"started": False, "status": "already_running", "kind": _exec_bg["kind"]}
+    _exec_bg["task"] = asyncio.create_task(executor.run_maintenance("admin"))
+    _exec_bg["kind"] = "maintenance"
+    return {"started": True, "kind": "maintenance"}
+
+
+@router.post("/publish-proposals")
+async def publish_proposals(dry_run: bool = False, admin=Depends(get_current_admin)):
+    return await executor.publish_proposals(dry_run=dry_run)
+
+
+@router.post("/process-drafts")
+async def process_drafts(admin=Depends(get_current_admin)):
+    return await executor.process_article_drafts()
+
+
+@router.post("/generate-article")
+async def generate_article(force: bool = True, admin=Depends(get_current_admin)):
+    return await executor.generate_article(force=force)
 
 
 @router.get("/status")

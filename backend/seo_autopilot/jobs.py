@@ -29,6 +29,20 @@ async def j_weekly():
     return _compact(r)
 
 
+@job("seo_ap_execute", 24 * 3600, "SEO Autopilot FULL: pubblica bozze/proposte, genera 1 articolo/giorno, internal linking (solo FULL)")
+async def j_execute():
+    from . import executor
+    r = await executor.run_execution("scheduler")
+    return r if isinstance(r, dict) else {"result": str(r)[:200]}
+
+
+@job("seo_ap_maintenance", 12 * 3600, "SEO Autopilot FULL: safe-fix + internal linking + sitemap (solo FULL)")
+async def j_maintenance():
+    from . import executor
+    r = await executor.run_maintenance("scheduler")
+    return r if isinstance(r, dict) else {"result": str(r)[:200]}
+
+
 def _compact(r: dict) -> dict:
     if not isinstance(r, dict):
         return {"result": str(r)[:200]}
