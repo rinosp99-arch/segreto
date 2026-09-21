@@ -100,6 +100,35 @@ class RealXAdapter:
             raise XError("INVALID_TOKEN" if err.startswith("INVALID_TOKEN") else "NOT_CONNECTED", err)
         return {"id": ident["X_USER_ID_MASKED"], "username": ident["X_USERNAME"], "name": ident["X_DISPLAY_NAME"], "access_level": ident.get("access_level")}
 
+    async def _get(self, url: str) -> httpx.Response:
+        try:
+            return await xauth._http("GET", url, headers=await xauth.signed_headers("GET", url))
+        except xauth.XAuthError as e:
+            raise XError(e.code, e.description)
+
+    async def credits_probe(self) -> dict:
+        """ONE READ in user context on the v2 posts endpoint (same product as the write): 402 -> CREDITS_DEPLETED (STOP before any write)."""
+        r = await self._get(f"{X_API}/tweets/20?tweet.fields=id")
+        if r.status_code == 200:
+            return {"ok": True, "status": 200, "error": None}
+        code, detail = xauth._error_code(r)
+        return {"ok": False, "status": r.status_code, "error": code, "detail": xauth.scrub(detail)[:200]}
+
+    async def read_post(self, post_id: str) -> dict:
+        """READ back a post: id, text, author_id, attached media keys/types, expanded URLs."""
+        url = f"{X_API}/tweets/{post_id}?tweet.fields=author_id,text,attachments,entities,created_at&expansions=attachments.media_keys,author_id&media.fields=type,media_key&user.fields=username"
+        r = await self._get(url)
+        if r.status_code != 200:
+            self._raise(r, "READ_POST")
+        return r.json() or {}
+
+    async def recent_posts(self, user_id: str, n: int = 5) -> list:
+        url = f"{X_API}/users/{user_id}/tweets?max_results={max(5, min(n, 10))}&tweet.fields=text,created_at,attachments"
+        r = await self._get(url)
+        if r.status_code != 200:
+            self._raise(r, "READ_RECENT")
+        return (r.json() or {}).get("data") or []
+
     def _write_allowed(self):
         if not credentials_present():
             raise XError("NOT_CONNECTED", "credenziali app X assenti")

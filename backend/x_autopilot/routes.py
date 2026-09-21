@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from auth import get_current_admin
 
 from . import adapter as xapi
-from . import engine, xauth
+from . import engine, realtest, xauth
 
 router = APIRouter(prefix="/api/admin/x-autopilot", tags=["X Autopilot"])
 SETTING_KEYS = ("posts_per_day", "schedule_times", "timezone", "use_ai_copy", "italy_audience_mode")
@@ -71,6 +71,27 @@ async def auth_callback(oauth_token: Optional[str] = None, oauth_verifier: Optio
     except xauth.XAuthError as e:
         return RedirectResponse(url=f"/admin/x-autopilot?x_auth=error&code={e.code}", status_code=302)
     return RedirectResponse(url=f"/admin/x-autopilot?x_auth={'ok' if r.get('status') == 'CONNECTED' else 'saved'}&user={r.get('X_USERNAME') or ''}", status_code=302)
+
+
+# ------------------------------------------------------------------ FIRST CONTROLLED REAL POST (hard cap 1, idempotent, READ-verified)
+@router.post("/real-test")
+async def real_test(execute: bool = False, admin=Depends(get_current_admin)):
+    """execute=false -> READ-ONLY dry run (gates, account, credits probe, candidate PHOTO+PHOTO, media pre-check, copy). execute=true -> the ONE real post."""
+    r = await realtest.real_test_post("admin", execute=execute)
+    if r.get("status") == "LOCKED":
+        raise HTTPException(409, "Pubblicazione già in corso")
+    return r
+
+
+@router.get("/real-test")
+async def real_test_last(admin=Depends(get_current_admin)):
+    return {"last_run": await realtest.last_run(), "REAL_X_POSTS_CREATED": await xapi.real_posts_created(), "runs_started": await realtest.real_runs_started()}
+
+
+@router.post("/real-test/verify")
+async def real_test_verify(admin=Depends(get_current_admin)):
+    """READ-ONLY re-verification of the last real run (never resends)."""
+    return await realtest.verify_last("admin")
 
 
 @router.get("/auth/status")

@@ -179,6 +179,9 @@ Sezione in Home con fascia orizzontale di teaser video verticali che scorre lent
 
 ## 3) Phase 14 — SEO AUTOPILOT READ_ONLY (Status: COMPLETED — PASS, PUBLIC_MUTATIONS=0)
 
+### Phase 27 — X AUTOPILOT: PRIMO POST REALE CONTROLLATO IN PRODUZIONE — Status: CODICE PRONTO (realtest.py, 31/31 test, testing agent iteration_32 0 bug); IN ATTESA DI DEPLOY + SECRETS UTENTE → poi OAuth produzione (URL) → dry-run → 1 post reale → report
+- Produzione al momento: codice X vecchio (auth/status e real-test 404), MOCK_MODE=true, nessun secret X. Prossima modella in coda X prod: vanessa-bella (10 public / 8 secret).
+
 ### Phase 26 — X AUTOPILOT: COLLEGAMENTO ACCOUNT X REALE — Status: COMPLETED in workspace 2026-09-21 01:23Z — account @latosegreto collegato via OAuth 1.0a (token cifrato in Mongo workspace, access level read-write, MISSING_MANUAL_STEP NONE). MOCK=true, X_REAL_POSTING_ENABLED=false, scheduler OFF, REAL_X_POSTS_CREATED=0. NOTA: in produzione servono i Secrets X_* + deploy + nuova autorizzazione (token nel DB di produzione) prima del test reale.
 - xauth.py (OAuth 1.0a 3-legged, token cifrati in Mongo, identità READ, write capability), RealXAdapter (v2 media upload + /2/tweets, gate X_REAL_POSTING_ENABLED), route /connection /auth/start /auth/callback /auth/status /auth/disconnect, UI "Account X reale".
 - Verifica live: oauth2/token → code 99 "Unable to verify your credentials"; bearer → 401; request_token → code 32. Serve: rigenerare/incollare chiavi corrette + configurare callback nel portale, poi /auth/start → URL da aprire.

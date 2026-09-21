@@ -144,6 +144,8 @@ def _error_code(resp: httpx.Response) -> Tuple[str, str]:
     body = resp.text[:300]
     if resp.status_code == 401:
         return "INVALID_TOKEN", body
+    if resp.status_code == 402:
+        return "CREDITS_DEPLETED", body
     if resp.status_code == 403:
         return "FORBIDDEN", body
     if resp.status_code == 429:

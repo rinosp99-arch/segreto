@@ -65,3 +65,11 @@ PARTIAL_THREAD_FAILURE_HANDLED, indipendenza Telegram/Instagram). Testing agent:
 - Requisito Developer Portal (manuale, una volta): App → User authentication settings → App permissions "Read and write", Type "Web App, Automated App or Bot",
   Callback URI = `https://secret-side.emergent.host/api/admin/x-autopilot/auth/callback` (+ preview), Website URL = `https://secret-side.emergent.host`.
 - Test: `tests/test_x_connection.py` (8 test, zero rete) + `tests/test_x_autopilot.py` (16) = 24/24; testing agent `iteration_31_x_connection.json` (0 bug). REAL_X_POSTS_CREATED=0.
+
+## PRIMO POST REALE CONTROLLATO (`x_autopilot/realtest.py`)
+`POST /api/admin/x-autopilot/real-test?execute=false|true` · `GET /real-test` · `POST /real-test/verify` (READ-only).
+Gate: `X_AUTOPILOT_MOCK=false`, `X_REAL_POSTING_ENABLED=true`, `X_AUTO_SCHEDULER_ENABLED=false`, hard cap 1 (log + `x_real_runs` SENDING/UNVERIFIED/PUBLISHED),
+account `@latosegreto` read-write, probe crediti (1 READ v2: 402 ⇒ STOP), prossima modella in coda con PHOTO Public + PHOTO Secret (SINGLE_POST), pre-check MIME/dimensione, copy con SOLO il link OF della modella.
+Write: marker SENDING → upload PUBLIC → upload SECRET → media ids → UNA `POST /2/tweets` → read-back (`GET /2/tweets/{id}`: esiste, autore = account, 2 media, testo, link OF) → PUBLISHED (coda avanza 1 volta) | UNVERIFIED (mai reinvio; `verify` cerca tra i post recenti).
+Test: `tests/test_x_real_test.py` (7) — suite X 31/31; testing agent iteration_32 (0 bug).
+Produzione: richiede deploy + Secrets `X_CONSUMER_KEY/X_CONSUMER_SECRET/X_BEARER_TOKEN`, `X_AUTOPILOT_MOCK=false`, `X_REAL_POSTING_ENABLED=true`, `X_AUTO_SCHEDULER_ENABLED=false`, poi OAuth ("Collega account X") sul DB di produzione.
