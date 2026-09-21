@@ -270,6 +270,12 @@ class TheOnlyAPIAdapter(OFProviderAdapter):
         if pid is None:
             return OFPostResult(None, True, "SCHEDULE_NOT_CONFIRMED", data)
         confirmed = await self.verify_scheduled(of_user_id, str(pid))
+        if not confirmed:                                                # schedules list may lag/omit the entry: READ the post itself as second proof
+            try:
+                post = await self.get_post(of_user_id, str(pid))
+                confirmed = bool(post) and str(post.get("id")) == str(pid)
+            except OFProviderError:
+                confirmed = False
         return OFPostResult(str(pid), True, "SCHEDULE_CONFIRMED" if confirmed else "SCHEDULE_NOT_CONFIRMED", data)
 
     async def delete_scheduled_post(self, of_user_id: str, post_id: str) -> Dict[str, Any]:

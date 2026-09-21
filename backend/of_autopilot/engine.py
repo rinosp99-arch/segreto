@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 
 from pymongo.errors import DuplicateKeyError
 
-from database import db
+from database import db, models_col
 
 from . import connection
 from .caption import build_caption, build_dm_caption
@@ -371,9 +371,15 @@ async def run(action: str = "PUBLISH_NOW", trigger: str = "admin", slot_id: Opti
             model = next(x for x in q["roster"]["models"] if x["id"] == cand["model_id"])
             base = {"model_id": cand["model_id"], "model_slug": cand["slug"], "model_name": cand["name"], "cycle_number": st["cycle_number"], "slot_id": slot_id, "action_type": action, "trigger": trigger, "of_link": cand["of_url"], "mock": is_mock}
             prev = await get_run(cand["model_id"], st["cycle_number"])
-            if prev and prev.get("feed_status") == "OK":                                             # FEED already confirmed this cycle -> NEVER a second feed: only the mass DM
-                result = await _retry_dm_only(provider, of_uid, model, cand, prev, st, eligible, is_mock, trigger, slot_id)
-                break
+            if prev and feed_consumed(prev):                                                           # INVARIANT: max ONE feed per model+cycle -> BLOCKED before any upload/write
+                await _advance(st, eligible, cand["model_id"], False, None, "BLOCKED_DUPLICATE_FEED")  # the model is consumed for this cycle; its DM lives in the DM queue
+                await upsert_run(cand["model_id"], st["cycle_number"], feed_consumed=True)
+                await _log(status="BLOCKED_DUPLICATE_FEED", **base, error_code="FEED_ALREADY_CONSUMED", provider_post_id=prev.get("feed_post_id"), feed_status=prev.get("feed_status"), mass_dm_status=prev.get("mass_dm_status"))
+                if single:
+                    result = {"status": "BLOCKED_DUPLICATE_FEED", "model_slug": cand["slug"], "provider_post_id": prev.get("feed_post_id"), "FEED_STATUS": prev.get("feed_status"), "MASS_DM_STATUS": prev.get("mass_dm_status")}
+                    await _finish_slot(slot_id, "BLOCKED_DUPLICATE_FEED")
+                    break
+                continue                                                                                # next model of the cycle in this same slot
             seqs = await pick_sequences(cand["model_id"], cand["public"], cand["secret"])
             # ---- 1) validate BOTH sides first (real HEAD on our storage) -> skip the model before any upload if a side has no valid media
             pub_sel = await select_valid(seqs["public"], cand["model_id"])
@@ -419,55 +425,63 @@ async def run(action: str = "PUBLISH_NOW", trigger: str = "admin", slot_id: Opti
             # ---- create / schedule + verify (hard limit re-checked right before the create write)
             if not is_mock and mx is not None and await real_posts_created() >= mx:
                 result = await _fail(info, "BLOCKED", [], slot_id, error_code="REAL_TEST_LIMIT"); break
+            # ---- SENDING marker BEFORE the write: from here the model is CONSUMED for this cycle (a 5xx/timeout may still have created the post)
+            run_fields = dict(model_slug=cand["slug"], model_name=cand["name"], mock=is_mock, action_type=action, slot_id=slot_id, feed_caption=cap["text"], of_link=cand["of_url"],
+                              public_media_id=pub["item"]["id"], secret_media_id=sec["item"]["id"], public_source_url=pub["item"]["source_url"], secret_source_url=sec["item"]["source_url"],
+                              public_media_type=pub["item"]["type"], secret_media_type=sec["item"]["type"], scheduled_at=req.scheduled_at, dm_due_at=(_dm_due(scheduled_at) if action == "SCHEDULE" else None))
+            await upsert_run(cand["model_id"], st["cycle_number"], feed_status="SENDING", feed_consumed=True, feed_started_at=now_iso(), **run_fields)
+            verify = None
             try:
                 if action == "SCHEDULE":
                     pr = await provider.schedule_post(of_uid, req)
                     confirmed = pr.schedule_state == "SCHEDULE_CONFIRMED"
-                    real_status = "SCHEDULE_CONFIRMED" if confirmed else "SCHEDULE_NOT_CONFIRMED"
+                    real_status = "SCHEDULE_CONFIRMED" if confirmed else "SCHEDULE_UNVERIFIED"
                 else:
                     pr = await provider.create_post(of_uid, req)
                     verify = await verify_real_post(provider, of_uid, pr, cap["text"], cand["of_url"], [pub["media"], sec["media"]])
                     confirmed = verify["ok"]
-                    real_status = "POST_CONFIRMED" if confirmed else "POST_NOT_CONFIRMED"
+                    real_status = "POST_CONFIRMED" if confirmed else "POST_UNVERIFIED"
             except OFProviderError as e:
                 for u in (pub["upload_id"], sec["upload_id"]):
                     await _set_upload(u, status="UPLOAD_SUCCESS", error=f"post: {e.code}")
-                result = await _fail(info, "FAILED", [{"stage": "CREATE", "reason": e.code}], slot_id, error_code=e.code)
+                if definitive_no_post(e):                                                                # the provider certainly did NOT create the post -> not consumed, retry at a later slot
+                    await upsert_run(cand["model_id"], st["cycle_number"], feed_status="FAILED", feed_consumed=False, feed_error=e.code)
+                    result = await _fail(info, "FAILED", [{"stage": "CREATE", "reason": e.code}], slot_id, error_code=e.code)
+                    break
+                # timeout / 5xx / unknown AFTER the write started: the post MAY exist -> UNVERIFIED, consumed, NEVER re-sent (read-back only)
+                await upsert_run(cand["model_id"], st["cycle_number"], feed_status="UNVERIFIED", feed_consumed=True, feed_error=e.code)
+                await _advance(st, eligible, cand["model_id"], False, None, "FEED_UNVERIFIED")
+                await set_state(last_error=f"FEED_UNVERIFIED:{e.code}")
+                res = await _log(status="FEED_UNVERIFIED", **info, error_code=e.code, media_errors=[{"stage": "CREATE", "reason": e.code}])
+                await _finish_slot(slot_id, "FEED_UNVERIFIED")
+                result = {"status": "FEED_UNVERIFIED", "error_code": e.code, **info, "caption": cap["text"], "log": res, "FEED_STATUS": "UNVERIFIED", "FEED_CONSUMED": True}
                 break
             info["provider_post_id"] = pr.post_id
-            if action == "PUBLISH_NOW":
+            if verify is not None:
                 info["verification"] = verify
-            if not confirmed:                                                                           # 200 but not verifiable -> NO advance
-                await set_state(last_error=real_status)
-                res = await _log(status=real_status, **info, error_code=real_status)
-                await _finish_slot(slot_id, real_status)
-                result = {"status": real_status, **info, "caption": cap["text"], "log": res}
-                break
-            # ---- confirmed FEED: uploads USED_IN_POST, cursors; queue advances only when the MASS DM step is complete (or not applicable)
+            # ---- the write returned: the FEED is CONSUMED for this cycle whatever the verification says; cursors advance NOW (DM is a separate queue)
             for u in (pub["upload_id"], sec["upload_id"]):
                 await _set_upload(u, status="USED_IN_POST", provider_post_id=pr.post_id)
             await mark_media_used(cand["model_id"], cand["public"], cand["secret"], pub["item"], sec["item"], st["cycle_number"])
-            status_ = "MOCK_CONFIRMED" if is_mock else real_status
+            feed_state = "OK" if confirmed else "UNVERIFIED"
+            status_ = "MOCK_CONFIRMED" if (is_mock and confirmed) else real_status
             pub_info = {"model_id": cand["model_id"], "model_slug": cand["slug"], "model_name": cand["name"], "public_media_id": pub["item"]["id"], "secret_media_id": sec["item"]["id"],
                         "provider_post_id": pr.post_id, "action_type": action, "status": status_, "at": now_iso(), "cycle_number": st["cycle_number"], "slot_id": slot_id}
-            run_doc = await upsert_run(cand["model_id"], st["cycle_number"], model_slug=cand["slug"], model_name=cand["name"], mock=is_mock, action_type=action, slot_id=slot_id,
-                                       feed_status="OK", feed_post_id=pr.post_id, feed_media_ids=(verify.get("media_ids") if action == "PUBLISH_NOW" else []) or [],
-                                       feed_caption=cap["text"], feed_confirmed_at=now_iso(), of_link=cand["of_url"], public_media_id=pub["item"]["id"], secret_media_id=sec["item"]["id"],
-                                       public_source_url=pub["item"]["source_url"], secret_source_url=sec["item"]["source_url"], public_media_type=pub["item"]["type"], secret_media_type=sec["item"]["type"],
-                                       dm_due_at=(_dm_due(scheduled_at) if action == "SCHEDULE" else None))
-            res = await _log(status=status_, real_status=real_status, **info, media_errors=(pub["errors"] + sec["errors"]) or None)
+            run_doc = await upsert_run(cand["model_id"], st["cycle_number"], feed_status=feed_state, feed_consumed=True, feed_post_id=pr.post_id, feed_error=None if confirmed else real_status,
+                                       feed_media_ids=((verify or {}).get("media_ids") if action == "PUBLISH_NOW" else []) or [], feed_confirmed_at=now_iso() if confirmed else None, **run_fields)
+            await _advance(st, eligible, cand["model_id"], True, pub_info, status_)                        # FEED cursor -> next model, immediately
+            if not confirmed:
+                await set_state(last_error=real_status)
+            res = await _log(status=status_, real_status=real_status, **info, error_code=None if confirmed else real_status, media_errors=(pub["errors"] + sec["errors"]) or None)
             result = {"status": status_, "real_status": real_status, **info, "caption": cap["text"], "media_order": ["PUBLIC", "SECRET"], "SAME_MODEL_MEDIA": True,
-                      "public_media_object": dict(pub["media"].raw), "secret_media_object": dict(sec["media"].raw), "log": res, "FEED_STATUS": "OK"}
-            dm = await _mass_dm_step(provider, of_uid, model, run_doc, is_mock, trigger, deferred_ok=(action == "SCHEDULE"))
-            result["mass_dm"] = dm
-            result["MASS_DM_STATUS"] = dm["MASS_DM_STATUS"]
-            if dm["advance"]:
-                await _advance(st, eligible, cand["model_id"], True, pub_info, status_)
-                await _finish_slot(slot_id, status_)
-            else:                                                                                       # feed done, DM pending/failed -> NO advance (retry only the DM)
-                await set_state(last_error=f"MASS_DM:{dm.get('error_code') or dm['MASS_DM_STATUS']}" if dm["MASS_DM_STATUS"] != "PENDING" else None)
-                await _finish_slot(slot_id, f"{status_}_DM_{dm['MASS_DM_STATUS']}")
-                result["status"] = f"{status_}_DM_{dm['MASS_DM_STATUS']}"
+                      "public_media_object": dict(pub["media"].raw), "secret_media_object": dict(sec["media"].raw), "log": res, "FEED_STATUS": feed_state, "FEED_CONSUMED": True}
+            await _finish_slot(slot_id, status_)
+            # ---- MASS DM: independent queue. Immediate attempt only for a confirmed PUBLISH_NOW; scheduled feeds are handled by process_dm_queue() when due.
+            if confirmed and action == "PUBLISH_NOW":
+                dm = await _mass_dm_step(provider, of_uid, model, run_doc, is_mock, trigger)
+                result["mass_dm"], result["MASS_DM_STATUS"] = dm, dm["MASS_DM_STATUS"]
+            else:
+                result["MASS_DM_STATUS"] = run_doc.get("mass_dm_status") or "PENDING"
             break
         if result is None:
             result = {"status": "FAILED", "error_code": "NO_PUBLISHABLE_MODEL"}
@@ -496,6 +510,27 @@ def _dm_due(scheduled_at: Optional[str]) -> Optional[str]:
         return (datetime.fromisoformat(scheduled_at) + timedelta(minutes=2)).isoformat()
     except ValueError:
         return None
+
+
+DEFINITIVE_NO_POST_ERRORS = ("WRITES_DISABLED", "REAL_TEST_LIMIT", "FORBIDDEN", "INVALID_TOKEN", "UNAUTHORIZED", "NOT_FOUND", "NOT_CONFIGURED", "NOT_DOCUMENTED", "NOT_SUPPORTED", "MASS_DM_DISABLED")
+CONSUMED_FEED_STATES = ("SENDING", "OK", "UNVERIFIED")
+DM_RETRY_STATES = ("PENDING", "FAILED")
+DM_MAX_ATTEMPTS = 5
+DM_RETRY_MIN_INTERVAL_MIN = 20
+DM_SENDING_STALE_MIN = 30
+
+
+def definitive_no_post(e: OFProviderError) -> bool:
+    """True when the provider certainly did NOT create the post (gates, auth, 4xx validation): retry at a later slot is safe.
+    Everything else (timeout, network, 5xx, unknown) may have created it -> UNVERIFIED + consumed, never re-sent."""
+    if e.code in DEFINITIVE_NO_POST_ERRORS or e.code == "RATE_LIMITED":
+        return True
+    return e.code == "API_ERROR" and e.status is not None and 400 <= int(e.status) < 500
+
+
+def feed_consumed(run: Optional[dict]) -> bool:
+    """INVARIANT: max ONE feed per model+cycle. Consumed once the write STARTED (SENDING) or returned (OK/UNVERIFIED), regardless of the DM state."""
+    return bool(run) and (bool(run.get("feed_consumed")) or run.get("feed_status") in CONSUMED_FEED_STATES)
 
 
 async def get_run(model_id: str, cycle: int) -> Optional[dict]:
@@ -735,53 +770,114 @@ async def _execute_mass_dm(dmp: OFProviderAdapter, provider: OFProviderAdapter, 
             rep["WRITE_GATE_RESTORED_TO_FALSE"] = bool(g.get("restored") and g.get("verified_false"))
 
 
-async def _retry_dm_only(provider: OFProviderAdapter, of_uid: str, model: dict, cand: dict, run: dict, st: dict, eligible: list, is_mock: bool, trigger: str, slot_id: Optional[str]) -> dict:
-    """Feed already confirmed for this model+cycle: NO new feed, only the mass DM. Advances the queue on OK."""
+async def dm_queue_view(limit: int = 20) -> list:
+    """DM RETRY QUEUE (independent from the feed queue): runs whose FEED is consumed but whose MASS DM is not OK."""
+    cur = runs_col.find({"$or": [{"feed_consumed": True}, {"feed_status": {"$in": list(CONSUMED_FEED_STATES)}}], "mass_dm_status": {"$nin": ["OK", "DISABLED", "MOCK_ONLY", "SKIPPED"]}},
+                        {"_id": 0}).sort("created_at", 1).limit(limit)
+    return [{"model_id": r.get("model_id"), "model_slug": r.get("model_slug"), "cycle_number": r.get("cycle_number"), "FEED_STATUS": r.get("feed_status"), "feed_post_id": r.get("feed_post_id"),
+             "MASS_DM_STATUS": r.get("mass_dm_status") or "PENDING", "mass_dm_error": r.get("mass_dm_error"), "mass_dm_attempts": r.get("mass_dm_attempts") or 0, "dm_due_at": r.get("dm_due_at"),
+             "mass_dm_last_attempt_at": r.get("mass_dm_last_attempt_at"), "mock": r.get("mock")} async for r in cur]
+
+
+async def _verify_unverified_feed(provider: OFProviderAdapter, of_uid: str, run: dict) -> dict:
+    """READ-only: an UNVERIFIED feed (write returned but not verifiable) is re-checked with GET post; found -> FEED OK (+ vault ids). Never a new feed."""
+    if run.get("feed_status") != "UNVERIFIED" or not run.get("feed_post_id"):
+        return run
+    try:
+        data = await provider.get_post(of_uid, run["feed_post_id"])
+    except OFProviderError as e:
+        await runs_col.update_one({"model_id": run["model_id"], "cycle_number": run["cycle_number"]}, {"$set": {"feed_verify_error": e.code, "feed_verified_at": now_iso(), "updated_at": now_iso()}})
+        return run
+    if data and str(data.get("id")) == str(run["feed_post_id"]):
+        return await upsert_run(run["model_id"], run["cycle_number"], feed_status="OK", feed_confirmed_at=now_iso(), feed_media_ids=_media_ids_from_post(data) or run.get("feed_media_ids") or [], feed_error=None)
+    return run
+
+
+def _dm_retry_allowed(run: dict, manual: bool = False) -> Optional[str]:
+    """Why a run must NOT be (re)tried now: None = allowed."""
+    if run.get("mass_dm_status") == "SENDING":
+        return "SENDING"
+    if run.get("mass_dm_status") == "UNVERIFIED" or run.get("mass_dm_id"):
+        return "UNVERIFIED_NEVER_RESENT"
+    if run.get("mass_dm_status") not in DM_RETRY_STATES:
+        return f"STATE_{run.get('mass_dm_status')}"
+    if run.get("dm_due_at") and run["dm_due_at"] > now_iso():
+        return "NOT_DUE"
+    if int(run.get("mass_dm_attempts") or 0) >= DM_MAX_ATTEMPTS and not manual:
+        return "MAX_ATTEMPTS"
+    last = run.get("mass_dm_last_attempt_at")
+    if last and not manual:
+        try:
+            if datetime.now(timezone.utc) - datetime.fromisoformat(last) < timedelta(minutes=DM_RETRY_MIN_INTERVAL_MIN):
+                return "RETRY_INTERVAL"
+        except ValueError:
+            pass
+    return None
+
+
+async def _mark_stale_sending():
+    """A SENDING DM older than DM_SENDING_STALE_MIN (crash/restart mid-send) becomes UNVERIFIED: never re-sent blindly, read-back/close only."""
+    limit = (datetime.now(timezone.utc) - timedelta(minutes=DM_SENDING_STALE_MIN)).isoformat()
+    await runs_col.update_many({"mass_dm_status": "SENDING", "updated_at": {"$lt": limit}}, {"$set": {"mass_dm_status": "UNVERIFIED", "mass_dm_error": "SENDING_STALE", "updated_at": now_iso()}})
+
+
+async def _dm_attempt(provider: OFProviderAdapter, of_uid: str, is_mock: bool, run: dict, trigger: str) -> dict:
+    """ONE DM-only attempt for a consumed feed: verify UNVERIFIED feed by READ -> vault ids of the EXISTING post -> refresh -> Fans -> ONE mass DM. No upload, no feed."""
+    run = await _verify_unverified_feed(provider, of_uid, run)
+    if run.get("feed_status") != "OK":
+        return {"status": "DM_WAIT_FEED_VERIFY", "model_slug": run.get("model_slug"), "FEED_STATUS": run.get("feed_status"), "MASS_DM_STATUS": run.get("mass_dm_status")}
+    model = await models_col.find_one({"id": run["model_id"]}, {"_id": 0}) or {"id": run["model_id"], "slug": run.get("model_slug"), "nome_artistico": run.get("model_name")}
+    await runs_col.update_one({"model_id": run["model_id"], "cycle_number": run["cycle_number"]}, {"$set": {"mass_dm_last_attempt_at": now_iso(), "updated_at": now_iso()}})
     dm = await _mass_dm_step(provider, of_uid, model, run, is_mock, trigger)
-    status_ = ("MOCK_CONFIRMED" if is_mock else "POST_CONFIRMED") if dm["advance"] else f"FEED_OK_DM_{dm['MASS_DM_STATUS']}"
-    if dm["advance"]:
-        pub_info = {"model_id": cand["model_id"], "model_slug": cand["slug"], "model_name": cand["name"], "public_media_id": run.get("public_media_id"), "secret_media_id": run.get("secret_media_id"),
-                    "provider_post_id": run.get("feed_post_id"), "action_type": run.get("action_type") or "PUBLISH_NOW", "status": status_, "at": now_iso(), "cycle_number": st["cycle_number"], "slot_id": slot_id}
-        await _advance(st, eligible, cand["model_id"], True, pub_info, status_)
-    else:
-        await set_state(last_error=f"MASS_DM:{dm.get('error_code') or dm['MASS_DM_STATUS']}")
-    await _finish_slot(slot_id, status_)
-    return {"status": status_, "FEED_STATUS": "OK", "feed_skipped_duplicate": True, "provider_post_id": run.get("feed_post_id"), "model_slug": cand["slug"], "model_name": cand["name"],
-            "MASS_DM_STATUS": dm["MASS_DM_STATUS"], "mass_dm": dm, "of_link": run.get("of_link"), "caption": run.get("feed_caption"), "mass_dm_text": run.get("mass_dm_text") or dm.get("text")}
+    return {"status": f"DM_{dm['MASS_DM_STATUS']}", "model_slug": run.get("model_slug"), "cycle_number": run.get("cycle_number"), "FEED_STATUS": "OK", "feed_skipped_duplicate": True,
+            "provider_post_id": run.get("feed_post_id"), "MASS_DM_STATUS": dm["MASS_DM_STATUS"], "mass_dm": dm, "of_link": run.get("of_link"), "mass_dm_text": run.get("mass_dm_text") or dm.get("text")}
 
 
-async def process_due_mass_dm(trigger: str = "scheduler") -> Optional[dict]:
-    """Scheduler helper: complete the pending (due) mass DM of the current model before any new slot is claimed."""
-    st = await get_state()
-    q = await queue_view(st)
-    cand = q["next"]
-    if not cand:
-        return None
-    run = await get_run(cand["model_id"], st["cycle_number"])
-    if not run or run.get("feed_status") != "OK" or run.get("mass_dm_status") not in ("PENDING", "FAILED") or (run.get("dm_due_at") and run["dm_due_at"] > now_iso()):
-        return None
-    return await run_dm_only(trigger)
+async def process_dm_queue(trigger: str = "scheduler") -> Optional[dict]:
+    """Scheduler helper: at most ONE DM-only attempt per tick from the DM RETRY QUEUE. Never touches the feed queue/cursors."""
+    await _mark_stale_sending()
+    for item in await dm_queue_view():
+        run = await get_run(item["model_id"], item["cycle_number"])
+        if not run or _dm_retry_allowed(run):
+            continue
+        owner = str(uuid.uuid4())
+        if not await acquire_lock(owner):
+            return {"status": "LOCKED"}
+        try:
+            provider = get_provider()
+            is_mock = isinstance(provider, MockOFProvider)
+            if bool(run.get("mock")) != is_mock:                                                      # a MOCK run never gets a REAL DM and vice versa
+                continue
+            of_uid = await _of_user_id(is_mock)
+            if not of_uid:
+                return {"status": "FAILED", "error_code": "OF_USER_ID_MISSING"}
+            return await _dm_attempt(provider, of_uid, is_mock, run, trigger)
+        finally:
+            await release_lock(owner)
+    return None
 
 
-async def run_dm_only(trigger: str = "admin") -> dict:
-    """Public entry: only the mass DM of the current model (its feed must already be confirmed in this cycle). Lock-protected."""
+async def run_dm_only(trigger: str = "admin", model_slug: Optional[str] = None) -> dict:
+    """Admin entry: ONE DM-only attempt for a run of the DM queue (by model slug, else the oldest). Manual -> interval/attempt caps bypassed, never SENDING/UNVERIFIED re-sent."""
     owner = str(uuid.uuid4())
     if not await acquire_lock(owner):
         return {"status": "LOCKED"}
     try:
-        st = await get_state()
-        q = await queue_view(st)
-        cand = q["next"]
-        if not cand:
-            return {"status": "FAILED", "error_code": "NO_ELIGIBLE_MODELS"}
-        run = await get_run(cand["model_id"], st["cycle_number"])
-        if not run or run.get("feed_status") != "OK":
-            return {"status": "FAILED", "error_code": "FEED_NOT_CONFIRMED", "model_slug": cand["slug"]}
+        items = await dm_queue_view()
+        if model_slug:
+            items = [i for i in items if i["model_slug"] == model_slug]
+        if not items:
+            return {"status": "FAILED", "error_code": "DM_QUEUE_EMPTY", "model_slug": model_slug}
+        run = await get_run(items[-1]["model_id"], items[-1]["cycle_number"])
+        why = _dm_retry_allowed(run, manual=True)
+        if why:
+            return {"status": "BLOCKED", "error_code": why, "model_slug": run.get("model_slug"), "MASS_DM_STATUS": run.get("mass_dm_status")}
         provider = get_provider()
         is_mock = isinstance(provider, MockOFProvider)
+        if bool(run.get("mock")) != is_mock:
+            return {"status": "BLOCKED", "error_code": "PROVIDER_MODE_MISMATCH", "model_slug": run.get("model_slug")}
         of_uid = await _of_user_id(is_mock)
-        model = next(x for x in q["roster"]["models"] if x["id"] == cand["model_id"])
-        return await _retry_dm_only(provider, of_uid, model, cand, run, st, q["eligible"], is_mock, trigger, None)
+        return await _dm_attempt(provider, of_uid, is_mock, run, trigger)
     finally:
         await release_lock(owner)
 
@@ -921,13 +1017,11 @@ async def tick(trigger: str = "scheduler") -> dict:
         return {"status": "PAUSED"}
     sch = await schedule_view(st)
     await set_state(next_run=(sch["next_slot"] or {}).get("at"))
-    dm = await process_due_mass_dm(trigger)                                   # pending mass DM of the current model first (never a new feed for it)
-    if dm and not dm.get("mass_dm", {}).get("advance"):
-        return {"status": "MASS_DM_PENDING", **{k: dm.get(k) for k in ("model_slug", "MASS_DM_STATUS")}}
     slot = await due_slot(st)
-    if not slot:
-        return {"status": "NO_DUE_SLOT", "mass_dm": dm and dm.get("status")}
-    return await run("SCHEDULE", trigger, slot_id=slot["slot_id"], scheduled_at=slot["scheduled_at"])
+    if slot:                                                                   # FEED rotation: never blocked by any DM state
+        return await run("SCHEDULE", trigger, slot_id=slot["slot_id"], scheduled_at=slot["scheduled_at"])
+    dm = await process_dm_queue(trigger)                                       # DM RETRY QUEUE: one DM-only attempt per tick, never a feed
+    return {"status": "NO_DUE_SLOT", "dm": dm}
 
 
 # ----------------------------------------------------------------------------------------------- status
@@ -951,7 +1045,8 @@ async def status() -> dict:
         "OF_REAL_POST_DONE": await log_col.count_documents({"status": {"$in": ["POST_CONFIRMED", "SCHEDULE_CONFIRMED"]}, "mock": {"$ne": True}}) > 0,
         "OF_MASS_DM_MOCK": mass_dm_mock(), "OF_MASS_DM_ENABLED": mass_dm_enabled(), "OF_REAL_MASS_DM_SENT": await runs_col.count_documents({"mock": {"$ne": True}, "mass_dm_id": {"$nin": [None, ""]}}) > 0,
         "THE_ONLY_API_REAL_MASS_DM_CALLS": toa.CALLS["mass_dm"], "current_run": _run_view(cur_run), "MASS_DM_TARGET": "FAN", "CATCH_UP_ENABLED": False, "activated_at": st.get("activated_at"),
-        "NEXT_MODEL": nxt["slug"] if nxt else None,
+        "NEXT_MODEL": nxt["slug"] if nxt else None, "NEXT_FEED_MODEL": nxt["slug"] if nxt else None, "CURRENT_FEED_CYCLE": st["cycle_number"],
+        "LAST_FEED_MODEL": (st.get("last_published") or {}).get("model_slug"), "dm_queue": await dm_queue_view(), "FEED_CURSOR_INDEPENDENT_FROM_DM": True,
         "closed_runs": [{"model_slug": r.get("model_slug"), "feed_post_id": r.get("feed_post_id"), "previous_mass_dm_status": r.get("previous_mass_dm_status"), "provider_response": r.get("provider_response"),
                          "readback_confirmed": r.get("readback_confirmed"), "closed_at": r.get("closed_at")}
                         async for r in runs_col.find({"closed_by_admin": True, "previous_mass_dm_status": {"$exists": True}}, {"_id": 0}).sort("closed_at", -1).limit(5)],
@@ -1194,3 +1289,53 @@ async def close_mass_dm_run(post_id: str, reason: str, trigger: str = "admin") -
     q = await queue_view(st)
     return {"status": "CLOSED", "post_id": str(post_id), "model_slug": run.get("model_slug"), "previous_mass_dm_status": prev_status, "provider_response": prev_err or prev_status, "readback_confirmed": True,
             "mass_dm_id": marker, "queue_advanced": advanced, "NEXT_MODEL": (q["next"] or {}).get("slug"), "writes": 0}
+
+
+# ----------------------------------------------------------------------------------------------- RECONCILE (DB-only): register an EXISTING provider feed post as the canonical consumed feed of a model+cycle
+async def reconcile_feed(model_slug: str, feed_post_id: str, duplicate_post_ids: Optional[list] = None, slot_id: Optional[str] = None, trigger: str = "admin") -> dict:
+    """READ the post (must exist, 2 media, model OF link in text) -> run: FEED OK, FEED_CONSUMED, canonical post id, MASS DM stays PENDING unless a DM marker exists.
+    Duplicate posts are recorded as DUPLICATE_EXISTING (never deleted, never re-sent). cycle_done gets the model. ZERO provider writes."""
+    st = await get_state()
+    model = await models_col.find_one({"slug": model_slug, "is_deleted": {"$ne": True}}, {"_id": 0})
+    if not model:
+        return {"status": "NOT_FOUND", "error_code": "MODEL_NOT_FOUND"}
+    provider = get_provider()
+    is_mock = isinstance(provider, MockOFProvider)
+    of_uid = await _of_user_id(is_mock)
+    of_link = (model.get("onlyfans_url") or model.get("link_onlyfans") or "").strip()
+    try:
+        data = await provider.get_post(of_uid, str(feed_post_id))
+    except OFProviderError as e:
+        return {"status": "FAILED", "error_code": f"READ_{e.code}"}
+    if not data or str(data.get("id")) != str(feed_post_id):
+        return {"status": "FAILED", "error_code": "POST_ID_MISMATCH"}
+    import re as _re
+    text = _re.sub(r"<[^>]+>|\s+", " ", str(data.get("text") or data.get("rawText") or "")).lower()
+    link_ok = bool(of_link) and of_link.lower().replace("https://", "") in text
+    media_ids = _media_ids_from_post(data)
+    if not link_ok:
+        return {"status": "FAILED", "error_code": "OF_LINK_NOT_IN_POST", "post_id": str(feed_post_id)}
+    dups = []
+    for d in duplicate_post_ids or []:
+        try:
+            dd = await provider.get_post(of_uid, str(d))
+            dups.append({"post_id": str(d), "status": "DUPLICATE_EXISTING", "exists": bool(dd and str(dd.get("id")) == str(d)), "postedAt": (dd or {}).get("postedAt")})
+        except OFProviderError as e:
+            dups.append({"post_id": str(d), "status": "DUPLICATE_EXISTING", "exists": False, "read_error": e.code})
+    prev = await get_run(model["id"], st["cycle_number"]) or {}
+    dm_status = prev.get("mass_dm_status") if (prev.get("mass_dm_id") or prev.get("mass_dm_status") in ("OK", "UNVERIFIED", "SENDING")) else "PENDING"
+    run = await upsert_run(model["id"], st["cycle_number"], model_slug=model["slug"], model_name=model.get("nome_artistico"), mock=is_mock, action_type=prev.get("action_type") or "SCHEDULE", slot_id=slot_id or prev.get("slot_id"),
+                           feed_status="OK", feed_consumed=True, feed_post_id=str(feed_post_id), canonical_feed_post_id=str(feed_post_id), feed_media_ids=media_ids, feed_confirmed_at=now_iso(), feed_error=None,
+                           of_link=of_link, duplicate_feed_posts=dups, reconciled_at=now_iso(), reconcile_reason="ADMIN_RECONCILE", mass_dm_status=dm_status,
+                           feed_caption=prev.get("feed_caption") or _re.sub(r"<[^>]+>", "\n", str(data.get("rawText") or data.get("text") or "")).strip())
+    q = await queue_view(st)
+    if model["id"] not in (st.get("cycle_done") or []):
+        pub_info = {"model_id": model["id"], "model_slug": model["slug"], "model_name": model.get("nome_artistico"), "provider_post_id": str(feed_post_id), "action_type": run.get("action_type"),
+                    "status": "POST_CONFIRMED", "at": now_iso(), "cycle_number": st["cycle_number"], "slot_id": slot_id}
+        await _advance(st, q["eligible"], model["id"], True, pub_info, "RECONCILED_FEED")
+    await _log(status="FEED_RECONCILED", action_type="RECONCILE", model_id=model["id"], model_slug=model["slug"], model_name=model.get("nome_artistico"), cycle_number=st["cycle_number"], trigger=trigger,
+               provider_post_id=str(feed_post_id), duplicate_feed_posts=dups, mass_dm_status=dm_status, mock=is_mock)
+    st2 = await get_state()
+    q2 = await queue_view(st2)
+    return {"status": "RECONCILED", "model_slug": model["slug"], "cycle_number": st["cycle_number"], "FEED_STATUS": "OK", "FEED_CONSUMED": True, "CANONICAL_FEED_POST_ID": str(feed_post_id),
+            "feed_media_ids": media_ids, "duplicates": dups, "MASS_DM_STATUS": dm_status, "NEXT_FEED_MODEL": (q2["next"] or {}).get("slug"), "CURRENT_FEED_CYCLE": st2["cycle_number"], "writes": 0}

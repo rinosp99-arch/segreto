@@ -196,20 +196,31 @@ async def test_X_mock_schedule_flow_and_not_confirmed(sandbox):
     post = mock.posts[r["provider_post_id"]]
     assert post["isScheduled"] == 1 and post["scheduledDate"] == when and post["postedAt"] is None and len(mock.scheduled) == 1
     assert await mock.verify_scheduled("u", r["provider_post_id"]) is True
-    # 200 but not in schedules -> SCHEDULE_NOT_CONFIRMED, NO advance, cursors untouched
+    # 200 but not in schedules -> SCHEDULE_UNVERIFIED: the write RETURNED -> FEED CONSUMED for this cycle, cursors/queue ADVANCE, never a second feed for this model
     mock.hide_scheduled = True
+    mock.hide_post = True                                                                         # GET post fallback also blind
     st = await engine.get_state()
     ms_before = await engine.media_state_col.find_one({"model_id": b["id"]})
     r = await engine.run("SCHEDULE", "scheduler", slot_id=f"{TAG}_2030-01-01_17:30", scheduled_at=when)
-    assert r["status"] == "SCHEDULE_NOT_CONFIRMED" and r["model_slug"] == b["slug"] and r["provider_post_id"]
-    assert (await engine.get_state())["cycle_done"] == st["cycle_done"] and await engine.media_state_col.find_one({"model_id": b["id"]}) == ms_before
-    assert (await engine.log_col.find_one({"slot_id": f"{TAG}_2030-01-01_17:30"}))["status"] == "SCHEDULE_NOT_CONFIRMED"
+    assert r["status"] == "SCHEDULE_UNVERIFIED" and r["model_slug"] == b["slug"] and r["provider_post_id"] and r["FEED_STATUS"] == "UNVERIFIED" and r["FEED_CONSUMED"] is True
+    st2 = await engine.get_state()
+    assert (b["id"] in st2["cycle_done"] or st2["cycle_number"] == st["cycle_number"] + 1) and st2["last_published"]["model_id"] == b["id"]   # consumed (2/2 done -> new cycle)
+    assert await engine.media_state_col.find_one({"model_id": b["id"]}) != ms_before
+    run = await engine.get_run(b["id"], st["cycle_number"])
+    assert run["feed_status"] == "UNVERIFIED" and run["feed_consumed"] is True and run["feed_post_id"] == r["provider_post_id"] and engine.feed_consumed(run)
+    assert (await engine.log_col.find_one({"slot_id": f"{TAG}_2030-01-01_17:30"}))["status"] == "SCHEDULE_UNVERIFIED"
     mock.hide_scheduled = False
+    mock.hide_post = False
+    posts_before = len(mock.posts)
     r = await engine.run("SCHEDULE", "scheduler", slot_id=f"{TAG}_2030-01-01_22:00", scheduled_at=when)
-    assert r["status"] == "MOCK_CONFIRMED" and r["model_slug"] == b["slug"], "same model retried on the next slot (no blind advance)"
+    assert r["model_slug"] != b["slug"], "the same model is NEVER re-published in the same cycle (consumed on write, whatever the verification)"
+    assert len(mock.posts) == posts_before + 1
+    # DM queue: the UNVERIFIED feed is re-checked by READ (GET post) before its DM, never re-created
+    q = await engine.dm_queue_view()
+    assert any(x["model_slug"] == b["slug"] and x["FEED_STATUS"] == "UNVERIFIED" for x in q)
 
 
-# ------------------------------------------------------------------ failures: upload failed / create failed / post not confirmed -> NO advance, cursors untouched, bounded
+# ------------------------------------------------------------------ failures: upload failed / create rejected (4xx) -> NO advance, cursors untouched, bounded
 async def test_failures_do_not_advance(sandbox):
     mock = sandbox
     a, = await seed(_model(f"{TAG}-fail", pub=[REAL_PHOTO, REAL_SITE_PHOTO, f"{HOST}/media/pub3.jpg"], sec=[REAL_SITE_PHOTO.replace("pub1", "pub2")]))
@@ -228,17 +239,14 @@ async def test_failures_do_not_advance(sandbox):
     r = await engine.run("PUBLISH_NOW", "admin")
     assert r["status"] == "UPLOAD_FAILED" and r["error_code"] == "NETWORK_ERROR" and (await engine.get_state())["cycle_done"] == st0["cycle_done"]
     mock.timeout_upload = False
-    # create failed -> FAILED, uploads kept as UPLOAD_SUCCESS (not USED_IN_POST), no advance
-    mock.fail_create = True
+    # create rejected with 4xx (certainly NOT created) -> FAILED, uploads kept as UPLOAD_SUCCESS (not USED_IN_POST), NOT consumed, no advance
+    mock.fail_create, mock.fail_create_status = True, 400
     r = await engine.run("PUBLISH_NOW", "admin")
     assert r["status"] == "FAILED" and r["error_code"] == "API_ERROR" and (await engine.get_state())["cycle_done"] == st0["cycle_done"]
     assert await engine.uploads_col.count_documents({"model_id": a["id"], "status": "USED_IN_POST"}) == 0
-    mock.fail_create = False
-    # post created but not verifiable -> POST_NOT_CONFIRMED, no advance
-    mock.hide_post = True
-    r = await engine.run("PUBLISH_NOW", "admin")
-    assert r["status"] == "POST_NOT_CONFIRMED" and r["provider_post_id"] and (await engine.get_state())["cycle_done"] == st0["cycle_done"]
-    mock.hide_post = False
+    run = await engine.get_run(a["id"], 1)
+    assert run["feed_status"] == "FAILED" and run["feed_consumed"] is False and not engine.feed_consumed(run)
+    mock.fail_create, mock.fail_create_status = False, 500
     # finally OK -> advance, cursor set (CURSOR_ADVANCE_ONLY_AFTER_SUCCESS)
     r = await engine.run("PUBLISH_NOW", "admin")
     _ok(r, a)

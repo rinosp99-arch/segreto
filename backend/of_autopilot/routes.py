@@ -80,6 +80,35 @@ async def publish_now(admin=Depends(get_current_admin)):
     return r
 
 
+# ------------------------------------------------------------------ DM RETRY QUEUE (independent from the feed queue) + DB-only feed reconcile
+@router.get("/dm-queue")
+async def dm_queue(admin=Depends(get_current_admin)):
+    """READ-ONLY: consumed feeds whose mass DM is not OK (PENDING/FAILED/SENDING/UNVERIFIED)."""
+    return {"items": await engine.dm_queue_view(), "DM_MAX_ATTEMPTS": engine.DM_MAX_ATTEMPTS, "DM_RETRY_MIN_INTERVAL_MIN": engine.DM_RETRY_MIN_INTERVAL_MIN}
+
+
+@router.post("/dm-only")
+async def dm_only(model_slug: Optional[str] = None, admin=Depends(get_current_admin)):
+    """ONE DM-only attempt for a run of the DM queue (never a new feed, never re-sends a SENDING/UNVERIFIED DM)."""
+    r = await engine.run_dm_only("admin", model_slug=model_slug)
+    if r.get("status") == "LOCKED":
+        raise HTTPException(409, "Operazione già in corso")
+    return r
+
+
+class ReconcileBody(BaseModel):
+    model_slug: str
+    feed_post_id: str
+    duplicate_post_ids: List[str] = Field(default_factory=list)
+    slot_id: Optional[str] = None
+
+
+@router.post("/reconcile-feed")
+async def reconcile_feed(body: ReconcileBody, admin=Depends(get_current_admin)):
+    """DB-only: register an EXISTING provider post as the canonical consumed feed of the model for the current cycle (READ verification, 0 writes)."""
+    return await engine.reconcile_feed(body.model_slug, body.feed_post_id, body.duplicate_post_ids, body.slot_id, trigger="admin")
+
+
 @router.post("/mass-dm-test")
 async def mass_dm_test(body: MassDmTest, admin=Depends(get_current_admin)):
     """DM-only test from an EXISTING confirmed feed post: never a new feed, never another model, hard cap 1 real mass DM, gate restored in finally."""

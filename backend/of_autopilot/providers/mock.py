@@ -21,6 +21,7 @@ class MockOFProvider(OFProviderAdapter):
         self.fail_upload: set = set()
         self.timeout_upload: bool = False
         self.fail_create: bool = False
+        self.fail_create_status: int = 500              # 5xx = the post MAY exist (UNVERIFIED, consumed); 4xx = certainly not created (FAILED, retry later)
         self.hide_scheduled: bool = False
         self.hide_post: bool = False
         self.write_calls = 0                  # mock-internal counter (never a real write)
@@ -100,7 +101,7 @@ class MockOFProvider(OFProviderAdapter):
     def _create(self, req: OFPostRequest, scheduled: bool) -> dict:
         self.write_calls += 1
         if self.fail_create:
-            raise OFProviderError("API_ERROR", "mock: creazione post rifiutata", 500)
+            raise OFProviderError("API_ERROR", "mock: creazione post rifiutata", self.fail_create_status)
         pid = f"mock_of_{uuid.uuid4().hex[:10]}"
         post = {"id": pid, "author": {"id": MOCK_OF_USER_ID, "username": "latosegreto"}, "text": req.text, "media": [{"id": m.provider_ref, "type": m.kind} for m in req.media], "mediaFiles": [dict(m.raw) for m in req.media],
                 "isScheduled": 1 if scheduled else 0, "scheduledDate": req.scheduled_at if scheduled else None, "postedAt": None if scheduled else datetime.now(timezone.utc).isoformat()}

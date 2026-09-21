@@ -1,0 +1,111 @@
+{
+  "summary": "OF Autopilot Critical Hotfix Testing Complete - All 73 pytest tests passed, all 31 API tests passed, static code review verified all requirements",
+  "backend_issues": {
+    "critical_bugs": [],
+    "flaky_endpoints": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "✅ Pytest: 73/73 tests passed (test_of_feed_rotation.py, test_of_mass_dm.py, test_of_autopilot.py, test_of_provider_connection.py, test_of_caption_style.py)",
+    "✅ Admin API: 31/31 tests passed (authentication, status endpoint, dm-queue endpoint, unauthenticated access, reconcile-feed, dm-only, write counter verification)",
+    "✅ Static Code Review: All 6 required logic points verified in engine.run()",
+    "✅ Duplicate guard runs BEFORE pick_sequences/uploads (line 374)",
+    "✅ upsert_run(SENDING, feed_consumed=True) BEFORE provider write (line 432)",
+    "✅ _advance() called BEFORE DM step (line 472)",
+    "✅ definitive_no_post(e) → FAILED not consumed; 5xx/timeout → UNVERIFIED consumed (lines 447-453)",
+    "✅ tick(): due slot first, then process_dm_queue (lines 1021-1023)",
+    "✅ _dm_retry_allowed() blocks SENDING/UNVERIFIED/NOT_DUE/MAX_ATTEMPTS/RETRY_INTERVAL correctly (lines 798-812)",
+    "✅ No real write calls detected (THE_ONLY_API_REAL_WRITE_CALLS=0, THE_ONLY_API_REAL_MASS_DM_CALLS=0)",
+    "✅ FEED_CURSOR_INDEPENDENT_FROM_DM=true verified",
+    "✅ CATCH_UP_ENABLED=false verified",
+    "✅ DM_MAX_ATTEMPTS=5, DM_RETRY_MIN_INTERVAL_MIN=20 verified",
+    "✅ Unauthenticated requests return 401/403 as expected",
+    "✅ Invalid model slug returns MODEL_NOT_FOUND error",
+    "✅ Invalid dm-only request returns DM_QUEUE_EMPTY error"
+  ],
+  "test_report_links": [
+    "/app/backend_test.py",
+    "/app/static_code_review.md"
+  ],
+  "success_percentage": {
+    "pytest": "100% (73/73)",
+    "admin_api": "100% (31/31)",
+    "static_review": "100% (6/6 logic points verified)"
+  },
+  "updated_files": [
+    "/app/backend_test.py",
+    "/app/static_code_review.md"
+  ],
+  "action_item_for_main_agent": "",
+  "should_call_test_agent_after_fix": "false",
+  "should_main_agent_test_itself": "false",
+  "detailed_findings": {
+    "pytest_results": {
+      "total_tests": 73,
+      "passed": 73,
+      "failed": 0,
+      "warnings": 1,
+      "execution_time": "38.28s",
+      "test_files": [
+        "test_of_feed_rotation.py - Feed rotation invariant tests (duplicate prevention, cycle management)",
+        "test_of_mass_dm.py - Mass DM integration tests (feed+DM separation, retry queue)",
+        "test_of_autopilot.py - Autopilot integration tests",
+        "test_of_provider_connection.py - Provider connection tests",
+        "test_of_caption_style.py - Caption generation tests"
+      ]
+    },
+    "api_tests": {
+      "authentication": "✅ Admin login successful with JWT token",
+      "status_endpoint": "✅ All required keys present (CURRENT_FEED_CYCLE, LAST_FEED_MODEL, NEXT_FEED_MODEL, dm_queue, FEED_CURSOR_INDEPENDENT_FROM_DM, CATCH_UP_ENABLED)",
+      "dm_queue_endpoint": "✅ Returns items list with DM_MAX_ATTEMPTS=5 and DM_RETRY_MIN_INTERVAL_MIN=20",
+      "unauthenticated_access": "✅ All endpoints return 401/403 without auth",
+      "reconcile_feed": "✅ Invalid model returns NOT_FOUND with MODEL_NOT_FOUND error",
+      "dm_only": "✅ Invalid slug returns FAILED with DM_QUEUE_EMPTY error",
+      "write_counter_verification": "✅ THE_ONLY_API_REAL_WRITE_CALLS and THE_ONLY_API_REAL_MASS_DM_CALLS remain 0 across multiple calls"
+    },
+    "static_code_review": {
+      "duplicate_guard": "✅ Lines 374-383: Guard checks feed_consumed(prev) BEFORE pick_sequences (line 383) and upload_side (lines 411, 415)",
+      "sending_marker": "✅ Lines 428-432: upsert_run(feed_status='SENDING', feed_consumed=True) at line 432 BEFORE provider.schedule_post (line 436) and provider.create_post (line 440)",
+      "advance_before_dm": "✅ Lines 462-481: _advance() called at line 472 BEFORE _mass_dm_step() at line 481; comment states 'cursors advance NOW (DM is a separate queue)'",
+      "error_handling": "✅ Lines 444-458: definitive_no_post(e) at line 447 → feed_consumed=False (line 449); else → feed_consumed=True (line 452) with _advance() at line 453",
+      "tick_order": "✅ Lines 1010-1024: due_slot() check at line 1021, if slot exists return run() at line 1022; process_dm_queue() at line 1023 ONLY if no due slot",
+      "dm_retry_allowed": "✅ Lines 796-815: Blocks SENDING (line 799), UNVERIFIED/mass_dm_id (line 800-801), NOT_DUE (line 804-805), MAX_ATTEMPTS (line 806-807), RETRY_INTERVAL (line 809-812); manual=True bypasses caps"
+    },
+    "root_cause_prevention": {
+      "issue": "Production duplicate: scheduled feed created (200 + post id) but schedules read-back failed → engine treated as not confirmed → no run doc → same model re-published at next slot",
+      "fix_verification": [
+        "✅ SENDING marker set BEFORE provider write (line 432) - even if call times out, model is marked consumed",
+        "✅ Duplicate guard checks feed_consumed() which includes SENDING state (line 374, 531-533)",
+        "✅ 5xx/timeout → UNVERIFIED + consumed (lines 451-453) - feed cursor advances immediately",
+        "✅ Read-back verification is separate (_verify_unverified_feed) - can upgrade UNVERIFIED → OK but feed already consumed"
+      ]
+    }
+  },
+  "workspace_configuration": {
+    "backend_url": "https://secret-side.preview.emergentagent.com",
+    "of_autopilot_mock": "true (pytest uses MockOFProvider)",
+    "of_real_posting_enabled": "true (but autopilot PAUSED)",
+    "of_auto_scheduler_enabled": "false (scheduler OFF)",
+    "of_mass_dm_enabled": "true",
+    "of_mass_dm_mock": "false (but no real writes in workspace)",
+    "real_write_calls": 0,
+    "real_mass_dm_calls": 0,
+    "provider": "THE_ONLY_API",
+    "connection_status": "CONNECTED",
+    "account_status": "HEALTHY"
+  },
+  "compliance_verification": {
+    "max_one_feed_per_model_cycle": "✅ Enforced via duplicate guard (line 374) and feed_consumed() function (lines 531-533)",
+    "feed_consumed_on_write_start": "✅ SENDING marker set before provider call (line 432)",
+    "feed_cursor_independent_from_dm": "✅ _advance() called before DM step (line 472); verified in API response",
+    "mass_dm_separate_retry_queue": "✅ dm_queue_view() returns independent queue (lines 773-779); process_dm_queue() handles retries (lines 836-857)",
+    "duplicate_guard_before_upload": "✅ Guard at line 374, uploads at lines 411 and 415",
+    "5xx_timeout_consumed": "✅ Lines 451-453: UNVERIFIED + feed_consumed=True",
+    "4xx_not_consumed": "✅ Lines 447-449: FAILED + feed_consumed=False",
+    "no_real_writes_in_workspace": "✅ Verified via API calls: THE_ONLY_API_REAL_WRITE_CALLS=0"
+  }
+}

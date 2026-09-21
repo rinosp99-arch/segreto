@@ -179,6 +179,9 @@ Sezione in Home con fascia orizzontale di teaser video verticali che scorre lent
 
 ## 3) Phase 14 — SEO AUTOPILOT READ_ONLY (Status: COMPLETED — PASS, PUBLIC_MUTATIONS=0)
 
+### Phase 29 — HOTFIX CRITICO OF: duplicazione modella (Valeria) — Status: CODICE PRONTO (73/73 test, testing agent iteration_34 0 bug); OF PAUSATO in produzione (DB) alle 13:47Z. IN ATTESA DEPLOY → poi: reconcile Valeria (post 09:30 = 2760274664 canonico, 2761124502 duplicato NOT_FOUND), 1 retry DM-only Valeria, riattivazione /start no-catch-up (09:30/14:30/20:30).
+- Root cause: schedules read-back fallita → SCHEDULE_NOT_CONFIRMED → nessun run/advance → stessa modella riproposta. Fix: consumed-on-write + cursore Feed indipendente + coda DM separata + guard BLOCKED_DUPLICATE_FEED.
+
 ### Phase 28 — X AUTOPILOT: ATTIVAZIONE UFFICIALE PRODUZIONE — Status: COMPLETED 2026-09-21 02:45Z — ACTIVE, activated_at 02:45:30Z, NEXT_RUN 2026-09-21T12:30+02:00 (slot 12:30/18:30/22:00 Europe/Rome), NEXT_MODEL valeria-trapani, LAST_COMPLETED vanessa-bella, REAL_X_POSTS_CREATED=1, nessun run immediato (verificato dopo un ciclo scheduler), workspace MOCK/gate chiuso/scheduler off.
 
 ### Phase 27 — X AUTOPILOT: PRIMO POST REALE CONTROLLATO IN PRODUZIONE — Status: COMPLETED 2026-09-21 ~02:10Z — post 2101859276016800070 (@latosegreto, Vanessa Bella, 2 foto, read-back PASS), REAL_X_POSTS_CREATED=1, hard cap attivo (2ª chiamata BLOCKED_HARD_CAP), scheduler OFF. Workspace: X_REAL_POSTING_ENABLED riportato a false.
