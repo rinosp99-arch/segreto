@@ -68,6 +68,18 @@ async def pause(admin=Depends(get_current_admin)):
     return {"enabled": False}
 
 
+@router.post("/feed-only")
+async def feed_only_mode(body: Optional[dict] = None, admin=Depends(get_current_admin)):
+    """Enable/disable FEED-ONLY: when true, Mass DM (immediate + retry queue + manual) is completely disabled.
+    History is preserved (no data deleted). Default enable=true."""
+    enabled = True if (body or {}).get("enabled") is None else bool((body or {}).get("enabled"))
+    await engine.set_state(feed_only_mode=enabled)
+    st = await engine.get_state()
+    return {"FEED_ONLY_MODE": bool(st.get("feed_only_mode")),
+            "MASS_DM_AUTOPILOT_ENABLED": engine.mass_dm_enabled() and not bool(st.get("feed_only_mode")),
+            "DM_RETRY_ENABLED": engine.mass_dm_enabled() and not bool(st.get("feed_only_mode"))}
+
+
 @router.post("/publish-now")
 async def publish_now(admin=Depends(get_current_admin)):
     """PUBBLICA ORA = immediate post (MOCK in this phase). Never schedules to the next slot."""

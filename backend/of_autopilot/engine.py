@@ -35,7 +35,7 @@ slots_col = db["of_autopilot_slots"]
 locks_col = db["of_autopilot_locks"]
 runs_col = db["of_model_runs"]       # FEED + MASS DM state per (model_id, cycle_number): feed_status / mass_dm_status kept separate
 
-DEFAULTS = {"enabled": False, "posts_per_day": 3, "schedule_times": ["11:30", "17:30", "22:00"], "timezone": "Europe/Rome", "use_ai_copy": True,
+DEFAULTS = {"enabled": False, "posts_per_day": 3, "schedule_times": ["11:30", "17:30", "22:00"], "timezone": "Europe/Rome", "use_ai_copy": True, "feed_only_mode": False,
             "cycle_number": 1, "cycle_done": [], "last_position": -1, "current_position": 0, "current_model_id": None, "last_published": None, "last_processed": None,
             "last_run": None, "last_success": None, "last_error": None, "next_run": None, "last_slot": None}
 MAX_MEDIA_ATTEMPTS = 3          # media tried per side (validation + upload), bounded
@@ -112,6 +112,11 @@ async def get_state() -> dict:
 async def set_state(**fields):
     fields["updated_at"] = now_iso()
     await state_col.update_one({"id": "global"}, {"$set": fields}, upsert=True)
+
+
+async def feed_only() -> bool:
+    """FEED-ONLY MODE: Mass DM (immediate + retry queue + manual) is completely disabled; only the FEED rotation runs."""
+    return bool((await get_state()).get("feed_only_mode"))
 
 
 # ----------------------------------------------------------------------------------------------- lock
@@ -474,10 +479,14 @@ async def run(action: str = "PUBLISH_NOW", trigger: str = "admin", slot_id: Opti
                 await set_state(last_error=real_status)
             res = await _log(status=status_, real_status=real_status, **info, error_code=None if confirmed else real_status, media_errors=(pub["errors"] + sec["errors"]) or None)
             result = {"status": status_, "real_status": real_status, **info, "caption": cap["text"], "media_order": ["PUBLIC", "SECRET"], "SAME_MODEL_MEDIA": True,
-                      "public_media_object": dict(pub["media"].raw), "secret_media_object": dict(sec["media"].raw), "log": res, "FEED_STATUS": feed_state, "FEED_CONSUMED": True}
+                      "public_media_object": dict(pub["media"].raw), "secret_media_object": dict(sec["media"].raw), "log": res, "FEED_STATUS": feed_state, "FEED_CONSUMED": True,
+                      "JOB_EXECUTED": True, "FEED_CREATED": bool(pr.post_id), "FEED_CONFIRMED": bool(confirmed)}
             await _finish_slot(slot_id, status_)
             # ---- MASS DM: independent queue. Immediate attempt only for a confirmed PUBLISH_NOW; scheduled feeds are handled by process_dm_queue() when due.
-            if confirmed and action == "PUBLISH_NOW":
+            if bool(st.get("feed_only_mode")):                                                         # FEED-ONLY: no DM ever (immediate/queue/manual all off)
+                await upsert_run(cand["model_id"], st["cycle_number"], mass_dm_status="DISABLED", mass_dm_error="FEED_ONLY_MODE")
+                result["MASS_DM_STATUS"] = "DISABLED"
+            elif confirmed and action == "PUBLISH_NOW":
                 dm = await _mass_dm_step(provider, of_uid, model, run_doc, is_mock, trigger)
                 result["mass_dm"], result["MASS_DM_STATUS"] = dm, dm["MASS_DM_STATUS"]
             else:
@@ -835,6 +844,8 @@ async def _dm_attempt(provider: OFProviderAdapter, of_uid: str, is_mock: bool, r
 
 async def process_dm_queue(trigger: str = "scheduler") -> Optional[dict]:
     """Scheduler helper: at most ONE DM-only attempt per tick from the DM RETRY QUEUE. Never touches the feed queue/cursors."""
+    if await feed_only():
+        return {"status": "FEED_ONLY_MODE", "dm_disabled": True}
     await _mark_stale_sending()
     for item in await dm_queue_view():
         run = await get_run(item["model_id"], item["cycle_number"])
@@ -864,6 +875,8 @@ async def run_dm_only(trigger: str = "admin", model_slug: Optional[str] = None) 
         return {"status": "LOCKED"}
     try:
         items = await dm_queue_view()
+        if await feed_only():
+            return {"status": "BLOCKED", "error_code": "FEED_ONLY_MODE", "detail": "Mass DM disattivato: OnlyFans Autopilot è in FEED-ONLY"}
         if model_slug:
             items = [i for i in items if i["model_slug"] == model_slug]
         if not items:
@@ -1003,7 +1016,7 @@ async def due_slot(st: dict) -> Optional[dict]:
             continue                                                                  # NO catch-up: slots at/before activation are never recovered
         if s["at"] - timedelta(minutes=SLOT_LEAD_MIN) <= now <= s["at"] + timedelta(minutes=SLOT_GRACE_MIN):
             if not await slots_col.find_one({"slot_id": s["slot_id"]}):
-                return {"slot_id": s["slot_id"], "scheduled_at": max(s["at"], now + timedelta(minutes=2)).isoformat()}
+                return {"slot_id": s["slot_id"], "scheduled_at": max(s["at"], now + timedelta(minutes=2)).isoformat(), "at": s["at"].isoformat(), "reached": now >= s["at"]}
     return None
 
 
@@ -1019,6 +1032,10 @@ async def tick(trigger: str = "scheduler") -> dict:
     await set_state(next_run=(sch["next_slot"] or {}).get("at"))
     slot = await due_slot(st)
     if slot:                                                                   # FEED rotation: never blocked by any DM state
+        if bool(st.get("feed_only_mode")):                                     # FEED-ONLY: reliable IMMEDIATE publish AT the slot (the flaky SCHEDULE path is the root cause of missed slots)
+            if not slot.get("reached"):
+                return {"status": "SLOT_PENDING", "slot_id": slot["slot_id"], "at": slot.get("at")}
+            return await run("PUBLISH_NOW", trigger, slot_id=slot["slot_id"])
         return await run("SCHEDULE", trigger, slot_id=slot["slot_id"], scheduled_at=slot["scheduled_at"])
     dm = await process_dm_queue(trigger)                                       # DM RETRY QUEUE: one DM-only attempt per tick, never a feed
     return {"status": "NO_DUE_SLOT", "dm": dm}
@@ -1047,6 +1064,9 @@ async def status() -> dict:
         "THE_ONLY_API_REAL_MASS_DM_CALLS": toa.CALLS["mass_dm"], "current_run": _run_view(cur_run), "MASS_DM_TARGET": "FAN", "CATCH_UP_ENABLED": False, "activated_at": st.get("activated_at"),
         "NEXT_MODEL": nxt["slug"] if nxt else None, "NEXT_FEED_MODEL": nxt["slug"] if nxt else None, "CURRENT_FEED_CYCLE": st["cycle_number"],
         "LAST_FEED_MODEL": (st.get("last_published") or {}).get("model_slug"), "dm_queue": await dm_queue_view(), "FEED_CURSOR_INDEPENDENT_FROM_DM": True,
+        "FEED_ONLY_MODE": bool(st.get("feed_only_mode")), "OF_FEED_AUTOPILOT_ENABLED": bool(st["enabled"]),
+        "MASS_DM_AUTOPILOT_ENABLED": (mass_dm_enabled() and not bool(st.get("feed_only_mode"))), "DM_RETRY_ENABLED": (mass_dm_enabled() and not bool(st.get("feed_only_mode"))),
+        "DUPLICATE_PROTECTION_ACTIVE": True, "FEED_ROTATION_ACTIVE": bool(st["enabled"]),
         "closed_runs": [{"model_slug": r.get("model_slug"), "feed_post_id": r.get("feed_post_id"), "previous_mass_dm_status": r.get("previous_mass_dm_status"), "provider_response": r.get("provider_response"),
                          "readback_confirmed": r.get("readback_confirmed"), "closed_at": r.get("closed_at")}
                         async for r in runs_col.find({"closed_by_admin": True, "previous_mass_dm_status": {"$exists": True}}, {"_id": 0}).sort("closed_at", -1).limit(5)],
