@@ -387,6 +387,8 @@ async def status() -> dict:
         "enabled": bool(st["enabled"]), "AUTO_SCHEDULER_ENABLED": auto_scheduler_enabled(), "mock": xapi.mock_enabled(), "MOCK_MODE": xapi.mock_enabled(), "active": bool(st["enabled"]) and auto_scheduler_enabled(),
         "connection": conn, "CONNECTION_STATUS": conn["CONNECTION_STATUS"], "operational": conn["operational"], "ITALY_AUDIENCE_MODE": italy_mode(st), "X_REAL_CALLS": xapi.X_REAL_CALLS["n"],
         "X_REAL_POST_DONE": await log_col.count_documents({"status": "PUBLISHED", "mock": {"$ne": True}}) > 0,
+        "REAL_X_POSTS_CREATED": await xapi.real_posts_created(), "X_REAL_POSTING_ENABLED": xapi.xauth.real_posting_enabled(), "X_USER_AUTH_PRESENT": await xapi.xauth.user_auth_present(),
+        "x_identity": await xapi.xauth.saved_identity(),
         "queue": {"position": q["position"], "total": q["n_eligible"], "cycle_number": st["cycle_number"], "done_in_cycle": q["n_done_in_cycle"],
                   "current": {"slug": nxt["slug"], "name": nxt["name"], "n_public": nxt["n_public"], "n_secret": nxt["n_secret"], "of_url": nxt["of_url"]} if nxt else None,
                   "order": [{"slug": r["slug"], "name": r["name"], "done": r["model_id"] in set(st.get("cycle_done") or [])} for r in q["eligible"]],

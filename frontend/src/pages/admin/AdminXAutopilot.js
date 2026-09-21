@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Twitter, Play, Pause, SkipForward, Zap, RefreshCw, Loader2, PlugZap, Clock, Users, Repeat, CheckCircle2, AlertTriangle, Eye, EyeOff, Sparkles, ShieldCheck, Link2, Layers } from 'lucide-react';
-import { xApStatus, xApLogs, xApTestConnection, xApStart, xApPause, xApPreview, xApPublishNow, xApSkip, xApSettings } from '@/lib/adminApi';
+import { Twitter, Play, Pause, SkipForward, Zap, RefreshCw, Loader2, PlugZap, Clock, Users, Repeat, CheckCircle2, AlertTriangle, Eye, EyeOff, Sparkles, ShieldCheck, Link2, Layers, KeyRound, Unplug, ExternalLink } from 'lucide-react';
+import { xApStatus, xApLogs, xApTestConnection, xApStart, xApPause, xApPreview, xApPublishNow, xApSkip, xApSettings, xApConnection, xApAuthStart, xApAuthDisconnect } from '@/lib/adminApi';
 import { SectionCard, Btn } from '@/pages/admin/ui';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
@@ -44,6 +44,31 @@ export default function AdminXAutopilot() {
   const [busy, setBusy] = useState('');
   const [form, setForm] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [xconn, setXconn] = useState(null);
+  const [authUrl, setAuthUrl] = useState(null);
+  const [manualStep, setManualStep] = useState(null);
+
+  const loadConn = useCallback(async (live) => {
+    setBusy(live ? 'xconn' : '');
+    try { const r = await xApConnection(live); setXconn(r); if (live) toast.success(`Account X: ${r.X_ACCOUNT_CONNECTED ? '@' + r.X_USERNAME : 'non collegato'}`); }
+    catch (e) { if (live) toast.error('Verifica connessione X fallita'); }
+    finally { setBusy(''); }
+  }, []);
+  useEffect(() => { loadConn(false); }, [loadConn]);
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const a = p.get('x_auth');
+    if (a === 'ok') toast.success(`Account X collegato${p.get('user') ? ': @' + p.get('user') : ''}`);
+    else if (a === 'denied') toast.warning('Autorizzazione X annullata');
+    else if (a === 'error') toast.error(`Autorizzazione X fallita: ${p.get('code') || ''}`);
+    if (a) { window.history.replaceState({}, '', window.location.pathname); loadConn(true); }
+  }, [loadConn]);
+  const startAuth = async () => {
+    setBusy('auth'); setManualStep(null);
+    try { const r = await xApAuthStart(); setAuthUrl(r.authorize_url); window.open(r.authorize_url, '_blank', 'noopener'); toast.success('Apri il link X e autorizza l\'account'); }
+    catch (e) { const d = e?.response?.data?.detail; setManualStep(d?.MISSING_MANUAL_STEP || d?.detail || 'Avvio autorizzazione fallito'); toast.error(d?.error || 'Avvio autorizzazione fallito'); }
+    finally { setBusy(''); }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -107,6 +132,25 @@ export default function AdminXAutopilot() {
         <Kpi icon={Clock} label="Post oggi" value={`${sch.posts_today ?? 0} / ${sch.posts_per_day ?? 0}`} sub={`orari ${(s?.settings?.schedule_times || []).join(' · ')} (${sch.timezone || ''})`} testid="x-kpi-today" />
         <Kpi icon={CheckCircle2} label="Ultima" value={lp ? lp.model_name : (le?.model_name || '—')} sub={lp ? `${fmtTime(lp.at)} · ${lp.format}${mock ? ' · mock' : ''} · OK` : (le ? `${fmtTime(le.timestamp)} · ${STATUS_LABEL[le.status] || le.status}` : 'nessuna')} testid="x-kpi-last" />
       </div>
+
+      <SectionCard title="Account X reale" desc="Collegamento OAuth 1.0a (backend-only): le chiavi restano nei Secrets, i token utente sono cifrati nel database. Nessun post viene creato in questa fase.">
+        <div className="flex flex-wrap gap-2 mb-3" data-testid="x-conn-pills">
+          <Pill label={`APP AUTH: ${xconn ? (xconn.X_APP_AUTH_READY === null ? 'NON VERIFICATA' : xconn.X_APP_AUTH_READY ? 'OK' : 'KO') : '…'}`} color={xconn?.X_APP_AUTH_READY ? C.ok : (xconn?.X_APP_AUTH_READY === false ? C.fail : C.muted)} testid="x-app-auth" />
+          <Pill label={`USER AUTH: ${xconn ? (xconn.X_USER_AUTH_PRESENT ? (xconn.X_USER_AUTH_READY ? 'OK' : 'TOKEN SALVATO') : 'ASSENTE') : '…'}`} color={xconn?.X_USER_AUTH_READY ? C.ok : (xconn?.X_USER_AUTH_PRESENT ? C.warn : C.muted)} testid="x-user-auth" />
+          <Pill label={`ACCOUNT: ${xconn?.X_USERNAME ? '@' + xconn.X_USERNAME : '—'}`} color={xconn?.X_ACCOUNT_CONNECTED ? C.ok : C.muted} testid="x-account" />
+          <Pill label={`SCRITTURA: ${xconn ? (xconn.X_WRITE_CAPABILITY_READY === null ? 'N/D' : xconn.X_WRITE_CAPABILITY_READY ? 'READ-WRITE' : 'SOLO LETTURA') : '…'}`} color={xconn?.X_WRITE_CAPABILITY_READY ? C.ok : (xconn?.X_WRITE_CAPABILITY_READY === false ? C.fail : C.muted)} testid="x-write-cap" />
+          <Pill label={`Post reali creati: ${xconn?.REAL_X_POSTS_CREATED ?? s?.REAL_X_POSTS_CREATED ?? 0}`} color={C.ok} testid="x-real-posts" />
+          <Pill label={`Gate scrittura: ${xconn?.X_REAL_POSTING_ENABLED ? 'APERTO' : 'CHIUSO'}`} color={xconn?.X_REAL_POSTING_ENABLED ? C.warn : C.ok} testid="x-write-gate" />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Btn onClick={startAuth} disabled={!!busy} data-testid="x-auth-start">{busy === 'auth' ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />} {xconn?.X_USER_AUTH_PRESENT ? 'Ri-autorizza account X' : 'Collega account X'}</Btn>
+          <Btn variant="ghost" onClick={() => loadConn(true)} disabled={!!busy} data-testid="x-conn-check">{busy === 'xconn' ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlugZap className="h-4 w-4" />} Verifica account (read-only)</Btn>
+          {xconn?.X_USER_AUTH_PRESENT && <Btn variant="ghost" onClick={() => { if (window.confirm('Scollegare l\'account X (solo token locale)?')) act('disc', xApAuthDisconnect, 'Account X scollegato').then(() => loadConn(false)); }} disabled={!!busy} data-testid="x-auth-disconnect"><Unplug className="h-4 w-4" /> Scollega</Btn>}
+        </div>
+        {authUrl && <div className="text-xs mt-3 flex items-center gap-2 break-all" data-testid="x-auth-url"><ExternalLink className="h-4 w-4 shrink-0" /> <a href={authUrl} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: C.gold }}>{authUrl}</a></div>}
+        {manualStep && <div className="text-xs mt-3 flex items-start gap-2" style={{ color: C.warn }} data-testid="x-manual-step"><AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" /> <span>{manualStep}</span></div>}
+        {xconn && xconn.MISSING_MANUAL_STEP && xconn.MISSING_MANUAL_STEP !== 'NONE' && !manualStep && <div className="text-xs mt-3 flex items-start gap-2 text-muted-foreground" data-testid="x-missing-step"><AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" /> <span>{xconn.MISSING_MANUAL_STEP}</span></div>}
+      </SectionCard>
 
       <SectionCard title="Prossima" desc={s?.next?.model ? `${s.next.model} — ${s.next.slot ? hhmm(s.next.slot.at, sch.timezone) : '—'} (${s.next.slot?.slot_id || ''})` : 'nessuna'}>
         <div className="flex flex-wrap gap-2">

@@ -148,6 +148,10 @@ export const xApPreview = () => api.post('/admin/x-autopilot/preview').then((r) 
 export const xApPublishNow = () => api.post('/admin/x-autopilot/publish-now').then((r) => r.data);
 export const xApSkip = () => api.post('/admin/x-autopilot/skip').then((r) => r.data);
 export const xApSettings = (body) => api.patch('/admin/x-autopilot/settings', body).then((r) => r.data);
+export const xApConnection = (live = false) => xAp('connection', { live });
+export const xApAuthStatus = () => xAp('auth/status');
+export const xApAuthStart = () => api.post('/admin/x-autopilot/auth/start').then((r) => r.data);
+export const xApAuthDisconnect = () => api.post('/admin/x-autopilot/auth/disconnect').then((r) => r.data);
 
 // ---------------- ONLYFANS AUTOPILOT (provider connection, READ-ONLY phase) ----------------
 export const ofApConnection = () => api.get('/admin/of-autopilot/connection').then((r) => r.data);

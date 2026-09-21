@@ -179,6 +179,10 @@ Sezione in Home con fascia orizzontale di teaser video verticali che scorre lent
 
 ## 3) Phase 14 — SEO AUTOPILOT READ_ONLY (Status: COMPLETED — PASS, PUBLIC_MUTATIONS=0)
 
+### Phase 26 — X AUTOPILOT: COLLEGAMENTO ACCOUNT X REALE — Status: CODICE COMPLETO (24/24 test, testing agent iteration_31 0 bug); BLOCCATO da credenziali app X non valide come incollate + step manuale Developer Portal (User authentication settings). MOCK=true, scheduler OFF, REAL_X_POSTS_CREATED=0
+- xauth.py (OAuth 1.0a 3-legged, token cifrati in Mongo, identità READ, write capability), RealXAdapter (v2 media upload + /2/tweets, gate X_REAL_POSTING_ENABLED), route /connection /auth/start /auth/callback /auth/status /auth/disconnect, UI "Account X reale".
+- Verifica live: oauth2/token → code 99 "Unable to verify your credentials"; bearer → 401; request_token → code 32. Serve: rigenerare/incollare chiavi corrette + configurare callback nel portale, poi /auth/start → URL da aprire.
+
 ### Phase 25 — ATTIVAZIONE UFFICIALE OF AUTOPILOT — Status: COMPLETED IN PRODUZIONE 2026-09-20 23:49Z (ACTIVE, slot 09:30/14:30/20:30 Europe/Rome, NEXT_RUN 2026-09-21T09:30+02:00, NEXT_MODEL valeria-trapani, Vanessa chiusa, 0 write all'attivazione, gate false)
 - Fatto (agent-tested): `due_slot()` guard `activated_at` (nessun recupero slot passati), `/start` senza run immediato (`CATCH_UP_ENABLED=false`, `IMMEDIATE_RUN_TRIGGERED=false`, `next_run` futuro),
   `POST /mass-dm-test/{post_id}/close` DB-only (storico API_ERROR/UNVERIFIED preservato, `readback_confirmed=true`, duplicate protection, run di ciclo FEED OK + DM OK anche se il feed precede `of_model_runs`, coda → NEXT_MODEL non pubblicata),

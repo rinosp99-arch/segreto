@@ -2,13 +2,14 @@
 import re
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from auth import get_current_admin
 
 from . import adapter as xapi
-from . import engine
+from . import engine, xauth
 
 router = APIRouter(prefix="/api/admin/x-autopilot", tags=["X Autopilot"])
 SETTING_KEYS = ("posts_per_day", "schedule_times", "timezone", "use_ai_copy", "italy_audience_mode")
@@ -30,6 +31,59 @@ async def status(admin=Depends(get_current_admin)):
 @router.post("/test-connection")
 async def test_connection(admin=Depends(get_current_admin)):
     return await xapi.connection_status()
+
+
+# ------------------------------------------------------------------ REAL X connection (READ-ONLY checks + OAuth 1.0a 3-legged). No token is ever returned.
+@router.get("/connection")
+async def connection(live: bool = True, admin=Depends(get_current_admin)):
+    """READ-ONLY: app auth (oauth2/token), user auth + identity (GET /2/users/me), write capability (x-access-level), sample media pre-check. Never posts."""
+    sample = None
+    try:
+        p = await engine.preview()
+        if p.get("public") and p.get("secret"):
+            sample = [p["public"], p["secret"]]
+    except Exception:                                            # noqa: BLE001 — preview problems must not hide the connection report
+        sample = None
+    return await xapi.real_connection_report(live=live, sample_media=sample)
+
+
+@router.post("/auth/start")
+async def auth_start(request: Request, admin=Depends(get_current_admin)):
+    """OAuth 1.0a step 1: request token -> authorize URL (the admin opens it; X redirects to /auth/callback)."""
+    cb = xauth.callback_url(dict(request.headers))
+    try:
+        r = await xauth.start_user_auth(cb)
+    except xauth.XAuthError as e:
+        detail = {"error": e.code, "detail": e.description, "callback": cb}
+        if e.code == "CALLBACK_NOT_APPROVED":
+            detail["MISSING_MANUAL_STEP"] = xauth.MANUAL_STEP_USER_AUTH.replace("<callback>", cb)
+        raise HTTPException(409, detail)
+    return {"status": "AUTHORIZE_URL_READY", **r}
+
+
+@router.get("/auth/callback")
+async def auth_callback(oauth_token: Optional[str] = None, oauth_verifier: Optional[str] = None, denied: Optional[str] = None):
+    """OAuth 1.0a step 3 (X redirects the browser here, no JWT): validate pending token, exchange, store encrypted, verify identity, redirect to the admin page."""
+    if denied or not (oauth_token and oauth_verifier):
+        return RedirectResponse(url="/admin/x-autopilot?x_auth=denied", status_code=302)
+    try:
+        r = await xauth.finish_user_auth(oauth_token, oauth_verifier)
+    except xauth.XAuthError as e:
+        return RedirectResponse(url=f"/admin/x-autopilot?x_auth=error&code={e.code}", status_code=302)
+    return RedirectResponse(url=f"/admin/x-autopilot?x_auth={'ok' if r.get('status') == 'CONNECTED' else 'saved'}&user={r.get('X_USERNAME') or ''}", status_code=302)
+
+
+@router.get("/auth/status")
+async def auth_status(admin=Depends(get_current_admin)):
+    """No X call: is a user token stored? which account (saved identity)? pending authorization?"""
+    pend = await xauth.auth_col.find_one({"id": "pending"}, {"_id": 0, "created_at": 1, "callback": 1})
+    return {"X_USER_AUTH_PRESENT": await xauth.user_auth_present(), "identity": await xauth.saved_identity(), "pending": pend, "X_REAL_POSTING_ENABLED": xauth.real_posting_enabled(),
+            "X_AUTOPILOT_MOCK": xapi.mock_enabled(), "REAL_X_POSTS_CREATED": await xapi.real_posts_created()}
+
+
+@router.post("/auth/disconnect")
+async def auth_disconnect(admin=Depends(get_current_admin)):
+    return await xauth.disconnect()
 
 
 @router.post("/start")

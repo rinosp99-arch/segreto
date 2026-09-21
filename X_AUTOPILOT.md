@@ -51,3 +51,17 @@ API `/api/admin/x-autopilot/`: `GET status|logs`, `POST start|pause|publish-now|
 ## Test
 `tests/test_x_autopilot.py` (16 test, casi A–Y + PHOTO_PAIR_SINGLE_POST, VIDEO_THREAD_FALLBACK, PUBLIC_FIRST_IN_THREAD, THREAD_COUNTS_AS_ONE_ROTATION_ITEM,
 PARTIAL_THREAD_FAILURE_HANDLED, indipendenza Telegram/Instagram). Testing agent: `test_reports/iteration_25_x_autopilot.json`.
+
+## FASE COLLEGAMENTO ACCOUNT X REALE (backend-only)
+- Env backend (Secrets, mai nel codice/frontend/log): `X_CONSUMER_KEY`, `X_CONSUMER_SECRET`, `X_BEARER_TOKEN` (facoltativo: `X_ACCESS_TOKEN`/`X_ACCESS_TOKEN_SECRET` in alternativa al flusso OAuth),
+  `X_OAUTH_CALLBACK_URL` (opzionale, default `https://<host>/api/admin/x-autopilot/auth/callback`), `X_REAL_POSTING_ENABLED` (gate write, default false), `X_AUTOPILOT_MOCK`, `X_AUTO_SCHEDULER_ENABLED`.
+- `x_autopilot/xauth.py`: OAuth 1.0a 3-legged documentato (`POST oauth/request_token` → `oauth/authorize` → callback → `POST oauth/access_token`), token utente cifrato (Fernet, chiave derivata dal consumer secret)
+  in Mongo `x_autopilot_auth`, identità READ `GET /2/users/me`, livello permessi da header `x-access-level` (`read-write` ⇒ X_WRITE_CAPABILITY_READY), app auth via `POST oauth2/token`.
+  Contatori: `X_REAL_CALLS` = SOLO write reali (upload/post), `X_REAL_READ_CALLS` = auth/identità. `scrub()` maschera ogni segreto (env + token caricati).
+- `RealXAdapter`: upload v2 chunked (`/2/media/upload/initialize` → `/{id}/append` → `/{id}/finalize` → STATUS) con pre-check MIME/dimensione sul nostro storage, `POST /2/tweets` (+ reply per thread).
+  Ogni write richiede credenziali app + token utente + `X_REAL_POSTING_ENABLED=true`, altrimenti `WRITES_DISABLED` prima di qualsiasi rete.
+- API admin: `GET /connection?live=` (report READ-ONLY), `POST /auth/start` (URL autorizzazione), `GET /auth/callback` (pubblica, redirect a `/admin/x-autopilot?x_auth=…`), `GET /auth/status`, `POST /auth/disconnect`.
+- Admin UI: sezione "Account X reale" (pill APP AUTH / USER AUTH / ACCOUNT / SCRITTURA / post reali / gate, bottoni Collega / Verifica / Scollega, MISSING_MANUAL_STEP).
+- Requisito Developer Portal (manuale, una volta): App → User authentication settings → App permissions "Read and write", Type "Web App, Automated App or Bot",
+  Callback URI = `https://secret-side.emergent.host/api/admin/x-autopilot/auth/callback` (+ preview), Website URL = `https://secret-side.emergent.host`.
+- Test: `tests/test_x_connection.py` (8 test, zero rete) + `tests/test_x_autopilot.py` (16) = 24/24; testing agent `iteration_31_x_connection.json` (0 bug). REAL_X_POSTS_CREATED=0.
