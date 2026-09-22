@@ -94,6 +94,9 @@ class TelegramClient:
     async def get_chat_member(self, chat_id: str, user_id: int) -> dict:
         return await self.call("getChatMember", {"chat_id": chat_id, "user_id": user_id})
 
+    async def get_updates(self, limit: int = 100) -> list:
+        return await self.call("getUpdates", {"limit": limit, "timeout": 0}) or []
+
     async def send_photo(self, chat_id: str, photo, caption: str, reply_markup: Optional[dict] = None, filename: str = "photo.jpg") -> dict:
         return await self._send_media("sendPhoto", "photo", chat_id, photo, caption, reply_markup, filename, {})
 
@@ -156,6 +159,9 @@ class MockTelegram:
     async def get_chat_member(self, chat_id, user_id):
         return {"status": self.member_status, "can_post_messages": self.can_post, "user": self.me}
 
+    async def get_updates(self, limit=100):
+        return []
+
     async def send_photo(self, chat_id, photo, caption, reply_markup=None, filename="photo.jpg"):
         return await self._send("photo", chat_id, photo, caption, reply_markup)
 
@@ -190,14 +196,16 @@ def force_client(c: Optional[Any]):
     _forced = c
 
 
-async def connection_status(check_real: bool = False) -> Dict[str, Any]:
+async def connection_status(check_real: bool = False, chat_id: Optional[str] = None) -> Dict[str, Any]:
     """TELEGRAM_CONNECTION_STATUS: CONNECTED | INVALID_TOKEN | CHANNEL_NOT_FOUND | BOT_NOT_ADMIN | MISSING_PERMISSION | API_ERROR.
-    `check_real=True` uses the REAL API even in mock mode (read-only calls: getMe/getChat/getChatMember)."""
-    out: Dict[str, Any] = {"TELEGRAM_CONNECTION_STATUS": "API_ERROR", "channel": channel() or None, "mock": mock_enabled() and not check_real, "bot": None, "chat": None, "bot_is_admin": False, "can_post": False, "error": None}
+    `check_real=True` uses the REAL API even in mock mode (read-only calls: getMe/getChat/getChatMember).
+    `chat_id` overrides the env channel (e.g. permanent NUMERIC id for a private channel)."""
+    target = str(chat_id or channel() or "").strip()
+    out: Dict[str, Any] = {"TELEGRAM_CONNECTION_STATUS": "API_ERROR", "channel": target or None, "mock": mock_enabled() and not check_real, "bot": None, "chat": None, "bot_is_admin": False, "can_post": False, "error": None}
     if not token():
         out.update(TELEGRAM_CONNECTION_STATUS="INVALID_TOKEN", error="TELEGRAM_BOT_TOKEN non configurato")
         return out
-    if not channel():
+    if not target:
         out.update(TELEGRAM_CONNECTION_STATUS="CHANNEL_NOT_FOUND", error="TELEGRAM_CHANNEL_ID non configurato")
         return out
     c = TelegramClient(timeout=20) if check_real else get_client()
@@ -208,13 +216,13 @@ async def connection_status(check_real: bool = False) -> Dict[str, Any]:
         out.update(TELEGRAM_CONNECTION_STATUS=e.code if e.code in ("INVALID_TOKEN",) else "API_ERROR", error=e.description)
         return out
     try:
-        chat = await c.get_chat(channel())
+        chat = await c.get_chat(target)
         out["chat"] = {"title": chat.get("title"), "username": chat.get("username"), "type": chat.get("type"), "id": chat.get("id")}
     except TelegramError as e:
         out.update(TELEGRAM_CONNECTION_STATUS="CHANNEL_NOT_FOUND" if e.code in ("CHANNEL_NOT_FOUND", "BOT_NOT_ADMIN") else e.code if e.code == "INVALID_TOKEN" else "API_ERROR", error=e.description)
         return out
     try:
-        m = await c.get_chat_member(channel(), me["id"])
+        m = await c.get_chat_member(target, me["id"])
     except TelegramError as e:
         out.update(TELEGRAM_CONNECTION_STATUS="BOT_NOT_ADMIN" if e.code in ("BOT_NOT_ADMIN", "MISSING_PERMISSION", "CHANNEL_NOT_FOUND") else "API_ERROR", error=e.description)
         return out
@@ -227,4 +235,29 @@ async def connection_status(check_real: bool = False) -> Dict[str, Any]:
         out.update(TELEGRAM_CONNECTION_STATUS="MISSING_PERMISSION", error="al bot manca il permesso 'Pubblica messaggi'")
     else:
         out["TELEGRAM_CONNECTION_STATUS"] = "CONNECTED"
+    return out
+
+
+
+async def resolve_channels_via_updates() -> Dict[str, Any]:
+    """Discover the permanent NUMERIC chat_id of channels the bot can see, using getUpdates (channel_post / my_chat_member / message).
+    Read-only. Returns {"ok", "channels": [{id,title,type,username}], "count"}. Works only if there are recent updates and no webhook."""
+    out: Dict[str, Any] = {"ok": False, "channels": [], "count": 0, "error": None}
+    if not token():
+        out["error"] = "TELEGRAM_BOT_TOKEN non configurato"
+        return out
+    c = TelegramClient(timeout=20)
+    try:
+        updates = await c.get_updates(limit=100)
+    except TelegramError as e:
+        out["error"] = f"{e.code}: {e.description}"
+        return out
+    seen: Dict[Any, dict] = {}
+    for u in (updates or []):
+        for key in ("channel_post", "edited_channel_post", "my_chat_member", "chat_member", "message"):
+            obj = u.get(key) if isinstance(u, dict) else None
+            chat = (obj or {}).get("chat") if isinstance(obj, dict) else None
+            if isinstance(chat, dict) and chat.get("type") in ("channel", "supergroup"):
+                seen[chat.get("id")] = {"id": chat.get("id"), "title": chat.get("title"), "type": chat.get("type"), "username": chat.get("username")}
+    out.update(ok=True, channels=list(seen.values()), count=len(seen))
     return out

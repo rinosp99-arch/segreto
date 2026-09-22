@@ -29,6 +29,7 @@ slots_col = db["telegram_autopilot_slots"]
 locks_col = db["telegram_autopilot_locks"]
 
 DEFAULTS = {"enabled": False, "posts_per_day": 4, "schedule_times": ["10:00", "14:00", "18:00", "22:00"], "timezone": "Europe/Rome", "use_photo": True, "use_video": True, "use_ai_copy": True,
+            "channel_id": None, "private_channel_mode": False,
             "cycle_number": 1, "cycle_done": [], "last_position": -1, "current_model_id": None, "last_published": None, "last_processed": None, "last_run": None, "last_success": None, "last_slot": None}
 MAX_MEDIA_ATTEMPTS = 3
 LOCK_TTL_S = 180
@@ -62,6 +63,12 @@ async def get_state() -> dict:
 async def set_state(**fields):
     fields["updated_at"] = now_iso()
     await state_col.update_one({"id": "global"}, {"$set": fields}, upsert=True)
+
+
+async def resolved_target(st: Optional[dict] = None) -> str:
+    """Primary publish target: the permanent NUMERIC chat_id override (private-channel mode) if set, else the env channel."""
+    st = st or await get_state()
+    return str(st.get("channel_id") or tg.channel() or "").strip()
 
 
 # ----------------------------------------------------------------------------------------------- lock
@@ -145,7 +152,7 @@ async def mark_media_used(model_id: str, media: List[dict], used: dict, cycle: i
 # ----------------------------------------------------------------------------------------------- send
 async def _send(clientobj, item: dict, caption: str, markup: dict) -> dict:
     """By URL first; on MEDIA_REJECTED for real client, download + multipart upload (<=50MB)."""
-    ch = tg.channel()
+    ch = await resolved_target()
     fn = clientobj.send_video if item["type"] == "video" else clientobj.send_photo
     try:
         return await fn(ch, item["url"], caption, markup)
@@ -319,7 +326,7 @@ async def tick(trigger: str = "scheduler") -> dict:
     slot = await due_slot(st)
     if not slot:
         return {"status": "NO_DUE_SLOT"}
-    conn = await tg.connection_status()
+    conn = await tg.connection_status(chat_id=await resolved_target(st))
     if conn["TELEGRAM_CONNECTION_STATUS"] != "CONNECTED":
         await _log(status="FAILED", error_code=conn["TELEGRAM_CONNECTION_STATUS"], slot_id=slot, trigger=trigger, cycle_number=st["cycle_number"])
         return {"status": "FAILED", "error_code": conn["TELEGRAM_CONNECTION_STATUS"]}
@@ -332,12 +339,15 @@ async def status() -> dict:
     st = await get_state()
     q = await queue_view(st)
     sch = await schedule_view(st)
-    conn = await tg.connection_status()
+    conn = await tg.connection_status(chat_id=await resolved_target(st))
     last = await log_col.find_one({"status": {"$in": ["PUBLISHED", "FAILED", "SKIPPED_NO_MEDIA", "MANUAL_SKIP"]}}, {"_id": 0}, sort=[("timestamp", -1)])
     nxt = q["next"]
+    target = await resolved_target(st)
     return {
         "enabled": bool(st["enabled"]), "AUTO_SCHEDULER_ENABLED": auto_scheduler_enabled(), "mock": tg.mock_enabled(), "active": bool(st["enabled"]) and auto_scheduler_enabled(),
-        "telegram": {k: v for k, v in conn.items()}, "channel": tg.channel(),
+        "telegram": {k: v for k, v in conn.items()}, "channel": target,
+        "TELEGRAM_TARGET_TYPE": ("NUMERIC_CHAT_ID" if str(target).lstrip("-").isdigit() else "USERNAME"),
+        "TELEGRAM_PRIVATE_CHANNEL_MODE": bool(st.get("private_channel_mode")), "TELEGRAM_CHAT_ID": target,
         "queue": {"position": q["position"], "total": q["n_eligible"], "cycle_number": st["cycle_number"], "done_in_cycle": q["n_done_in_cycle"],
                   "current": {"slug": nxt["slug"], "name": nxt["name"], "n_photos": nxt["n_photos"], "n_videos": nxt["n_videos"]} if nxt else None,
                   "order": [{"slug": r["slug"], "name": r["name"], "done": r["model_id"] in set(st.get("cycle_done") or [])} for r in q["eligible"]],
