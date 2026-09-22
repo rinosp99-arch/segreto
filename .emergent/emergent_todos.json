@@ -1,34 +1,26 @@
 [
   {
-    "content": "Build executor.py (hands): settings/flags, publish landing from proposal, article generator (IT, 1/day), model SEO prepare, internal-linking apply, safe-fix, process existing drafts, run_execution + run_maintenance, production_status",
+    "content": "Verify production deploy is live (new Telegram fields + /set-channel route not 404)",
     "status": "completed"
   },
   {
-    "content": "Add admin routes: /activate, /deactivate, /execute-now, /production-status, granular triggers",
+    "content": "Persist numeric target -1003723473193 via /set-channel with real Telegram validation",
     "status": "completed"
   },
   {
-    "content": "Register scheduler jobs seo_ap_execute (24h) + seo_ap_maintenance (12h), FULL-gated",
+    "content": "Read-only pre-send checks (bot connected/admin/can-post, private resolved, Greta not consumed, no MESSAGE_ID for 18:00 run)",
     "status": "completed"
   },
   {
-    "content": "Write tests (executor) without breaking existing",
+    "content": "Perform exactly ONE real Greta Sala recovery post",
     "status": "completed"
   },
   {
-    "content": "Run pytest + esbuild + supervisor; fix failures",
+    "content": "Interpret result (valid MESSAGE_ID -> consume + advance cursor once; else report error, no retry)",
     "status": "completed"
   },
   {
-    "content": "Activate on local/preview backend end-to-end, process existing drafts, verify publish + sitemap",
-    "status": "completed"
-  },
-  {
-    "content": "Testing agent (backend) for SEO executor + activation flows",
-    "status": "completed"
-  },
-  {
-    "content": "Provide report + production deploy/activation note",
+    "content": "Final read-only verification (scheduler active, next run 22:00 Rome, target/private flags)",
     "status": "completed"
   }
 ]
