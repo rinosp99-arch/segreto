@@ -1,26 +1,30 @@
 [
   {
-    "content": "Verify production deploy is live (new Telegram fields + /set-channel route not 404)",
+    "content": "Frontend: add clean top-level landing route /:slug (keep /l/:slug alias); render NotFound on 404",
     "status": "completed"
   },
   {
-    "content": "Persist numeric target -1003723473193 via /set-channel with real Telegram validation",
+    "content": "Frontend: LandingPage canonical/url -> clean /{slug}",
     "status": "completed"
   },
   {
-    "content": "Read-only pre-send checks (bot connected/admin/can-post, private resolved, Greta not consumed, no MESSAGE_ID for 18:00 run)",
+    "content": "Backend: sitemap (v1_seo.py) landing path /l/ -> clean /{slug}",
     "status": "completed"
   },
   {
-    "content": "Perform exactly ONE real Greta Sala recovery post",
+    "content": "Backend: executor + v1_landings + resolve_entity_url + inspector public_url /l/ -> clean /{slug}",
     "status": "completed"
   },
   {
-    "content": "Interpret result (valid MESSAGE_ID -> consume + advance cursor once; else report error, no retry)",
+    "content": "Backend: add PUBLIC_ROUTE_HTTP_200 + PUBLIC_RENDER_OK quality gate to landing publish verification",
     "status": "completed"
   },
   {
-    "content": "Final read-only verification (scheduler active, next run 22:00 Rome, target/private flags)",
+    "content": "Verify locally (esbuild + 42 pytest) + preview screenshots",
+    "status": "completed"
+  },
+  {
+    "content": "Gather report data; production requires redeploy to go live",
     "status": "completed"
   }
 ]

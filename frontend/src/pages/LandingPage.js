@@ -4,9 +4,10 @@ import { api } from '@/lib/api';
 import { ModelCard } from '@/components/ModelCard';
 import { setSeo, setNotFoundSeo, SITE } from '@/lib/seo';
 import { ArrowLeft, SearchX } from 'lucide-react';
+import NotFound from '@/pages/NotFound';
 
 /**
- * Public landing page /l/{slug} (Phase 13 - GOOGLE SEO CORE).
+ * Public landing page — clean SEO URL /{slug} (with legacy /l/{slug} alias).
  * The backend returns 404 unless the landing is published AND the admin flag public_landing_routes is ON,
  * so only really public landings are reachable/indexable. SEO meta + canonical + JSON-LD (WebPage/CollectionPage,
  * FAQPage only when real FAQ exist) are set from the landing document: nothing invented.
@@ -22,7 +23,7 @@ export default function LandingPage() {
       const l = r.data;
       setData(l);
       const seo = l.seo || {};
-      const url = `${window.location.origin}/l/${l.slug}`;
+      const url = `${window.location.origin}/${l.slug}`;
       const cards = l.model_cards || [];
       const jsonLd = [{
         '@context': 'https://schema.org', '@type': cards.length ? 'CollectionPage' : 'WebPage',
@@ -45,12 +46,7 @@ export default function LandingPage() {
     }).catch(() => { setNotFoundSeo(); setNotFound(true); });
   }, [slug]);
 
-  if (notFound) return (
-    <div className="max-w-2xl mx-auto px-4 py-24 text-center" data-testid="landing-not-found">
-      <div className="font-serif text-3xl mb-2">Pagina non trovata</div>
-      <Link to="/" className="btn-gold inline-block rounded-xl px-6 py-3 text-sm mt-4">Torna alla home</Link>
-    </div>
-  );
+  if (notFound) return <NotFound />;
   if (!data) return <div className="max-w-6xl mx-auto px-4 py-10"><div className="h-40 animate-pulse bg-muted/50 rounded-2xl" /></div>;
 
   const cards = data.model_cards || [];

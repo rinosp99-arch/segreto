@@ -2099,6 +2099,12 @@ async def _entity_from_params(ctx: Ctx, allow_all: bool = False) -> Optional[dic
                     return e
         if path in ("", "/"):
             return await resolve_entity_url("home", "")
+        # Clean SEO landing URL: single top-level segment (e.g. /onlyfans-italiane) resolves to a published landing
+        clean = path.strip("/")
+        if clean and "/" not in clean:
+            e = await resolve_entity_url("landing", clean)
+            if e:
+                return e
         return {"url": u, "entity_type": "url", "entity_id": u, "slug": None, "published": True, "indexable": True}
     if p.get("home"):
         return await resolve_entity_url("home", "")

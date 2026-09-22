@@ -191,7 +191,7 @@ async def resolve_entity_url(entity_type: str, ref: str) -> Optional[dict]:
     base = await refresh_public_base()
     if entity_type == "home":
         return {"url": f"{base}/", "entity_type": "home", "entity_id": "home", "slug": "", "published": True, "indexable": True}
-    col, path = {"model": (models_col, "modelle"), "landing": (landings_col, "l"), "category": (categories_col, "categorie")}.get(entity_type, (None, None))
+    col, path = {"model": (models_col, "modelle"), "landing": (landings_col, ""), "category": (categories_col, "categorie")}.get(entity_type, (None, None))
     if col is None:
         return None
     doc = await col.find_one({"is_deleted": {"$ne": True}, "$or": [{"id": ref}, {"slug": ref}]}, {"_id": 0, "id": 1, "slug": 1, "stato": 1, "seo": 1, "anteprima": 1, "indicizzabile": 1})
@@ -199,7 +199,8 @@ async def resolve_entity_url(entity_type: str, ref: str) -> Optional[dict]:
         return None
     seo = doc.get("seo") or {}
     indexable = seo.get("indexable", True) is not False and "noindex" not in (seo.get("robots") or "").lower() and not doc.get("anteprima") and doc.get("indicizzabile", True) is not False
-    return {"url": f"{base}/{path}/{doc['slug']}", "entity_type": entity_type, "entity_id": doc["id"], "slug": doc["slug"], "published": doc.get("stato") == "pubblicata", "indexable": indexable}
+    url = f"{base}/{path}/{doc['slug']}" if path else f"{base}/{doc['slug']}"
+    return {"url": url, "entity_type": entity_type, "entity_id": doc["id"], "slug": doc["slug"], "published": doc.get("stato") == "pubblicata", "indexable": indexable}
 
 
 async def inspect(url: str, entity: Optional[dict] = None, refresh: bool = False) -> dict:

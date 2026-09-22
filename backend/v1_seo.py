@@ -405,7 +405,7 @@ async def sitemap_entries(base: Optional[str] = None) -> List[dict]:
             lseo = l.get("seo") or {}
             if lseo.get("indexable", True) is False or "noindex" in (lseo.get("robots") or "").lower():
                 continue
-            entries.append({"path": f"/l/{l['slug']}", "priority": "0.8", "changefreq": "weekly", "type": "landing", "lastmod": (l.get("updated_at") or "")[:10] or None})
+            entries.append({"path": f"/{l['slug']}", "priority": "0.8", "changefreq": "weekly", "type": "landing", "lastmod": (l.get("updated_at") or "")[:10] or None})
     if latest:
         entries[0]["lastmod"] = latest
     seen, out = set(), []
@@ -596,7 +596,7 @@ async def page_seo(entity_type: str, entity_id: str, principal=Depends(require("
                   "structured_data_type": seo.get("structured_data_type", "ProfilePage"), "keywords": seo.get("keywords", []), "topics": seo.get("topics", []),
                   "alt_default": seo.get("alt_default"), "indexable": seo.get("indexable", True) and doc.get("stato") == "pubblicata"}
     else:
-        path = {"article": "/articoli/", "category": "/categorie/", "landing": "/l/"}[entity_type] + doc["slug"]
+        path = {"article": "/articoli/", "category": "/categorie/", "landing": "/"}[entity_type] + doc["slug"]
         seo = doc.get("seo") or {}
         fields = {"title": doc.get("seo_title") or seo.get("title"), "meta_description": doc.get("meta_description") or seo.get("meta_description"), "slug": doc.get("slug"),
                   "canonical": doc.get("canonical") or seo.get("canonical") or (f"{base}{path}" if base else path), "indexable": doc.get("indicizzabile", seo.get("indexable", True))}

@@ -117,7 +117,7 @@ def _enrich(doc: dict) -> dict:
     out = serialize_doc(doc)
     out["validation"] = validate_landing(out)
     out["workflow_status"] = "PUBLISHED" if out.get("stato") == "pubblicata" else ("READY" if out["validation"]["ready"] else "DRAFT")
-    out["public_url"] = f"/l/{out.get('slug')}"
+    out["public_url"] = f"/{out.get('slug')}"
     return out
 
 
@@ -161,7 +161,7 @@ async def patch_landing(doc: dict, changes: dict, principal: dict, request: Opti
     ver = await record_version("landing", doc["id"], doc, merged, actor_of(principal), source=principal.get("source", "manual"), reason=reason or "Aggiornamento landing", request_id=request_id_of(request))
     if merged["slug"] != doc["slug"]:
         from v1_seo import ensure_redirect
-        await ensure_redirect(f"/l/{doc['slug']}", f"/l/{merged['slug']}", actor_of(principal), "slug_change")
+        await ensure_redirect(f"/{doc['slug']}", f"/{merged['slug']}", actor_of(principal), "slug_change")
     out = _enrich(merged)
     out["version_id"] = ver.get("id")
     out["changed_fields"] = ver.get("changed_fields", [])

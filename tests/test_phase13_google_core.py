@@ -200,11 +200,11 @@ async def test_http_sitemap_robots_landing_and_capabilities():
         s.post(f"{BASE}/api/v1/landings/{lid}/publish", json={}, headers=J, timeout=30)
         s.put(f"{BASE}/api/v1/config/flags/public_landing_routes", json={"value": False}, headers=J, timeout=30)
         assert s.get(f"{BASE}/api/landings/landing-{TAG}", timeout=30).status_code == 404          # flag OFF
-        assert f"/l/landing-{TAG}" not in s.get(f"{BASE}/api/sitemap.xml", timeout=30).text
+        assert f"/landing-{TAG}</loc>" not in s.get(f"{BASE}/api/sitemap.xml", timeout=30).text
         s.put(f"{BASE}/api/v1/config/flags/public_landing_routes", json={"value": True}, headers=J, timeout=30)
         pr = s.get(f"{BASE}/api/landings/landing-{TAG}", timeout=30)
         assert pr.status_code == 200 and len(pr.json()["model_cards"]) == 2
-        assert f"/l/landing-{TAG}" in s.get(f"{BASE}/api/sitemap.xml", timeout=30).text
+        assert f"/landing-{TAG}</loc>" in s.get(f"{BASE}/api/sitemap.xml", timeout=30).text
         # capabilities via v2 (READ_ONLY key, Google NOT configured on the live backend -> graceful states, never 500)
         def ex(body, path="execute"):
             rr = s.post(f"{BASE}/api/v2/ai/{path}", json=body, headers=K, timeout=120)

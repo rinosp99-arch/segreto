@@ -130,6 +130,37 @@ async def _landing_candidate_from_proposal(p: dict) -> Optional[dict]:
     }
 
 
+async def verify_public_landing(slug: str) -> dict:
+    """PUBLISH VERIFICATION GATE (Phase 15+): a landing is really PUBLIC only if a visitor hitting the
+    public route sees a rendered page — not just a DB row flagged 'pubblicata'.
+    Mirrors exactly the public endpoint GET /api/landings/{slug} (v1_landings.public_landing):
+      - PUBLIC_ROUTE_HTTP_200: feature flag public_landing_routes ON AND a published, non-deleted landing exists
+        (i.e. the public API returns 200 instead of 404 → the SPA route /{slug} resolves to real content);
+      - PUBLIC_RENDER_OK: the payload actually renders (H1/headline present AND >=1 published model card).
+    """
+    from v1_landings import landings_col
+    out = {"PUBLIC_ROUTE_HTTP_200": False, "PUBLIC_RENDER_OK": False, "public_url": f"/{slug}", "reason": None}
+    cfg = await config_col.find_one({"id": "global"}, {"_id": 0, "flags": 1}) or {}
+    if not (cfg.get("flags") or {}).get("public_landing_routes", False):
+        out["reason"] = "PUBLIC_ROUTES_FLAG_OFF"
+        return out
+    doc = await landings_col.find_one({"slug": slug, "stato": "pubblicata", "is_deleted": {"$ne": True}}, {"_id": 0})
+    if not doc:
+        out["reason"] = "PUBLIC_API_404"
+        return out
+    out["PUBLIC_ROUTE_HTTP_200"] = True
+    has_h1 = bool((doc.get("headline") or doc.get("titolo") or "").strip())
+    cards = 0
+    for s in doc.get("model_slugs") or []:
+        if await models_col.find_one({"slug": s, "stato": "pubblicata"}, {"_id": 0, "id": 1}):
+            cards += 1
+    out["model_cards"] = cards
+    out["PUBLIC_RENDER_OK"] = bool(has_h1 and cards >= 1)
+    if not out["PUBLIC_RENDER_OK"]:
+        out["reason"] = "RENDER_EMPTY" if cards == 0 else "MISSING_H1"
+    return out
+
+
 async def publish_landing_from_proposal(p: dict, dry_run: bool = False) -> dict:
     from v1_landings import create_landing, set_landing_state, validate_landing_full, landings_col
     slug = p.get("proposed_slug")
@@ -152,10 +183,19 @@ async def publish_landing_from_proposal(p: dict, dry_run: bool = False) -> dict:
     raw = await landings_col.find_one({"id": lid}, {"_id": 0})
     out = await set_landing_state(raw, "pubblicata", PRINCIPAL, None)
     await enable_public_landings()
-    await _mark_sitemap_dirty(f"landing published {out.get('slug')}")
-    await proposals_col.update_one({"proposed_slug": slug}, {"$set": {"status": "PUBLISHED", "exec_status": "PUBLISHED", "landing_id": lid, "landing_slug": out.get("slug"), "updated_at": now_iso()}})
-    await log_decision(None, "LANDING_PUBLISHED", out.get("slug"), f"Landing pubblicata da proposta '{slug}' ({len(cand['model_slugs'])} creator)", result="PUBLISHED", kind="executor")
-    return {"slug": slug, "published": True, "status": "PUBLISHED", "landing_slug": out.get("slug"), "public_url": f"/l/{out.get('slug')}"}
+    published_slug = out.get("slug")
+    # PUBLISH VERIFICATION GATE: PUBLISHED must mean HTTP 200 + a really rendered public page, not just a DB flag.
+    verify = await verify_public_landing(published_slug)
+    if not (verify["PUBLIC_ROUTE_HTTP_200"] and verify["PUBLIC_RENDER_OK"]):
+        await proposals_col.update_one({"proposed_slug": slug}, {"$set": {"status": "PUBLISH_VERIFICATION_FAILED", "exec_status": "PUBLISH_VERIFICATION_FAILED", "landing_id": lid, "landing_slug": published_slug, "exec_reasons": [verify.get("reason")], "updated_at": now_iso()}})
+        await log_decision(None, "LANDING_PUBLISH_VERIFY_FAILED", published_slug, f"Landing '{published_slug}' salvata ma NON pubblica: PUBLIC_ROUTE_HTTP_200={verify['PUBLIC_ROUTE_HTTP_200']} PUBLIC_RENDER_OK={verify['PUBLIC_RENDER_OK']} ({verify.get('reason')})", result="PUBLISH_VERIFICATION_FAILED", kind="executor")
+        return {"slug": slug, "published": False, "status": "PUBLISH_VERIFICATION_FAILED", "landing_slug": published_slug,
+                "public_url": verify["public_url"], "PUBLIC_ROUTE_HTTP_200": verify["PUBLIC_ROUTE_HTTP_200"], "PUBLIC_RENDER_OK": verify["PUBLIC_RENDER_OK"], "reason": verify.get("reason")}
+    await _mark_sitemap_dirty(f"landing published {published_slug}")
+    await proposals_col.update_one({"proposed_slug": slug}, {"$set": {"status": "PUBLISHED", "exec_status": "PUBLISHED", "landing_id": lid, "landing_slug": published_slug, "updated_at": now_iso()}})
+    await log_decision(None, "LANDING_PUBLISHED", published_slug, f"Landing pubblicata da proposta '{slug}' ({len(cand['model_slugs'])} creator) — public {verify['public_url']} verificata (HTTP200+render)", result="PUBLISHED", kind="executor")
+    return {"slug": slug, "published": True, "status": "PUBLISHED", "landing_slug": published_slug, "public_url": verify["public_url"],
+            "PUBLIC_ROUTE_HTTP_200": True, "PUBLIC_RENDER_OK": True}
 
 
 async def publish_proposals(dry_run: bool = False) -> dict:

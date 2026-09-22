@@ -87,6 +87,8 @@ export default function App() {
             <Route path="/cookie" element={<Legal kind="cookie" />} />
             <Route path="/termini" element={<Legal kind="termini" />} />
             <Route path="/18-plus" element={<Legal kind="18-plus" />} />
+            {/* Clean SEO landing URLs (e.g. /onlyfans-italiane). Static routes above take precedence; unknown single-segment paths resolve to a real published landing or fall back to NotFound inside LandingPage. */}
+            <Route path="/:slug" element={<LandingPage />} />
             <Route path="*" element={<NotFound />} />
           </Route>
 
