@@ -1,0 +1,412 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ===== LATO PUBBLICO (default theme) ===== */
+  :root {
+    --background: 220 10% 6%;
+    --foreground: 38 28% 92%;
+    --card: 220 9% 10%;
+    --card-foreground: 38 28% 92%;
+    --popover: 220 10% 8%;
+    --popover-foreground: 38 28% 92%;
+    --primary: 42 45% 62%;            /* oro elegante */
+    --primary-foreground: 220 12% 8%;
+    --secondary: 220 8% 14%;
+    --secondary-foreground: 38 28% 92%;
+    --muted: 220 7% 16%;
+    --muted-foreground: 38 10% 70%;
+    --accent: 38 30% 86%;             /* champagne */
+    --accent-foreground: 220 12% 8%;
+    --destructive: 0 55% 45%;
+    --destructive-foreground: 38 28% 92%;
+    --border: 220 8% 18%;
+    --input: 220 8% 18%;
+    --ring: 42 45% 62%;
+    --radius: 0.9rem;
+
+    --glass-bg: 220 10% 10%;
+    --glass-border: 42 30% 70%;
+    --gold: 42 45% 62%;
+    --champagne: 38 30% 86%;
+    --wine: 350 45% 32%;
+    --grain-opacity: 0.05;
+    --vignette: radial-gradient(120% 90% at 50% 12%, rgba(0,0,0,0) 0%, rgba(0,0,0,0.35) 60%, rgba(0,0,0,0.6) 100%);
+
+    --chart-1: 42 45% 62%;
+    --chart-2: 38 30% 86%;
+    --chart-3: 220 8% 55%;
+    --chart-4: 150 25% 45%;
+    --chart-5: 20 35% 55%;
+
+    --sidebar-background: 220 10% 8%;
+    --sidebar-foreground: 38 20% 82%;
+  }
+
+  /* ===== LATO SEGRETO (activated) ===== */
+  .theme-secret {
+    --background: 240 12% 4%;
+    --foreground: 38 28% 92%;
+    --card: 240 10% 8%;
+    --card-foreground: 38 28% 92%;
+    --popover: 240 10% 7%;
+    --popover-foreground: 38 28% 92%;
+    --primary: 40 55% 60%;
+    --primary-foreground: 240 12% 6%;
+    --secondary: 350 30% 16%;
+    --secondary-foreground: 38 28% 92%;
+    --muted: 240 9% 14%;
+    --muted-foreground: 38 10% 70%;
+    --accent: 350 45% 30%;            /* bordeaux */
+    --accent-foreground: 38 30% 90%;
+    --border: 350 20% 20%;
+    --input: 240 10% 16%;
+    --ring: 40 55% 60%;
+
+    --glass-bg: 240 12% 6%;
+    --glass-border: 40 35% 62%;
+    --wine: 355 55% 34%;
+    --grain-opacity: 0.09;
+    --vignette: radial-gradient(120% 90% at 50% 18%, rgba(0,0,0,0) 0%, rgba(10,0,4,0.55) 55%, rgba(5,0,2,0.9) 100%);
+  }
+
+  * { border-color: hsl(var(--border)); }
+
+  body {
+    margin: 0;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.5s cubic-bezier(0.2,0.8,0.2,1), color 0.5s cubic-bezier(0.2,0.8,0.2,1);
+  }
+
+  h1, h2, h3, .font-serif { font-family: 'Cormorant Garamond', Georgia, serif; }
+
+  ::selection { background: hsl(var(--primary) / 0.35); color: hsl(var(--foreground)); }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: hsl(var(--background)); }
+  ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 8px; }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--primary) / 0.5); }
+}
+
+@layer components {
+  .glass {
+    background: hsl(var(--glass-bg) / 0.6);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    border: 1px solid hsl(var(--glass-border) / 0.18);
+  }
+  .gold-text { color: hsl(var(--primary)); }
+  .caps-label {
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .card-elev { box-shadow: 0 1px 0 rgba(255,255,255,0.04), 0 14px 40px rgba(0,0,0,0.45); }
+  .card-elev-2 { box-shadow: 0 1px 0 rgba(255,255,255,0.06), 0 22px 70px rgba(0,0,0,0.6); }
+
+  /* film grain overlay */
+  .grain::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 60;
+    opacity: var(--grain-opacity);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    mix-blend-mode: overlay;
+  }
+
+  .btn-gold {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+  }
+  .btn-gold:hover { filter: brightness(1.06); box-shadow: 0 10px 30px hsl(var(--primary) / 0.25); }
+  .btn-gold:active { transform: scale(0.98); }
+
+  .hairline { border-top: 1px solid hsl(var(--border) / 0.6); }
+}
+
+@layer utilities {
+  .transition-theme { transition: background-color .5s, color .5s, border-color .5s; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .text-balance { text-wrap: balance; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}
+
+/* ===== LATO SEGRETO — atmosfera scenografica ===== */
+@keyframes ls-smoke  { 0%{transform:translate3d(-8%,6%,0) scale(1.1);opacity:.45} 50%{transform:translate3d(8%,-4%,0) scale(1.3);opacity:.8} 100%{transform:translate3d(-8%,6%,0) scale(1.1);opacity:.45} }
+@keyframes ls-smoke2 { 0%{transform:translate3d(6%,-4%,0) scale(1.2);opacity:.35} 50%{transform:translate3d(-6%,6%,0) scale(1.4);opacity:.6} 100%{transform:translate3d(6%,-4%,0) scale(1.2);opacity:.35} }
+@keyframes ls-beam   { 0%{transform:translateX(-40%) rotate(9deg);opacity:0} 45%{opacity:.55} 100%{transform:translateX(80%) rotate(9deg);opacity:0} }
+@keyframes ls-glow   { 0%,100%{opacity:.4} 50%{opacity:.85} }
+@keyframes ls-sheen  { 0%{transform:translateX(-140%) rotate(14deg)} 100%{transform:translateX(240%) rotate(14deg)} }
+
+.secret-ambience { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.secret-ambience .blob { position: absolute; border-radius: 50%; filter: blur(60px); mix-blend-mode: screen; }
+.secret-ambience .b1 { width: 60vw; height: 60vw; left: -10vw; top: -10vh; background: radial-gradient(circle, hsl(350 60% 32% / 0.9), transparent 65%); animation: ls-smoke 18s ease-in-out infinite; }
+.secret-ambience .b2 { width: 55vw; height: 55vw; right: -12vw; top: 20vh; background: radial-gradient(circle, hsl(280 55% 30% / 0.8), transparent 65%); animation: ls-smoke2 22s ease-in-out infinite; }
+.secret-ambience .b3 { width: 50vw; height: 50vw; left: 20vw; bottom: -15vh; background: radial-gradient(circle, hsl(40 55% 45% / 0.35), transparent 60%); animation: ls-smoke 26s ease-in-out infinite; }
+.secret-ambience .beam { position: absolute; top: -20%; bottom: -20%; width: 30%; background: linear-gradient(90deg, transparent, hsl(40 60% 80% / 0.10), transparent); animation: ls-beam 11s linear infinite; }
+.secret-ambience .beam.beam2 { animation-duration: 15s; animation-delay: 4s; background: linear-gradient(90deg, transparent, hsl(350 60% 70% / 0.10), transparent); }
+.secret-ambience .grainlayer { position: absolute; inset: 0; opacity: .10; mix-blend-mode: overlay; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+.secret-tile { box-shadow: 0 0 0 1px hsl(var(--primary) / 0.35), 0 0 34px hsl(var(--accent) / 0.35); animation: ls-glow 4.5s ease-in-out infinite; }
+.secret-sheen { position: absolute; top: -30%; bottom: -30%; width: 40%; pointer-events: none; background: linear-gradient(90deg, transparent, hsl(40 65% 85% / 0.22), transparent); animation: ls-sheen 6.5s linear infinite; }
+
+/* ===== Pellicola "IN MOVIMENTO" — motore rAF (JS), NON CSS animation ===== */
+/* Il track viene mosso da requestAnimationFrame via transform: translate3d(),
+   così iOS Low Power Mode / prefers-reduced-motion non possono trasformarlo in
+   uno scroll manuale né metterlo in pausa. */
+.ls-strip-track {
+  display: flex;
+  gap: 12px;
+  width: max-content;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}
+
+.ls-tile {
+  position: relative;
+  flex: 0 0 auto;
+  border-radius: 1rem;
+  overflow: hidden;
+  aspect-ratio: 9 / 16;
+  background: hsl(var(--muted) / 0.5);
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+.ls-tile .ls-poster,
+.ls-tile .ls-video {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  object-position: center 22%;
+}
+.ls-tile .ls-video { opacity: 0; transition: opacity 400ms ease; }
+.ls-tile .ls-video.ready { opacity: 1; }
+.ls-tile:hover, .ls-tile:focus-visible, .ls-tile.touched { transform: scale(1.035); z-index: 2; }
+.ls-tile:focus-visible { outline: 2px solid hsl(var(--primary)); outline-offset: 2px; }
+.ls-tile .ls-grade { position: absolute; inset: 0; pointer-events: none; transition: opacity 500ms ease, background 500ms ease; }
+/* secret cinematic grade */
+.ls-tile.secret { border: 1px solid hsl(var(--primary) / 0.45); box-shadow: 0 0 26px hsl(var(--accent) / 0.35); }
+.ls-tile.secret .ls-video, .ls-tile.secret .ls-poster { filter: saturate(0.85) contrast(1.06) brightness(0.9) sepia(0.14) hue-rotate(-10deg); }
+.ls-tile.secret .ls-grade {
+  background:
+    linear-gradient(115deg, transparent 40%, hsl(40 60% 75% / 0.12) 50%, transparent 60%),
+    radial-gradient(120% 90% at 50% 120%, hsl(350 55% 22% / 0.55), transparent 60%),
+    radial-gradient(140% 120% at 50% 50%, transparent 55%, rgba(0,0,0,0.55) 100%);
+}
+
+
+/* ===== HEADER — switch Lato Pubblico / Lato Segreto: premium, curioso, invitante (mai arcade) =====
+   Solo luce / bordo / animazione / contrasto: dimensioni, padding e posizione restano quelle del design approvato. */
+.ls-switch {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  --sw-glow: hsl(var(--gold) / 0.55);
+  --sw-glow-soft: hsl(var(--champagne) / 0.28);
+  --sw-line: hsl(var(--champagne) / 0.9);
+  border-color: hsl(var(--gold) / 0.7) !important;
+  color: hsl(var(--champagne)) !important;
+  background: linear-gradient(180deg, hsl(var(--gold) / 0.14), hsl(var(--gold) / 0.04));
+  box-shadow: 0 0 0 1px hsl(var(--gold) / 0.25), 0 0 14px var(--sw-glow-soft), 0 0 26px var(--sw-glow-soft);
+  animation: ls-switch-pulse 2.8s ease-in-out infinite;
+  transition: box-shadow 500ms ease, border-color 500ms ease, color 300ms ease, background 500ms ease, transform 160ms ease;
+  will-change: transform;
+}
+.ls-switch::after {                    /* lama di luce: attraversa il bottone ogni ~6.5s (viaggio ~0.8s) */
+  content: "";
+  position: absolute;
+  top: -40%; bottom: -40%; left: 0; width: 38%;
+  background: linear-gradient(100deg, transparent 0%, var(--sw-line) 50%, transparent 100%);
+  opacity: 0.55;
+  transform: translateX(-160%) skewX(-18deg);
+  animation: ls-switch-shimmer 6.5s linear infinite;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+.ls-switch--secret {
+  --sw-glow: hsl(var(--wine) / 0.8);
+  --sw-glow-soft: hsl(350 55% 40% / 0.42);
+  --sw-line: hsl(340 60% 80% / 0.85);
+  border-color: hsl(350 55% 55% / 0.85) !important;
+  color: hsl(38 40% 90%) !important;
+  background: linear-gradient(180deg, hsl(350 50% 34% / 0.55), hsl(280 35% 22% / 0.45));
+  box-shadow: 0 0 0 1px hsl(350 55% 50% / 0.35), 0 0 16px var(--sw-glow-soft), 0 0 30px hsl(285 45% 40% / 0.35);
+}
+.ls-switch--intro {                    /* primo accesso della sessione: un solo richiamo più evidente, poi normale */
+  animation: ls-switch-intro 1.6s cubic-bezier(0.2, 0.8, 0.2, 1) 1, ls-switch-pulse 2.8s ease-in-out 1.6s infinite;
+}
+.ls-switch--tap {                      /* risposta immediata al click */
+  animation: ls-switch-tap 420ms cubic-bezier(0.2, 0.8, 0.2, 1) 1, ls-switch-pulse 2.8s ease-in-out 420ms infinite;
+}
+.ls-switch:hover { filter: brightness(1.08); }
+.ls-switch:active { transform: scale(0.97); }
+.ls-switch:focus-visible { outline: 2px solid hsl(var(--primary)); outline-offset: 2px; }
+
+@keyframes ls-switch-pulse {           /* micro-pulse molto discreto */
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.03); }
+}
+@keyframes ls-switch-shimmer {         /* 0→12% = passaggio (~0.8s su 6.5s), poi fermo fuori dal bottone */
+  0%   { transform: translateX(-160%) skewX(-18deg); }
+  12%  { transform: translateX(420%) skewX(-18deg); }
+  100% { transform: translateX(420%) skewX(-18deg); }
+}
+@keyframes ls-switch-intro {
+  0%   { transform: scale(1);    box-shadow: 0 0 0 1px hsl(var(--gold) / 0.25), 0 0 14px var(--sw-glow-soft), 0 0 26px var(--sw-glow-soft); }
+  45%  { transform: scale(1.07); box-shadow: 0 0 0 1px var(--sw-glow), 0 0 22px var(--sw-glow), 0 0 48px var(--sw-glow-soft); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 1px hsl(var(--gold) / 0.25), 0 0 14px var(--sw-glow-soft), 0 0 26px var(--sw-glow-soft); }
+}
+@keyframes ls-switch-tap {
+  0%   { transform: scale(0.96); box-shadow: 0 0 0 1px var(--sw-glow), 0 0 22px var(--sw-glow), 0 0 40px var(--sw-glow-soft); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ls-switch, .ls-switch::after { animation: none !important; }   /* resta il glow statico, nessun movimento */
+}
+
+/* ===== GLOBAL ONLYFANS MARQUEE — fascia editoriale premium, chiaramente cliccabile (Home + profilo, subito sotto l'header) =====
+   Movimento continuo SINISTRA -> DESTRA via translate3d (GPU), loop seamless con due gruppi identici.
+   Inviti al click: gerarchia testo (CTA più luminosa/bold), arrow pulse, breathing glow, light sweep, hover/tap. */
+.ls-marquee {
+  --mq-line: hsl(var(--gold) / 0.55);
+  --mq-glow: hsl(var(--champagne) / 0.14);
+  --mq-glow-peak: hsl(var(--gold) / 0.34);
+  --mq-text: hsl(var(--champagne) / 0.82);
+  --mq-cta: hsl(42 60% 76%);
+  --mq-cta-hover: hsl(42 70% 86%);
+  --mq-sweep: hsl(var(--champagne) / 0.35);
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 46px;
+  overflow: hidden;
+  cursor: pointer;
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(12, 8, 12, 0.96), rgba(5, 3, 7, 0.98));
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--mq-line);
+  border-bottom: 1px solid var(--mq-line);
+  box-shadow: 0 0 0 1px hsl(var(--gold) / 0.10), 0 0 22px var(--mq-glow), inset 0 0 24px rgba(0, 0, 0, 0.35);
+  color: var(--mq-text);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+  animation: ls-marquee-breathe 5s ease-in-out infinite;      /* breathing glow: ~1.8s di respiro ogni 5s */
+  transition: box-shadow 350ms ease, color 350ms ease, border-color 350ms ease, transform 140ms ease;
+  will-change: transform;
+}
+@media (min-width: 640px) { .ls-marquee { height: 50px; } }
+.ls-marquee:hover {
+  --mq-glow: hsl(var(--champagne) / 0.30);
+  --mq-line: hsl(var(--gold) / 0.85);
+  --mq-cta: var(--mq-cta-hover);
+  transform: scale(1.005);
+}
+.ls-marquee:active { transform: scale(0.99); }
+.ls-marquee:focus-visible { outline: 2px solid hsl(var(--primary)); outline-offset: 2px; }
+/* Lato Segreto: stesso testo champagne/oro, bordo + glow con componente bordeaux/viola */
+.theme-secret .ls-marquee {
+  --mq-line: hsl(350 50% 48% / 0.65);
+  --mq-glow: hsl(285 45% 42% / 0.30);
+  --mq-glow-peak: hsl(350 55% 55% / 0.42);
+  --mq-sweep: hsl(340 50% 85% / 0.32);
+  background: linear-gradient(180deg, rgba(20, 7, 16, 0.96), rgba(7, 3, 9, 0.98));
+  box-shadow: 0 0 0 1px hsl(350 50% 45% / 0.18), 0 0 22px var(--mq-glow), inset 0 0 24px rgba(0, 0, 0, 0.35);
+}
+.theme-secret .ls-marquee:hover { --mq-glow: hsl(285 50% 48% / 0.46); --mq-line: hsl(350 55% 58% / 0.9); }
+
+.ls-marquee__track {
+  position: absolute;
+  top: 0; left: 0; height: 100%;
+  display: flex;
+  width: max-content;
+  will-change: transform;               /* moved by requestAnimationFrame + translate3d (see GlobalOfMarquee.js) */
+  backface-visibility: hidden;
+}
+.ls-marquee__group { display: flex; height: 100%; align-items: center; flex: 0 0 auto; }
+.ls-marquee__item {
+  display: inline-flex; align-items: center; gap: 0.9em; white-space: nowrap;
+  padding: 0 0.45em;
+  font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; font-weight: 500;
+}
+@media (min-width: 640px) { .ls-marquee__item { font-size: 12px; letter-spacing: 0.26em; } }
+.ls-marquee__soft { color: var(--mq-text); }
+.ls-marquee__cta {
+  display: inline-flex; align-items: center; gap: 0.45em;
+  color: var(--mq-cta); font-weight: 700; letter-spacing: 0.26em;
+  text-shadow: 0 0 10px hsl(var(--gold) / 0.35);
+  transition: color 300ms ease, text-shadow 300ms ease;
+}
+.ls-marquee:hover .ls-marquee__cta { text-shadow: 0 0 14px hsl(var(--gold) / 0.55); }
+.ls-marquee__ext { font-size: 0.85em; opacity: 0.75; margin-left: 0.15em; }
+.ls-marquee__sep, .ls-marquee__gap { color: hsl(var(--gold)); font-size: 0.9em; opacity: 0.9; }
+.ls-marquee__gap { margin: 0 1.6em; opacity: 0.55; }
+.ls-marquee__arrow { display: inline-block; font-weight: 700; animation: ls-marquee-arrow 5s ease-in-out infinite; }   /* "vai/entra": 0 -> 5px -> 0 ogni 5s */
+.ls-marquee__probe { position: absolute; visibility: hidden; pointer-events: none; white-space: nowrap; left: 0; top: 0; }
+.ls-marquee__static { display: flex; height: 100%; align-items: center; justify-content: center; }
+.ls-marquee__static .ls-marquee__gap { display: none; }
+/* riflesso su vetro: sottile lama chiara che attraversa la fascia ogni ~9s (viaggio ~0.8s), sopra lo sfondo ma non copre il testo */
+.ls-marquee__sweep {
+  position: absolute; top: -30%; bottom: -30%; left: 0; width: 22%;
+  background: linear-gradient(100deg, transparent 0%, var(--mq-sweep) 50%, transparent 100%);
+  transform: translateX(-140%) skewX(-16deg);
+  opacity: 0.45;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  animation: ls-marquee-sweep 9s linear infinite;
+  z-index: 0;
+}
+.ls-marquee__track, .ls-marquee__static { z-index: 1; }
+/* tap feedback: soft glow che nasce nel punto toccato */
+.ls-marquee__flash {
+  position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
+  background: radial-gradient(circle, hsl(var(--champagne) / 0.35) 0%, transparent 70%);
+  pointer-events: none; z-index: 2;
+  animation: ls-marquee-flash 500ms ease-out forwards;
+}
+
+/* due gruppi identici: da -50% a 0 = un gruppo intero, il secondo copre sempre lo spazio -> nessun vuoto */
+@keyframes ls-marquee-ltr {
+  from { transform: translate3d(-50%, 0, 0); }
+  to   { transform: translate3d(0, 0, 0); }
+}
+@keyframes ls-marquee-arrow {
+  0%, 70%, 100% { transform: translateX(0); }
+  82% { transform: translateX(5px); }
+  94% { transform: translateX(0); }
+}
+@keyframes ls-marquee-breathe {
+  0%, 64%, 100% { box-shadow: 0 0 0 1px hsl(var(--gold) / 0.10), 0 0 22px var(--mq-glow), inset 0 0 24px rgba(0, 0, 0, 0.35); }
+  82%           { box-shadow: 0 0 0 1px hsl(var(--gold) / 0.18), 0 0 30px var(--mq-glow-peak), inset 0 0 24px rgba(0, 0, 0, 0.35); }
+}
+@keyframes ls-marquee-sweep {
+  0%   { transform: translateX(-140%) skewX(-16deg); }
+  9%   { transform: translateX(600%) skewX(-16deg); }
+  100% { transform: translateX(600%) skewX(-16deg); }
+}
+@keyframes ls-marquee-flash {
+  from { transform: scale(0.4); opacity: 1; }
+  to   { transform: scale(1.6); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* decorative animations only: the text movement itself is JS-driven and must keep scrolling (slower) */
+  .ls-marquee, .ls-marquee__arrow, .ls-marquee__sweep { animation: none !important; }
+}

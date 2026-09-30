@@ -1,0 +1,13 @@
+# content database, uploads, secrets and test logins - never in git
+data/
+
+# downloaded media from the old site (537 MB) - kept locally as backup only
+inhalte/medien/
+inhalte/fehlende-medien.txt
+
+node_modules/
+frontend/build/
+screenshots/
+.env
+.env.*
+*.log

@@ -1,0 +1,8 @@
+.git
+data
+inhalte/medien
+screenshots
+**/node_modules
+frontend/build
+.env
+.env.*
