@@ -4,7 +4,7 @@ import { SectionCard, Field, TextInput, TextArea, Toggle, Btn } from '@/pages/ad
 import { Plus, Trash2, Pencil, X } from 'lucide-react';
 import { toast } from 'sonner';
 
-const empty = { nome: '', slug: '', descrizione: '', seo_title: '', meta_description: '', ordine: 0, indicizzabile: true, stato: 'pubblicata' };
+const empty = { nome: '', slug: '', descrizione: '', testo_seo: '', seo_title: '', meta_description: '', ordine: 0, indicizzabile: true, stato: 'pubblicata' };
 
 export default function AdminCategories() {
   const [items, setItems] = useState([]);
@@ -36,6 +36,7 @@ export default function AdminCategories() {
             <Field label="Slug"><TextInput value={editing.slug} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} /></Field>
           </div>
           <Field label="Descrizione"><TextArea value={editing.descrizione} onChange={(e) => setEditing({ ...editing, descrizione: e.target.value })} /></Field>
+          <Field label="Testo SEO (sotto i profili, HTML: <h2>, <p>, <a>)"><TextArea rows={10} value={editing.testo_seo || ''} onChange={(e) => setEditing({ ...editing, testo_seo: e.target.value })} /></Field>
           <div className="grid sm:grid-cols-2 gap-x-4">
             <Field label="SEO title"><TextInput value={editing.seo_title} onChange={(e) => setEditing({ ...editing, seo_title: e.target.value })} /></Field>
             <Field label="Meta description"><TextInput value={editing.meta_description} onChange={(e) => setEditing({ ...editing, meta_description: e.target.value })} /></Field>

@@ -51,8 +51,27 @@ const models = read('modelle.json').map(({ pubblico, segreto }) => {
   };
 });
 
-const categories = read('kategorien.json').map(({ conteggio, ...c }) => ({ ...c, ...C.normalizeCategory(c), id: c.id }));
-const articles = read('artikel.json').map(({ modelle_correlate_dettaglio, ...a }) => localize({ ...a, ...C.normalizeArticle(a), id: a.id }));
+// new SEO content (inhalte/seo-inhalte.json, built by inhalte/seo_inhalte.py): guides, expanded articles, category texts
+const seoFile = path.join(SRC, 'seo-inhalte.json');
+const seo = fs.existsSync(seoFile) ? JSON.parse(fs.readFileSync(seoFile, 'utf8')) : { articles: [], categories: {} };
+
+const categories = read('kategorien.json').map(({ conteggio, ...c }) => {
+  const merged = { ...c, ...(seo.categories[c.slug] || {}) };
+  return { ...merged, ...C.normalizeCategory(merged), id: c.id };
+});
+
+const oldArticles = read('artikel.json').map(({ modelle_correlate_dettaglio, ...a }) => ({ ...a, ...C.normalizeArticle(a), id: a.id }));
+const seoBySlug = Object.fromEntries(seo.articles.map((a) => [a.slug, a]));
+const now = store.nowIso();
+const toArticle = (a, base = {}) => {
+  const n = C.normalizeArticle(a);
+  return { ...base, ...n, contenuto: C.sanitizeHtml(n.contenuto), id: base.id || a.id || require('crypto').randomUUID(),
+    created_at: base.created_at || now, data_aggiornamento: now, fonte: base.fonte || 'manuale' };
+};
+const articles = [
+  ...oldArticles.map((a) => (seoBySlug[a.slug] ? toArticle(seoBySlug[a.slug], a) : a)),
+  ...seo.articles.filter((a) => !oldArticles.some((o) => o.slug === a.slug)).map((a) => toArticle(a)),
+].map(localize);
 const settings = {
   ...read('einstellungen.json'),
   home_pellicola: pellicola.config || {},
@@ -62,7 +81,7 @@ const settings = {
 console.log(`Quelle: ${SRC}`);
 console.log(`Ziel:   ${store.DATA_DIR}\n`);
 console.log(`  ${models.length} Creatorinnen (alle veröffentlicht)`);
-console.log(`  ${categories.length} Kategorien, ${articles.length} Artikel, Einstellungen`);
+console.log(`  ${categories.length} Kategorien, ${articles.length} Artikel (davon ${seo.articles.length} aus seo-inhalte.json), Einstellungen`);
 for (const m of models) {
   const rd = C.readiness(m);
   if (!rd.is_ready) console.log(`  Hinweis: ${m.slug} fehlt für die Veröffentlichungs-Prüfung: ${rd.missing_required.join(', ')}`);

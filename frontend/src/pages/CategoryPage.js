@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getCategory } from '@/lib/api';
@@ -53,6 +54,10 @@ export default function CategoryPage() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5">
           {items.map((m, i) => <ModelCard key={m.slug} model={m} index={i} placement="category" context={slug} />)}
         </div>
+      )}
+      {categoria.testo_seo && (
+        <section className="article-body max-w-3xl mt-16 mb-6 text-foreground/85 leading-relaxed"
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(categoria.testo_seo, { USE_PROFILES: { html: true }, FORBID_TAGS: ['style', 'iframe', 'object', 'embed', 'form'], FORBID_ATTR: ['onerror', 'onload'] }) }} />
       )}
     </div>
   );

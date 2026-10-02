@@ -123,6 +123,7 @@ function normalizeCategory(input) {
     nome: String(d.nome || ''),
     slug: d.slug || '',
     descrizione: d.descrizione || '',
+    testo_seo: sanitizeHtml(d.testo_seo || ''), // long SEO text below the profiles
     seo_title: d.seo_title || '',
     meta_description: d.meta_description || '',
     immagine: d.immagine || '',

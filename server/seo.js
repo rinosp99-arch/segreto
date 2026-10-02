@@ -86,7 +86,7 @@ function pageFor(pathname, base) {
           { '@type': 'ListItem', position: 2, name: cat.nome, item: `${base}/categorie/${cat.slug}` },
         ],
       },
-      body: `<h1>${esc(cat.nome)}</h1>${cat.descrizione ? `<p>${esc(clean(cat.descrizione))}</p>` : ''}${modelList(items)}${categoryNav()}`,
+      body: `<h1>${esc(cat.nome)}</h1>${cat.descrizione ? `<p>${esc(clean(cat.descrizione))}</p>` : ''}${modelList(items)}${cat.testo_seo ? `<section>${cat.testo_seo}</section>` : ''}${categoryNav()}`,
     };
   }
 
