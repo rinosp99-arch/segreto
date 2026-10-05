@@ -18,12 +18,13 @@ COPY server/ ./server/
 COPY scripts/ ./scripts/
 # content snapshot of the old site (texts only; media are fetched by the import)
 COPY inhalte/daten ./inhalte/daten
-COPY inhalte/medien-liste.json ./inhalte/
+COPY inhalte/medien-liste.json inhalte/seo-inhalte.json ./inhalte/
 COPY --from=frontend /app/frontend/build ./frontend/build
 
 ENV NODE_ENV=production \
     DATA_DIR=/data \
-    PORT=8001
+    PORT=8001 \
+    IMPORT_MEDIEN_VON=https://secret-side.emergent.host
 WORKDIR /app/server
 EXPOSE 8001
-CMD ["node", "--disable-warning=ExperimentalWarning", "index.js"]
+CMD ["node", "--disable-warning=ExperimentalWarning", "start.js"]

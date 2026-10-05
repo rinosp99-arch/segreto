@@ -6,9 +6,17 @@ const path = require('path');
 
 const SRC = path.resolve(process.argv.find((a) => a.startsWith('--von='))?.slice(6) || path.join(__dirname, '..', 'inhalte'));
 const really = process.argv.includes('--ja');
+const onlyIfEmpty = process.argv.includes('--nur-wenn-leer'); // auto start: do nothing when content exists
+const onlyDb = process.argv.includes('--nur-db');             // write texts, skip the (slow) media download
+const onlyMedia = process.argv.includes('--nur-medien');      // media only, never touch the database
 
 const store = require('../server/db');
 const C = require('../server/content');
+
+if (onlyIfEmpty && store.all('models').length > 0) {
+  console.log('Import übersprungen: Inhalte sind schon da.');
+  process.exit(0);
+}
 
 const read = (f) => JSON.parse(fs.readFileSync(path.join(SRC, 'daten', f), 'utf8'));
 const mediaMap = JSON.parse(fs.readFileSync(path.join(SRC, 'medien-liste.json'), 'utf8'));
@@ -99,14 +107,15 @@ if (!really) {
   process.exit(0);
 }
 
-store.transaction(() => {
+if (!onlyMedia) store.transaction(() => {
   for (const col of ['models', 'categories', 'articles', 'settings']) store.db.prepare('DELETE FROM docs WHERE col = ?').run(col);
   models.forEach((m) => store.put('models', m));
   categories.forEach((c) => store.put('categories', c));
   articles.forEach((a) => store.put('articles', a));
   store.put('settings', settings);
 });
-console.log('\nDatenbank geschrieben.');
+if (!onlyMedia) console.log('\nDatenbank geschrieben.');
+if (onlyDb) process.exit(0);
 
 (async () => {
   let copied = 0;

@@ -8,7 +8,7 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "start": "node --disable-warning=ExperimentalWarning index.js",
+    "start": "node --disable-warning=ExperimentalWarning start.js",
     "import": "node --disable-warning=ExperimentalWarning ../scripts/import.js",
     "admin": "node --disable-warning=ExperimentalWarning ../scripts/admin.js"
   },
