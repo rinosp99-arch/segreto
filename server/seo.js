@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const store = require('./db');
 const { arr } = require('./content');
+const { baseUrl } = require('./site');
 
 const SITE = 'LATO SEGRETO';
 const HOME_TITLE = 'LATO SEGRETO — Il lato che non hai ancora visto';
@@ -20,9 +21,6 @@ const articles = () => store.all('articles').filter((a) => a.stato === 'pubblica
   .sort((a, b) => String(b.data_pubblicazione || '').localeCompare(String(a.data_pubblicazione || '')));
 const name = (m) => clean(m.nome_artistico || m.nome);
 
-function baseUrl(req) {
-  return (process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
-}
 const abs = (base, url) => (!url ? '' : /^https?:\/\//.test(url) ? url : `${base}${url.startsWith('/') ? '' : '/'}${url}`);
 
 const modelList = (items) => `<ul>${items.map((m) =>
@@ -176,9 +174,9 @@ function htmlHandler(frontendDir) {
   };
 }
 
-function sitemap(req, res) {
-  const base = baseUrl(req);
-  const urls = [
+// every URL of the sitemap for a base URL (also used by the AI capability seo.sitemap_status)
+function sitemapUrls(base) {
+  return [
     { loc: `${base}/`, lastmod: new Date().toISOString().slice(0, 10), pr: '1.0' },
     ...published().filter((m) => m.seo?.indexable !== false).map((m) => ({ loc: `${base}/modelle/${m.slug}`, lastmod: (m.updated_at || m.data_pubblicazione || '').slice(0, 10), pr: '0.9' })),
     ...categories().filter((c) => c.indicizzabile !== false).map((c) => ({ loc: `${base}/categorie/${c.slug}`, pr: '0.8' })),
@@ -186,6 +184,10 @@ function sitemap(req, res) {
     ...articles().filter((a) => a.indicizzabile !== false).map((a) => ({ loc: `${base}/articoli/${a.slug}`, lastmod: (a.data_aggiornamento || a.data_pubblicazione || '').slice(0, 10), pr: '0.7' })),
     ...store.all('landings').filter((l) => l.stato === 'pubblicata' || l.stato === 'published').map((l) => ({ loc: `${base}/${l.slug}`, pr: '0.8' })),
   ];
+}
+
+function sitemap(req, res) {
+  const urls = sitemapUrls(baseUrl(req));
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) =>
     `<url><loc>${esc(u.loc)}</loc>${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ''}<priority>${u.pr}</priority></url>`).join('\n')}\n</urlset>\n`;
   res.type('application/xml').set('Cache-Control', 'public, max-age=3600').send(xml);
@@ -195,4 +197,4 @@ function robots(req, res) {
   res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\nAllow: /api/uploads/\n\nSitemap: ${baseUrl(req)}/sitemap.xml\n`);
 }
 
-module.exports = { htmlHandler, sitemap, robots, pageFor };
+module.exports = { htmlHandler, sitemap, robots, pageFor, sitemapUrls };

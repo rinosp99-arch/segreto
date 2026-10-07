@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { admGetSettings, admUpdateSettings, changePassword, admAudit } from '@/lib/adminApi';
 import { SectionCard, Field, TextInput, TextArea, SelectInput, Toggle, Btn } from '@/pages/admin/ui';
+import AiControl from '@/pages/admin/AiControl';
 import { toast } from 'sonner';
 
 export default function AdminSettings() {
@@ -65,6 +66,8 @@ export default function AdminSettings() {
         </div>
         <div className="mt-3"><Btn onClick={save} variant="ghost">Salva integrazione</Btn></div>
       </SectionCard>
+
+      <AiControl />
 
       <SectionCard title="Sicurezza">
         <Field label="Nuova password" hint="Minimo 10 caratteri"><TextInput type="password" value={pw} onChange={(e) => setPw(e.target.value)} /></Field>

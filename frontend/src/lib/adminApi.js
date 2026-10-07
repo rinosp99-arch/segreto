@@ -33,6 +33,15 @@ export const admGetSettings = () => api.get('/admin/settings').then((r) => r.dat
 export const admUpdateSettings = (data) => api.put('/admin/settings', data).then((r) => r.data);
 export const admAudit = () => api.get('/admin/audit').then((r) => r.data);
 
+// AI interface (custom GPT): switches, keys, activity
+export const aiGetControl = () => api.get('/admin/ai/control').then((r) => r.data);
+export const aiSetControl = (patch) => api.patch('/admin/ai/control', patch).then((r) => r.data);
+export const aiGetKeys = () => api.get('/admin/ai/keys').then((r) => r.data);
+export const aiCreateKey = (name, preset) => api.post('/admin/ai/keys', { name, preset }).then((r) => r.data); // {key} is returned only here
+export const aiToggleKey = (id, disable) => api.post(`/admin/ai/keys/${id}/${disable ? 'disable' : 'enable'}`).then((r) => r.data);
+export const aiDeleteKey = (id) => api.delete(`/admin/ai/keys/${id}`).then((r) => r.data);
+export const aiGetActions = (limit = 20) => api.get('/admin/ai/actions', { params: { limit } }).then((r) => r.data);
+
 // analytics
 export const anOverview = (range) => api.get('/admin/analytics/overview', { params: { range } }).then((r) => r.data);
 export const anFunnel = (range, model_id) => api.get('/admin/analytics/funnel', { params: { range, model_id } }).then((r) => r.data);

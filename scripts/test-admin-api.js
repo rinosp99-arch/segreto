@@ -1,11 +1,13 @@
 // End-to-end check of the admin API against a running local server (uses data/test-admin.txt).
 //   node scripts/test-admin-api.js
+// DATA_DIR must be the data folder of that server (default: data/), e.g. a throw-away copy for tests.
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
 
 const B = process.env.BASE || 'http://localhost:8001';
-const creds = fs.readFileSync(path.join(__dirname, '..', 'data', 'test-admin.txt'), 'utf8');
+const DATA = path.resolve(process.env.DATA_DIR || path.join(__dirname, '..', 'data'));
+const creds = fs.readFileSync(path.join(DATA, 'test-admin.txt'), 'utf8');
 const email = creds.match(/E-Mail: (.+)/)[1].trim();
 const password = creds.match(/Passwort: (.+)/)[1].trim();
 
@@ -37,7 +39,7 @@ const ok = (label) => console.log(`  ok  ${label}`);
   const fdImg = new FormData(); fdImg.append('file', new Blob([img], { type: 'image/jpeg' }), 'foto.jpg');
   const upImg = await call('POST', '/api/admin/upload', fdImg);
   assert.equal(upImg.status, 200); assert.equal(upImg.json.tipo, 'image'); ok(`Bild hochgeladen -> ${upImg.json.url}`);
-  const vidPath = path.join(__dirname, '..', 'data', 'uploads', 'lato-segreto', 'uploads');
+  const vidPath = path.join(DATA, 'uploads', 'lato-segreto', 'uploads');
   const vid = fs.readFileSync(path.join(vidPath, fs.readdirSync(vidPath).find((f) => f.endsWith('.mp4'))));
   const fdVid = new FormData(); fdVid.append('file', new Blob([vid], { type: 'video/mp4' }), 'clip.mp4');
   const upVid = await call('POST', '/api/admin/upload', fdVid);
@@ -95,8 +97,8 @@ const ok = (label) => console.log(`  ok  ${label}`);
   token = ''; assert.equal((await call('GET', `/api/models/${pub.json.slug}`)).status, 404); ok('gelöscht -> nicht mehr öffentlich');
 
   // cleanup: test uploads + the soft-deleted test creator
-  for (const u of [upImg.json.url, upVid.json.url]) fs.rmSync(path.join(__dirname, '..', 'data', 'uploads', u.replace('/api/uploads/', '')));
+  for (const u of [upImg.json.url, upVid.json.url]) fs.rmSync(path.join(DATA, 'uploads', u.replace('/api/uploads/', '')));
   const { DatabaseSync } = require('node:sqlite');
-  new DatabaseSync(path.join(__dirname, '..', 'data', 'lato.db')).prepare("DELETE FROM docs WHERE col = 'models' AND id = ?").run(id);
+  new DatabaseSync(path.join(DATA, 'lato.db')).prepare("DELETE FROM docs WHERE col = 'models' AND id = ?").run(id);
   console.log('\nALLE ADMIN-TESTS BESTANDEN');
 })().catch((e) => { console.error('\nFEHLER:', e.message); process.exit(1); });

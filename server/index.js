@@ -5,6 +5,7 @@ const express = require('express');
 const compression = require('compression');
 const store = require('./db');
 const seo = require('./seo');
+const site = require('./site');
 
 const PORT = process.env.PORT || 8001;
 const FRONTEND_DIR = path.resolve(process.env.FRONTEND_DIR || path.join(__dirname, '..', 'frontend', 'build'));
@@ -24,13 +25,16 @@ app.use((req, res, next) => {
   next();
 });
 
-// www -> apex (or the other way round) once the real domain is set
+// www -> apex (or the other way round) once the real domain is set.
+// Never redirected: the health check, and the AI interface (a GPT keeps calling the host it imported,
+// and a wrong base URL must stay correctable from the previous host).
+const NO_HOST_REDIRECT = ['/api/health', '/api/v2/ai/'];
 app.use((req, res, next) => {
-  const canonical = process.env.PUBLIC_BASE_URL;
+  const canonical = site.configuredBaseUrl();
   if (canonical && process.env.NODE_ENV === 'production') {
     const want = new URL(canonical).host;
-    if (req.hostname && req.get('host') !== want && !req.path.startsWith('/api/health')) {
-      return res.redirect(301, `${canonical.replace(/\/+$/, '')}${req.originalUrl}`);
+    if (req.hostname && req.get('host') !== want && !NO_HOST_REDIRECT.some((p) => req.path.startsWith(p))) {
+      return res.redirect(301, `${canonical}${req.originalUrl}`);
     }
   }
   next();
@@ -41,8 +45,9 @@ app.use('/api/uploads', express.static(store.UPLOADS_DIR, {
   immutable: true, maxAge: '365d', index: false, dotfiles: 'ignore', fallthrough: false,
 }));
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', instance: site.INSTANCE_ID }));
 app.use('/api/admin', require('./admin'));
+app.use('/api/v2/ai', require('./ai'));
 app.use('/api', require('./public'));
 app.use('/api', (req, res) => res.status(404).json({ detail: 'Not Found' }));
 

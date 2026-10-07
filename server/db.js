@@ -20,12 +20,34 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS events_ts ON events (ts);
   CREATE INDEX IF NOT EXISTS events_tipo_model ON events (tipo, model_id);
+
+  -- AI interface (/api/v2/ai): keys are stored as SHA-256 hash only, the plain key is never written anywhere
+  CREATE TABLE IF NOT EXISTS ai_keys (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, prefix TEXT NOT NULL, key_hash TEXT UNIQUE NOT NULL, preset TEXT, scopes TEXT NOT NULL,
+    created_at TEXT NOT NULL, created_by TEXT, last_used_at TEXT, disabled INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS ai_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, request_id TEXT, key_id TEXT, key_prefix TEXT, key_name TEXT,
+    action TEXT, target TEXT, kind TEXT, ok INTEGER, code TEXT, session_id TEXT, reason TEXT, params TEXT, approval_id TEXT, summary TEXT
+  );
+  CREATE INDEX IF NOT EXISTS ai_actions_session ON ai_actions (session_id);
+  CREATE TABLE IF NOT EXISTS ai_versions (
+    id TEXT PRIMARY KEY, session_id TEXT, action TEXT, request_id TEXT, key_id TEXT, entity_col TEXT NOT NULL, entity_id TEXT NOT NULL,
+    before TEXT, after TEXT, ts TEXT NOT NULL, rolled_back INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS ai_versions_session ON ai_versions (session_id);
+  CREATE TABLE IF NOT EXISTS ai_approvals (
+    id TEXT PRIMARY KEY, token_hash TEXT UNIQUE NOT NULL, key_id TEXT NOT NULL, action TEXT NOT NULL, target TEXT, payload TEXT NOT NULL,
+    payload_hash TEXT NOT NULL, before TEXT, after TEXT, reason TEXT, session_id TEXT, request_id TEXT,
+    created_at TEXT NOT NULL, expires_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', used_at TEXT
+  );
+  CREATE TABLE IF NOT EXISTS ai_idempotency (key TEXT PRIMARY KEY, body_hash TEXT NOT NULL, response TEXT NOT NULL, created_at TEXT NOT NULL);
 `);
 
 const nowIso = () => new Date().toISOString();
 const uuid = () => crypto.randomUUID();
 
-// ---- documents (models, categories, articles, settings, landings, redirects) ----
+// ---- documents (models, categories, articles, settings, landings, redirects, config) ----
 const qAll = db.prepare('SELECT data FROM docs WHERE col = ? ORDER BY rowid');
 const qGet = db.prepare('SELECT data FROM docs WHERE col = ? AND id = ?');
 const qPut = db.prepare('INSERT INTO docs (col, id, data) VALUES (?, ?, ?) ON CONFLICT (col, id) DO UPDATE SET data = excluded.data');

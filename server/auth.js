@@ -82,6 +82,6 @@ function loginFailed(ip) {
 const loginOk = (ip) => attempts.delete(ip);
 
 module.exports = {
-  createAdmin, setPassword, checkLogin, signToken, requireAdmin, isAdminRequest,
+  createAdmin, setPassword, checkLogin, signToken, requireAdmin, isAdminRequest, adminFromRequest: decode,
   loginAllowed, loginFailed, loginOk, adminCount: () => qCount.get().n,
 };
