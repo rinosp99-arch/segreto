@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { getModels, getPellicola, track } from '@/lib/api';
 import { noteHomeSeen } from '@/lib/analytics';
@@ -15,6 +16,15 @@ const FILTERS = [
   { key: 'piu-viste', label: 'Più viste' },
   { key: 'in-tendenza', label: 'In tendenza' },
 ];
+
+// Text block at the end of the page. The server writes the same text into the HTML: server/seo.js (HOME_ABOUT) - change both.
+const HOME_ABOUT = {
+  title: 'Creator italiane su OnlyFans, scelte una per una',
+  text: [
+    'LATO SEGRETO raccoglie creator italiane presenti su OnlyFans e le presenta in due tempi: prima il lato pubblico, con foto, stile e personalità; poi il lato segreto, che si svela solo a chi sceglie di andare oltre. Ogni creator ha la sua pagina, con una breve presentazione e il link al suo spazio su OnlyFans.',
+    'Puoi sfogliare la collezione per categoria oppure partire dalla Rivista, dove trovi guide semplici: come funziona OnlyFans, quanto costa un abbonamento e come scoprire le creator italiane da seguire. Tutte le creator presenti sono maggiorenni e questo spazio è riservato a un pubblico adulto.',
+  ],
+};
 
 let lastHomeViewAt = 0;
 
@@ -41,13 +51,10 @@ export default function Home() {
 
   useEffect(() => {
     setSeo({
-      title: 'LATO SEGRETO — Il lato che non hai ancora visto',
-      description: 'Creator premium con un lato pubblico elegante e un lato segreto tutto da svelare. Scopri, incuriosisciti, premi.',
-      jsonLd: {
-        '@context': 'https://schema.org', '@type': 'WebSite', name: SITE.name,
-        url: window.location.origin,
-        potentialAction: { '@type': 'SearchAction', target: `${window.location.origin}/?q={search_term_string}`, 'query-input': 'required name=search_term_string' },
-      },
+      // same values as server/seo.js (HOME_TITLE, HOME_DESC)
+      title: 'LATO SEGRETO | Creator italiane su OnlyFans',
+      description: 'Creator italiane su OnlyFans, selezionate da LATO SEGRETO: profili, categorie e link a OnlyFans. Scopri il lato pubblico, poi decidi se premere.',
+      jsonLd: { '@context': 'https://schema.org', '@type': 'WebSite', name: SITE.name, url: `${window.location.origin}/` },
     });
   }, []);
 
@@ -96,10 +103,11 @@ export default function Home() {
       {/* intro */}
       <section className="pt-8 pb-6 sm:pt-12">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-          <div className="caps-label gold-text mb-3">{secret ? 'Modalità anteprima segreta' : 'Collezione riservata'}</div>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl leading-[0.95] mb-3 text-balance">
+          {/* the small line is the page heading (search term); the large line keeps its look as a paragraph */}
+          <h1 className="caps-label font-sans gold-text mb-3">{secret ? 'Modalità anteprima segreta' : 'Creator italiane su OnlyFans'}</h1>
+          <p className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[0.95] mb-3 text-balance">
             {secret ? 'Un assaggio di ciò che nascondono.' : 'Ognuna ha un lato che non hai ancora visto.'}
-          </h1>
+          </p>
           <p className="text-muted-foreground max-w-xl text-sm sm:text-base">
             {secret
               ? 'Questa è solo l’atmosfera. Il vero Lato Segreto si sblocca dentro il profilo di ogni creator.'
@@ -153,6 +161,13 @@ export default function Home() {
           {!showStrip && <div className="pb-10" />}
         </>
       )}
+
+      {/* what the site is, in words (also in the HTML written by the server) */}
+      <section className="max-w-3xl pt-6 pb-4" data-testid="home-about">
+        <h2 className="text-2xl sm:text-3xl mb-3">{HOME_ABOUT.title}</h2>
+        {HOME_ABOUT.text.map((t) => <p key={t} className="text-sm sm:text-base text-muted-foreground leading-relaxed mb-3">{t}</p>)}
+        <Link to="/articoli" className="caps-label gold-text">Vai alla Rivista</Link>
+      </section>
       </div>
     </div>
   );

@@ -58,13 +58,26 @@ Volljährigkeit kann nur ein Mensch im Admin setzen. Hochgeladene Dateien bleibe
 Die Basis-URL der Seite kommt aus `PUBLIC_BASE_URL`; sie kann über den GPT geändert werden (`config.site.update`), aber nur auf eine
 https-Domain, die schon auf diese App zeigt. Der gespeicherte Wert hat dann Vorrang vor der Variable.
 
+## Bilder, Titel und Google (seit 10/2026)
+
+- **Verkleinerte Bilder:** `/api/uploads/<datei>?w=640` liefert eine WebP-Kopie in dieser Breite (erlaubt: 320, 480, 640, 960, 1280, 1600;
+  mit `&f=jpg` als JPEG für Vorschaubilder in sozialen Netzen). Die Kopien entstehen einmal und liegen unter `data/cache/img`
+  (auf dem Server im Volume). Nach dem Start bereitet der Server sie im Hintergrund vor („Verkleinerte Bilder bereit“ im Log).
+  Der Ordner `cache/` darf jederzeit gelöscht werden, er baut sich neu auf. Die Originale bleiben unverändert.
+- **Kopf der Seite kommt vom Server** (`server/seo.js`): Titel, Beschreibung, Canonical, strukturierte Daten. Auf der Seite, auf der
+  ein Besucher ankommt, lässt die React-App diesen Kopf stehen (`frontend/src/lib/seo.js`). Der Text der Startseite steht zweimal:
+  `HOME_ABOUT` in `server/seo.js` und in `frontend/src/pages/Home.js` – immer beide ändern.
+- **Einmalige Inhalts-Korrekturen** (`server/migrate.js`) laufen bei jedem Start, ändern aber nur, was noch den alten Wert hat.
+- **Icons** (`favicon.ico`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`) liegen in `frontend/public`; neu erzeugen mit
+  `node scripts/icons.js`.
+
 ## Was wo ist
 
 | Pfad | Inhalt |
 |---|---|
 | `frontend/` | die bisherige React-Seite + Admin (Autopiloten entfernt) |
-| `server/` | Server: `public.js` Seite-API, `admin.js` Admin-API, `rules.js` gemeinsame Schreibregeln, `seo.js` HTML für Google + Sitemap, `site.js` Basis-URL, `db.js` Datenbank, `ai*.js` KI-Schnittstelle |
-| `scripts/` | Import, Admin anlegen, Admin-Test, KI-Test |
+| `server/` | Server: `public.js` Seite-API, `admin.js` Admin-API, `rules.js` gemeinsame Schreibregeln, `seo.js` HTML für Google + Sitemap, `images.js` verkleinerte Bilder, `migrate.js` einmalige Inhalts-Korrekturen, `site.js` Basis-URL, `db.js` Datenbank, `ai*.js` KI-Schnittstelle |
+| `scripts/` | Import, Admin anlegen, Admin-Test, KI-Test, `icons.js` (Icons neu erzeugen) |
 | `inhalte/` | Texte der alten Seite + Liste der Medien; `inhalte/medien/` = lokale Sicherungskopie (nicht in Git) |
 | `data/` | Datenbank + hochgeladene Medien (nicht in Git, auf dem Server = Volume) |
 

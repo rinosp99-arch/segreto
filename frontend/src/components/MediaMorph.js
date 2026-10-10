@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { mediaUrl } from '@/lib/api';
+import { bigUrl } from '@/lib/api';
 import { tryPlayVideo, pauseVideo, primeVideo, useVisibilityRetry } from '@/lib/videoAutoplay';
 import { track, once } from '@/lib/analytics';
 
@@ -60,13 +60,13 @@ function Layer({ item, active, reduced, grade, visible, impVisible = false, extr
     let alive = true;
     const im = new Image();
     im.onload = () => { if (alive && im.naturalWidth && im.naturalHeight) onNatural(im.naturalWidth, im.naturalHeight); };
-    im.src = mediaUrl(item.poster);
+    im.src = bigUrl(item.poster);
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item]);
 
   if (!item || !item.url) return null;
-  const src = mediaUrl(item.url);
+  const src = bigUrl(item.url);   // images: smaller copy; videos: unchanged
   const baseGrade = grade ? 'saturate(0.82) contrast(1.06) brightness(0.9) sepia(0.16) hue-rotate(-12deg)' : '';
   const common = {
     className: `absolute inset-0 h-full w-full object-${fit}`,
@@ -79,7 +79,7 @@ function Layer({ item, active, reduced, grade, visible, impVisible = false, extr
     },
   };
   if (item.tipo === 'video') {
-    const poster = mediaUrl(item.poster);
+    const poster = bigUrl(item.poster);
     return (
       <>
         {/* poster behind the video: visible while loading / if playback is refused -> never a black tile (FilmStrip pattern) */}

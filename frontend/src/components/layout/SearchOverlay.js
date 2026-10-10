@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X } from 'lucide-react';
-import { getModels, mediaUrl, track } from '@/lib/api';
+import { getModels, imgUrl, track } from '@/lib/api';
 import { setEntry } from '@/lib/analytics';
 
 export default function SearchOverlay({ open, onClose }) {
@@ -62,7 +62,7 @@ export default function SearchOverlay({ open, onClose }) {
               {results.map((m) => (
                 <button key={m.slug} onClick={() => go(m.slug)} data-testid="search-result"
                   className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-muted/50 transition-colors text-left">
-                  <img src={mediaUrl(m.foto_card)} alt={m.nome_artistico} className="h-12 w-12 rounded-lg object-cover" style={{ objectPosition: 'center 20%' }} />
+                  <img src={imgUrl(m.foto_card, 320)} alt={m.nome_artistico} className="h-12 w-12 rounded-lg object-cover" style={{ objectPosition: 'center 20%' }} />
                   <div>
                     <div className="font-serif text-lg leading-none">{m.nome_artistico}</div>
                     <div className="text-xs text-muted-foreground">{m.frase}</div>

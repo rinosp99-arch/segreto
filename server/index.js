@@ -6,6 +6,7 @@ const compression = require('compression');
 const store = require('./db');
 const seo = require('./seo');
 const site = require('./site');
+const images = require('./images');
 
 const PORT = process.env.PORT || 8001;
 const FRONTEND_DIR = path.resolve(process.env.FRONTEND_DIR || path.join(__dirname, '..', 'frontend', 'build'));
@@ -40,7 +41,8 @@ app.use((req, res, next) => {
   next();
 });
 
-// media: range requests (video seeking / iOS) are handled by express.static
+// media: ?w=<width> answers with a smaller copy of an image; range requests (video seeking / iOS) are handled by express.static
+app.use('/api/uploads', images.middleware);
 app.use('/api/uploads', express.static(store.UPLOADS_DIR, {
   immutable: true, maxAge: '365d', index: false, dotfiles: 'ignore', fallthrough: false,
 }));
@@ -69,4 +71,7 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   res.status(status).json({ detail: status === 404 ? 'Not Found' : 'Errore interno' });
 });
 
-app.listen(PORT, () => console.log(`LATO SEGRETO läuft auf http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`LATO SEGRETO läuft auf http://localhost:${PORT}`);
+  images.warmUp().catch((e) => console.error('Vorschaubilder:', e.message));
+});

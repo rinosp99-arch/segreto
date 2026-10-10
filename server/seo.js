@@ -5,10 +5,19 @@ const path = require('path');
 const store = require('./db');
 const { arr } = require('./content');
 const { baseUrl } = require('./site');
+const images = require('./images');
 
 const SITE = 'LATO SEGRETO';
-const HOME_TITLE = 'LATO SEGRETO — Il lato che non hai ancora visto';
-const HOME_DESC = 'Creator premium con un lato pubblico elegante e un lato segreto tutto da svelare. Scopri, incuriosisciti, premi.';
+const HOME_TITLE = 'LATO SEGRETO | Creator italiane su OnlyFans';
+const HOME_DESC = 'Creator italiane su OnlyFans, selezionate da LATO SEGRETO: profili, categorie e link a OnlyFans. Scopri il lato pubblico, poi decidi se premere.';
+// Text block of the home page. The same text is shown by React: frontend/src/pages/Home.js (HOME_ABOUT) - change both.
+const HOME_ABOUT = {
+  title: 'Creator italiane su OnlyFans, scelte una per una',
+  text: [
+    'LATO SEGRETO raccoglie creator italiane presenti su OnlyFans e le presenta in due tempi: prima il lato pubblico, con foto, stile e personalità; poi il lato segreto, che si svela solo a chi sceglie di andare oltre. Ogni creator ha la sua pagina, con una breve presentazione e il link al suo spazio su OnlyFans.',
+    'Puoi sfogliare la collezione per categoria oppure partire dalla Rivista, dove trovi guide semplici: come funziona OnlyFans, quanto costa un abbonamento e come scoprire le creator italiane da seguire. Tutte le creator presenti sono maggiorenni e questo spazio è riservato a un pubblico adulto.',
+  ],
+};
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const clean = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
@@ -24,8 +33,16 @@ const name = (m) => clean(m.nome_artistico || m.nome);
 const abs = (base, url) => (!url ? '' : /^https?:\/\//.test(url) ? url : `${base}${url.startsWith('/') ? '' : '/'}${url}`);
 
 const modelList = (items) => `<ul>${items.map((m) =>
-  `<li><a href="/modelle/${esc(m.slug)}">${m.foto_card ? `<img src="${esc(m.foto_card)}" alt="${esc(name(m))}" width="300" height="400" loading="lazy">` : ''}<strong>${esc(name(m))}</strong>${m.frase ? ` — ${esc(clean(m.frase))}` : ''}</a></li>`).join('')}</ul>`;
+  `<li><a href="/modelle/${esc(m.slug)}">${m.foto_card ? `<img src="${esc(images.url(m.foto_card, 480))}" alt="${esc(name(m))}" width="300" height="400" loading="lazy">` : ''}<strong>${esc(name(m))}</strong>${m.frase ? ` — ${esc(clean(m.frase))}` : ''}</a></li>`).join('')}</ul>`;
 const categoryNav = () => `<nav><h2>Categorie</h2><ul>${categories().map((c) => `<li><a href="/categorie/${esc(c.slug)}">${esc(c.nome)}</a></li>`).join('')}</ul></nav>`;
+
+// on every page: without JavaScript the navigation of the React app does not exist, these links replace it
+const siteNav = () => '<nav aria-label="Navigazione"><p><a href="/">LATO SEGRETO</a> · <a href="/articoli">Rivista</a></p></nav>';
+const siteFooter = () => `<footer><p>${Object.entries(LEGAL).map(([slug, label]) => `<a href="/${slug}">${esc(label)}</a>`).join(' · ')}</p></footer>`;
+const crumbs = (base, items) => ({
+  '@type': 'BreadcrumbList',
+  itemListElement: items.map((it, i) => ({ '@type': 'ListItem', position: i + 1, name: it.name, item: `${base}${it.path}` })),
+});
 
 const LEGAL = {
   privacy: 'Privacy', cookie: 'Cookie', termini: 'Termini e condizioni', '18-plus': 'Solo per maggiorenni (18+)',
@@ -41,8 +58,17 @@ function pageFor(pathname, base) {
     return {
       title: HOME_TITLE, description: HOME_DESC,
       image: models[0]?.foto_card,
-      jsonLd: { '@context': 'https://schema.org', '@type': 'WebSite', name: SITE, url: base },
-      body: `<h1>${esc(SITE)}</h1><p>${esc(HOME_DESC)}</p><section><h2>Le creator</h2>${modelList(models)}</section>${categoryNav()}`,
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@graph': [
+          { '@type': 'WebSite', '@id': `${base}/#website`, name: SITE, url: `${base}/`, inLanguage: 'it', publisher: { '@id': `${base}/#organization` } },
+          { '@type': 'Organization', '@id': `${base}/#organization`, name: SITE, url: `${base}/`, logo: `${base}/icon-512.png` },
+        ],
+      },
+      body: `<h1>${esc(SITE)}: creator italiane su OnlyFans</h1><p>${esc(HOME_DESC)}</p><section><h2>Le creator</h2>${modelList(models)}</section>`
+        + `<section><h2>${esc(HOME_ABOUT.title)}</h2>${HOME_ABOUT.text.map((t) => `<p>${esc(t)}</p>`).join('')}</section>`
+        + `<section><h2>Dalla rivista</h2><ul>${articles().slice(0, 6).map((a) => `<li><a href="/articoli/${esc(a.slug)}">${esc(a.titolo)}</a></li>`).join('')}</ul></section>`
+        + categoryNav(),
     };
   }
 
@@ -50,18 +76,24 @@ function pageFor(pathname, base) {
     const doc = published().find((x) => x.slug === m[1]);
     if (!doc) return null;
     const seo = doc.seo || {};
-    const title = clean(seo.title) || `${name(doc)} | ${SITE}`;
+    const title = clean(seo.title) || `${name(doc)} OnlyFans | Profilo su ${SITE}`; // same default in frontend ModelProfile.js
     const description = cut(seo.meta_description || doc.bio);
     const related = published().filter((x) => x.slug !== doc.slug && arr(x.categorie).some((c) => arr(doc.categorie).includes(c))).slice(0, 4);
     const cats = categories().filter((c) => arr(doc.categorie).includes(c.slug));
     return {
       title, description, image: clean(seo.og_image) || doc.foto_card, type: 'profile', noindex: seo.indexable === false,
       jsonLd: {
-        '@context': 'https://schema.org', '@type': 'ProfilePage',
-        mainEntity: { '@type': 'Person', name: name(doc), description: cut(doc.bio, 300), image: abs(base, doc.foto_card) },
+        '@context': 'https://schema.org',
+        '@graph': [
+          {
+            '@type': 'ProfilePage', url: `${base}/modelle/${doc.slug}`, name: title,
+            mainEntity: { '@type': 'Person', name: name(doc), description: cut(doc.bio, 300), image: abs(base, images.url(doc.foto_card, 1280, 'jpg')) },
+          },
+          crumbs(base, [{ name: 'Inizio', path: '/' }, ...cats.slice(0, 1).map((c) => ({ name: c.nome, path: `/categorie/${c.slug}` })), { name: name(doc), path: `/modelle/${doc.slug}` }]),
+        ],
       },
       body: `<article><h1>${esc(name(doc))}</h1>${doc.frase ? `<p><em>${esc(clean(doc.frase))}</em></p>` : ''}`
-        + `${doc.foto_copertina ? `<img src="${esc(doc.foto_copertina)}" alt="${esc(clean(seo.alt_default) || name(doc))}">` : ''}`
+        + `${doc.foto_copertina ? `<img src="${esc(images.url(doc.foto_copertina, 960))}" alt="${esc(clean(seo.alt_default) || name(doc))}">` : ''}`
         + `<p>${esc(clean(doc.bio))}</p>`
         + `${cats.length ? `<p>Categorie: ${cats.map((c) => `<a href="/categorie/${esc(c.slug)}">${esc(c.nome)}</a>`).join(', ')}</p>` : ''}`
         + `${arr(doc.tag).length ? `<p>${arr(doc.tag).map((t) => esc(t)).join(' · ')}</p>` : ''}</article>`
@@ -77,13 +109,7 @@ function pageFor(pathname, base) {
       title: clean(cat.seo_title) || `${cat.nome} | ${SITE}`,
       description: cut(cat.meta_description || cat.descrizione || `${cat.nome}: le creator di ${SITE}.`),
       image: cat.immagine || items[0]?.foto_card, noindex: cat.indicizzabile === false,
-      jsonLd: {
-        '@context': 'https://schema.org', '@type': 'BreadcrumbList',
-        itemListElement: [
-          { '@type': 'ListItem', position: 1, name: 'Inizio', item: base },
-          { '@type': 'ListItem', position: 2, name: cat.nome, item: `${base}/categorie/${cat.slug}` },
-        ],
-      },
+      jsonLd: { '@context': 'https://schema.org', ...crumbs(base, [{ name: 'Inizio', path: '/' }, { name: cat.nome, path: `/categorie/${cat.slug}` }]) },
       body: `<h1>${esc(cat.nome)}</h1>${cat.descrizione ? `<p>${esc(clean(cat.descrizione))}</p>` : ''}${modelList(items)}${cat.testo_seo ? `<section>${cat.testo_seo}</section>` : ''}${categoryNav()}`,
     };
   }
@@ -103,7 +129,7 @@ function pageFor(pathname, base) {
       title: clean(a.seo_title) || `${a.titolo} | ${SITE}`, description: cut(a.meta_description || a.estratto || stripTags(a.contenuto)),
       image: a.og_image || a.immagine_principale, type: 'article', noindex: a.indicizzabile === false,
       jsonLd: {
-        '@context': 'https://schema.org', '@type': 'Article', headline: a.titolo, image: abs(base, a.immagine_principale),
+        '@context': 'https://schema.org', '@type': 'Article', headline: a.titolo, image: abs(base, images.url(a.immagine_principale, 1280, 'jpg')),
         datePublished: a.data_pubblicazione, dateModified: a.data_aggiornamento || a.data_pubblicazione,
         author: { '@type': 'Organization', name: SITE }, publisher: { '@type': 'Organization', name: SITE },
       },
@@ -119,6 +145,7 @@ function pageFor(pathname, base) {
     if (l) {
       return {
         title: clean(l.seo_title || l.titolo) || SITE, description: cut(l.meta_description || l.sottotitolo || HOME_DESC),
+        clientHead: true, // the React page writes a richer head (FAQ data), it keeps control
         body: `<h1>${esc(l.titolo || l.slug)}</h1>${l.contenuto ? `<div>${l.contenuto}</div>` : ''}`,
       };
     }
@@ -128,11 +155,14 @@ function pageFor(pathname, base) {
 
 function render(template, page, url, base) {
   const noindex = page.noindex;
-  const image = abs(base, page.image);
+  const image = abs(base, images.url(page.image, 1280, 'jpg'));
   const head = [
     `<title>${esc(page.title)}</title>`,
     `<meta name="description" content="${esc(page.description)}" />`,
     `<meta name="robots" content="${noindex ? 'noindex,follow' : 'index,follow'}" />`,
+    '<meta name="rating" content="adult" />',
+    // tells setSeo() in the React app that this head is already complete for this path (see frontend/src/lib/seo.js)
+    noindex || page.clientHead ? '' : `<meta name="ls-head" content="${esc(new URL(url).pathname)}" />`,
     noindex ? '' : `<link rel="canonical" href="${esc(url)}" />`,
     `<meta property="og:title" content="${esc(page.title)}" />`,
     `<meta property="og:description" content="${esc(page.description)}" />`,
@@ -141,13 +171,16 @@ function render(template, page, url, base) {
     `<meta property="og:site_name" content="${SITE}" />`,
     image ? `<meta property="og:image" content="${esc(image)}" />` : '',
     `<meta name="twitter:card" content="${image ? 'summary_large_image' : 'summary'}" />`,
+    `<meta name="twitter:title" content="${esc(page.title)}" />`,
+    `<meta name="twitter:description" content="${esc(page.description)}" />`,
+    image ? `<meta name="twitter:image" content="${esc(image)}" />` : '',
     page.jsonLd ? `<script type="application/ld+json" id="ls-jsonld">${JSON.stringify(page.jsonLd).replace(/</g, '\\u003c')}</script>` : '',
   ].filter(Boolean).join('\n        ');
   return template
     .replace(/<title>[\s\S]*?<\/title>/, '')
     .replace(/<meta name="description"[^>]*>/, '')
     .replace('</head>', `        ${head}\n    </head>`)
-    .replace('<div id="root"></div>', `<div id="root"><div class="seo-snapshot">${page.body || ''}</div></div>`);
+    .replace('<div id="root"></div>', `<div id="root"><div class="seo-snapshot">${siteNav()}${page.body || ''}${siteFooter()}</div></div>`);
 }
 
 let templateCache = null;

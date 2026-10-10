@@ -12,6 +12,13 @@ const from = (process.env.IMPORT_MEDIEN_VON || '').replace(/\/+$/, '');
 const r = spawnSync(NODE, [QUIET, IMPORT, '--ja', '--nur-wenn-leer', '--nur-db'], { stdio: 'inherit' });
 if (r.status !== 0) console.error('Import der Texte fehlgeschlagen - Server startet trotzdem.');
 
+// 1b. one-off content corrections (each one checks the old value, so nothing happens the second time)
+try {
+  require('./migrate').run();
+} catch (e) {
+  console.error('Inhalts-Korrekturen nicht ausgeführt:', e.message);
+}
+
 // 2. first admin from one-time variables (only if there is no admin yet)
 try {
   const auth = require('./auth');

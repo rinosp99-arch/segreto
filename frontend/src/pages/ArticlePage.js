@@ -1,7 +1,7 @@
 import DOMPurify from 'dompurify';
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getArticle, track, mediaUrl } from '@/lib/api';
+import { getArticle, track, bigUrl } from '@/lib/api';
 import { setSeo, setNotFoundSeo, SITE } from '@/lib/seo';
 import { getSessionId } from '@/lib/session';
 import { ModelCard } from '@/components/ModelCard';
@@ -37,7 +37,7 @@ export default function ArticlePage() {
       </nav>
       <h1 className="text-4xl sm:text-5xl font-serif leading-tight mb-3">{a.titolo}</h1>
       <div className="text-sm text-muted-foreground mb-6">{a.autore} · {(a.data_pubblicazione || '').slice(0, 10)}</div>
-      {a.immagine_principale && <div className="rounded-2xl overflow-hidden mb-8 aspect-[16/9]"><img src={mediaUrl(a.immagine_principale)} alt={a.alt_text || a.titolo} className="h-full w-full object-cover" /></div>}
+      {a.immagine_principale && <div className="rounded-2xl overflow-hidden mb-8 aspect-[16/9]"><img src={bigUrl(a.immagine_principale)} alt={a.alt_text || a.titolo} className="h-full w-full object-cover" /></div>}
       <div className="article-body max-w-none text-foreground/90 leading-relaxed"
         style={{ fontSize: '1.05rem' }} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(a.contenuto || '', { USE_PROFILES: { html: true }, FORBID_TAGS: ['style', 'iframe', 'object', 'embed', 'form'], FORBID_ATTR: ['onerror', 'onload'] }) }} />
       {a.modelle_correlate_dettaglio?.length > 0 && (

@@ -14,6 +14,7 @@ export default function CookieBanner() {
         transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
         className="fixed bottom-3 left-3 right-3 md:left-auto md:right-4 md:max-w-md z-[90]"
         data-testid="cookie-banner"
+        data-nosnippet=""
       >
         <div className="glass rounded-2xl p-4 card-elev-2">
           <div className="caps-label gold-text mb-1">Preferenze cookie</div>

@@ -1,6 +1,6 @@
 /* Profile-to-profile navigation (swipe / arrows): published-only ring in the Home default order, circular.
    Keeps only what the gesture needs (slug, name, card image) — never the full profiles. */
-import { getModels, mediaUrl } from '@/lib/api';
+import { getModels, imgUrl } from '@/lib/api';
 import { debugLog } from '@/lib/log';
 
 let ringCache = null;          // [{ slug, nome_artistico, foto_card }]
@@ -35,7 +35,7 @@ export function neighborsOf(ring, slug) {
 
 export function preloadCard(m) {
   if (!m || !m.foto_card) return;
-  try { const im = new Image(); im.decoding = 'async'; im.src = mediaUrl(m.foto_card); } catch (e) { debugLog('nav.preload', e); }
+  try { const im = new Image(); im.decoding = 'async'; im.src = imgUrl(m.foto_card, 640); } catch (e) { debugLog('nav.preload', e); }
 }
 
 /* Mode carry-over between profiles: set right before navigate(), consumed once by the next ModelProfile mount.

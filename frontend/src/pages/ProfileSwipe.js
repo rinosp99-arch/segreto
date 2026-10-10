@@ -7,7 +7,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import ModelProfile from '@/pages/ModelProfile';
 import { getRing, neighborsOf, preloadCard, setCarry } from '@/lib/profileNav';
-import { track, mediaUrl } from '@/lib/api';
+import { track, imgUrl } from '@/lib/api';
 import { getSessionId } from '@/lib/session';
 import { noteNavigation, setEntry, currentProfile, secondsSinceProfileOpen } from '@/lib/analytics';
 import { debugLog } from '@/lib/log';
@@ -184,7 +184,7 @@ export default function ProfileSwipe() {
       {showUnder && (
         <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden" style={{ opacity: underOpacity, transition: dragging ? 'none' : 'opacity 200ms ease' }} data-testid="swipe-underlay">
           {target.foto_card && (
-            <img src={mediaUrl(target.foto_card)} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: 'center 20%', filter: 'blur(14px) brightness(0.45) saturate(0.85)', transform: `scale(${1.08 - progress * 0.04})` }} />
+            <img src={imgUrl(target.foto_card, 640)} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: 'center 20%', filter: 'blur(14px) brightness(0.45) saturate(0.85)', transform: `scale(${1.08 - progress * 0.04})` }} />
           )}
           <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(5,2,6,0.35), rgba(5,2,6,0.75))' }} />
           <div className={`absolute inset-x-0 top-1/2 -translate-y-1/2 flex flex-col items-center gap-2 px-6 ${dir === 'next' ? 'text-right' : 'text-left'}`}>

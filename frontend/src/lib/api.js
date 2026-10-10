@@ -23,6 +23,21 @@ export function mediaUrl(url) {
   return url;
 }
 
+// Smaller copy of an uploaded image (built once by the server, see server/images.js; widths 320-1600, WebP).
+// Videos, external URLs and frontend files are returned like mediaUrl() does.
+const UPLOADED_IMAGE = /^\/api\/uploads\/.+\.(jpe?g|png|webp)$/i;
+export function imgUrl(url, w) {
+  return url && UPLOADED_IMAGE.test(url) ? `${BACKEND_URL}${url}?w=${w}` : mediaUrl(url);
+}
+// srcset for an <img> that is shown in different sizes (cards); undefined when there are no smaller copies
+export function imgSrcSet(url, widths = [320, 480, 640, 960]) {
+  return url && UPLOADED_IMAGE.test(url) ? widths.map((w) => `${imgUrl(url, w)} ${w}w`).join(', ') : undefined;
+}
+// Large pictures (profile, article): one size per visit, so preloading and display always ask for the same file.
+const SCREEN_PX = typeof window === 'undefined' ? 1280 : Math.min(window.innerWidth, 1400) * Math.min(window.devicePixelRatio || 1, 3);
+const BIG_WIDTH = SCREEN_PX <= 960 ? 960 : SCREEN_PX <= 1300 ? 1280 : 1600;
+export const bigUrl = (url) => imgUrl(url, BIG_WIDTH);
+
 // ---- public endpoints ----
 export const getModels = (params) => api.get('/models', { params }).then((r) => r.data);
 export const getModel = (slug) => api.get(`/models/${slug}`).then((r) => r.data);

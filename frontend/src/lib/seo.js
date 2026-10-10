@@ -22,7 +22,19 @@ function upsertLink(rel, href) {
   el.setAttribute('href', href);
 }
 
+// The server writes a complete head for the URL the visitor arrives on and marks it with <meta name="ls-head" content="/path">
+// (server/seo.js). That head stays as it is, so search engines read the same before and after JavaScript.
+// The mark is dropped as soon as another page is opened: from then on the pages write the head themselves.
+function serverHead() {
+  const el = document.head.querySelector('meta[name="ls-head"]');
+  if (!el) return false;
+  if (el.getAttribute('content') === (window.location.pathname.replace(/\/+$/, '') || '/')) return true;
+  el.remove();
+  return false;
+}
+
 export function setSeo({ title, description, canonical, image, type = 'website', jsonLd, noindex = false }) {
+  if (serverHead() && !noindex) return;
   if (title) document.title = title;
   if (description) upsertMeta('name', 'description', description);
   upsertMeta('name', 'robots', noindex ? 'noindex,nofollow' : 'index,follow');
@@ -66,6 +78,8 @@ export const SITE = {
 // The static host always answers HTTP 200 for SPA routes (FRONTEND_HTTP_STATUS = 200); Google's recommended handling for
 // JS sites is: noindex + no canonical + real 404 UI (SEO_NOT_FOUND_STATE = NOINDEX + NO_CANONICAL + 404_UI).
 export function setNotFoundSeo() {
+  const mark = document.head.querySelector('meta[name="ls-head"]');
+  if (mark) mark.remove();
   document.title = 'Pagina non trovata | Lato Segreto';
   upsertMeta('name', 'description', 'Pagina non trovata');
   upsertMeta('name', 'robots', 'noindex, follow');

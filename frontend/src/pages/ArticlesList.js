@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getArticles, mediaUrl } from '@/lib/api';
+import { getArticles, imgUrl } from '@/lib/api';
 import { setSeo, SITE } from '@/lib/seo';
 
 export default function ArticlesList() {
@@ -22,7 +22,7 @@ export default function ArticlesList() {
         <div className="grid sm:grid-cols-2 gap-6">
           {items.map((a) => (
             <Link key={a.slug} to={`/articoli/${a.slug}`} className="group rounded-2xl overflow-hidden border border-border/60 bg-card card-elev hover:card-elev-2 transition-shadow" data-testid="article-card">
-              <div className="aspect-[16/9] overflow-hidden"><img src={mediaUrl(a.immagine_principale)} alt={a.alt_text || a.titolo} className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" /></div>
+              <div className="aspect-[16/9] overflow-hidden"><img src={imgUrl(a.immagine_principale, 960)} alt={a.alt_text || a.titolo} className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" /></div>
               <div className="p-5">
                 <div className="font-serif text-2xl mb-2 leading-tight">{a.titolo}</div>
                 <p className="text-sm text-muted-foreground line-clamp-2">{a.estratto}</p>

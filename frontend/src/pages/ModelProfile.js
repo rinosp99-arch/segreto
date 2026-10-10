@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { ArrowLeft, Lock, ArrowRight, Mail, X, Sparkles, Volume2, VolumeX } from 'lucide-react';
-import { getModel, getModelSecret, getRelated, track, mediaUrl } from '@/lib/api';
+import { getModel, getModelSecret, getRelated, track, imgUrl, bigUrl } from '@/lib/api';
 import { MediaMorph } from '@/components/MediaMorph';
 import { ModelCard } from '@/components/ModelCard';
 import { setSeo, setNotFoundSeo, SITE } from '@/lib/seo';
@@ -118,8 +118,8 @@ export default function ModelProfile() {
     const preloadSecret = (s) => {
       (s.media_pairs || []).forEach((p) => {
         if (p.segreto?.url) {
-          if (p.tipo === 'image') { const im = new Image(); im.src = mediaUrl(p.segreto.url); }
-          else if (p.segreto.poster) { const im = new Image(); im.src = mediaUrl(p.segreto.poster); }
+          if (p.tipo === 'image') { const im = new Image(); im.src = bigUrl(p.segreto.url); }
+          else if (p.segreto.poster) { const im = new Image(); im.src = bigUrl(p.segreto.poster); }
         }
       });
     };
@@ -133,7 +133,7 @@ export default function ModelProfile() {
         meta: { ...(carry ? { via: carry.via } : {}), mode: openSecret ? 'secret' : 'public', profiles_seen: entry.profiles_seen, profile_views: entry.profile_views, ...(entry.position !== undefined ? { position: entry.position } : {}) },
       });
       setSeo({
-        title: m.seo?.title || `${m.nome_artistico} | ${SITE.name}`,
+        title: m.seo?.title || `${m.nome_artistico} OnlyFans | Profilo su ${SITE.name}`,   // same default in server/seo.js
         description: m.seo?.meta_description || m.bio,
         image: m.seo?.og_image || m.foto_card, type: 'profile',
         noindex: !!m.anteprima,
@@ -549,7 +549,7 @@ export default function ModelProfile() {
               ) : (
                 <div className="p-4">
                   <div className="flex justify-between items-start mb-3"><span className="caps-label gold-text inline-flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> Messaggio</span><button onClick={() => { setEnvelopeVisible(false); track({ tipo: 'cta_dismiss', model_slug: slug, session_id: getSessionId(), cta_source: 'of_click_message', ...ctaOf('of_click_message'), valore: secondsSinceProfileOpen() }); }} data-testid="envelope-dismiss-button" className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-muted/50"><X className="h-4 w-4" /></button></div>
-                  {secretData?.messaggio_35s?.foto && <div className="rounded-xl overflow-hidden mb-3" style={{ aspectRatio: '16/10' }}><img src={mediaUrl(secretData.messaggio_35s.foto)} alt="" className="h-full w-full object-cover" style={{ filter: 'saturate(0.82) hue-rotate(-12deg)', objectPosition: 'center 20%' }} /></div>}
+                  {secretData?.messaggio_35s?.foto && <div className="rounded-xl overflow-hidden mb-3" style={{ aspectRatio: '16/10' }}><img src={imgUrl(secretData.messaggio_35s.foto, 960)} alt="" className="h-full w-full object-cover" style={{ filter: 'saturate(0.82) hue-rotate(-12deg)', objectPosition: 'center 20%' }} /></div>}
                   <p className="text-sm leading-relaxed mb-4">{secretData?.messaggio_35s?.testo}</p>
                   <button onClick={() => openOnlyFans('of_click_message')} data-testid="envelope-cta" className="btn-gold w-full rounded-xl py-3 text-sm inline-flex items-center justify-center gap-2">{secretData?.messaggio_35s?.cta_testo || ctaLabel} <ArrowRight className="h-4 w-4" /></button>
                   <div className="text-center text-[11px] text-muted-foreground mt-2">Apri il mio profilo OnlyFans</div>

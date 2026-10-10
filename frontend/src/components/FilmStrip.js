@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { mediaUrl, track } from '@/lib/api';
+import { mediaUrl, imgUrl, track } from '@/lib/api';
 import { getSessionId } from '@/lib/session';
 import { once, setEntry } from '@/lib/analytics';
 
@@ -39,7 +39,7 @@ function Tile({ item, secret, index, tileW, mgr, sectionInView, onOpen, onVideoV
 
   const side = secret ? item.segreto : item.pubblico;
   const vsrc = mediaUrl(side?.video_url || '');
-  const poster = mediaUrl(side?.poster_url || item.foto_card || '');
+  const poster = imgUrl(side?.poster_url || item.foto_card || '', 640);
 
   // iOS Safari: muted/playsInline MUST be set (as properties) BEFORE play()
   const tryPlay = useCallback(() => {

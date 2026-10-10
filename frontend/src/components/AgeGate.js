@@ -17,6 +17,7 @@ export default function AgeGate() {
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         style={{ background: 'radial-gradient(120% 90% at 50% 10%, rgba(20,15,10,0.9), rgba(0,0,0,0.97))' }}
         data-testid="age-gate"
+        data-nosnippet=""
       >
         <motion.div
           initial={{ y: 24, opacity: 0, scale: 0.98 }} animate={{ y: 0, opacity: 1, scale: 1 }}
