@@ -28,7 +28,7 @@ export default function CategoryPage() {
           ],
         },
       });
-    }).catch(() => { setNotFoundSeo(); setNotFound(true); });
+    }).catch((e) => { if (isNotFound(e)) setNotFoundSeo(); setNotFound(true); });
   }, [slug]);
 
   if (notFound) return (

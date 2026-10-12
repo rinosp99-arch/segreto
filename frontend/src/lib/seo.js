@@ -77,6 +77,9 @@ export const SITE = {
 // Phase 14C — SEO state for a dynamic resource that does not exist (profile / category / article / landing).
 // The static host always answers HTTP 200 for SPA routes (FRONTEND_HTTP_STATUS = 200); Google's recommended handling for
 // JS sites is: noindex + no canonical + real 404 UI (SEO_NOT_FOUND_STATE = NOINDEX + NO_CANONICAL + 404_UI).
+// true only when the API really answered "does not exist" (404); a failed or blocked request must never mark a page noindex
+export const isNotFound = (err) => err?.response?.status === 404;
+
 export function setNotFoundSeo() {
   const mark = document.head.querySelector('meta[name="ls-head"]');
   if (mark) mark.remove();

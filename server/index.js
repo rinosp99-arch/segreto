@@ -47,6 +47,8 @@ app.use('/api/uploads', express.static(store.UPLOADS_DIR, {
   immutable: true, maxAge: '365d', index: false, dotfiles: 'ignore', fallthrough: false,
 }));
 
+// API answers are data for the React app: search engines may read them (robots.txt), but must not list them as pages
+app.use('/api', (req, res, next) => { res.set('X-Robots-Tag', 'noindex'); next(); });
 app.get('/api/health', (req, res) => res.json({ status: 'ok', instance: site.INSTANCE_ID }));
 app.use('/api/admin', require('./admin'));
 app.use('/api/v2/ai', require('./ai'));

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { anOverview, anFunnel } from '@/lib/adminApi';
 import { SectionCard } from '@/pages/admin/ui';
+import Sources from '@/pages/admin/Sources';
 import { Eye, Flame, MousePointerClick, TrendingUp } from 'lucide-react';
 
 const RANGES = [{ k: 'oggi', l: 'Oggi' }, { k: '7g', l: '7 giorni' }, { k: '30g', l: '30 giorni' }];
@@ -77,6 +78,8 @@ export default function Dashboard() {
           </div>
         </SectionCard>
       </div>
+
+      <Sources range={range} />
     </div>
   );
 }

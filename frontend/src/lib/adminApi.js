@@ -44,6 +44,7 @@ export const aiGetActions = (limit = 20) => api.get('/admin/ai/actions', { param
 
 // analytics
 export const anOverview = (range) => api.get('/admin/analytics/overview', { params: { range } }).then((r) => r.data);
+export const anSources = (range) => api.get('/admin/analytics/sources', { params: { range } }).then((r) => r.data);
 export const anFunnel = (range, model_id) => api.get('/admin/analytics/funnel', { params: { range, model_id } }).then((r) => r.data);
 
 // upload

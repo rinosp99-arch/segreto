@@ -1,24 +1,8 @@
 // Lightweight, privacy-safe client state (no sensitive data)
+import { getVisitorId } from '@/lib/analytics';
 
-function uuid() {
-  if (crypto && crypto.randomUUID) return crypto.randomUUID();
-  return 'xxxxxxxxyxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
-
-// Anonymous visitor id (persistent). Same value as analytics.getVisitorId(); kept for the existing call sites.
-export function getSessionId() {
-  let sid = localStorage.getItem('ls_visitor_id') || localStorage.getItem('ls_session_id');
-  if (!sid) {
-    sid = uuid();
-  }
-  if (!localStorage.getItem('ls_session_id')) localStorage.setItem('ls_session_id', sid);
-  if (!localStorage.getItem('ls_visitor_id')) localStorage.setItem('ls_visitor_id', sid);
-  return sid;
-}
+// Anonymous visitor id. Same value as analytics.getVisitorId() (permanent only after "Accetta"); kept for the existing call sites.
+export const getSessionId = () => getVisitorId();
 
 // 18+ gate
 export const isAgeConfirmed = () => localStorage.getItem('ls_age_ok') === '1';
@@ -26,7 +10,7 @@ export const confirmAge = () => localStorage.setItem('ls_age_ok', '1');
 
 // cookie consent: null | 'accept' | 'reject'
 export const getConsent = () => localStorage.getItem('ls_consent');
-export const setConsent = (v) => localStorage.setItem('ls_consent', v);
+export const setConsent = (v) => { localStorage.setItem('ls_consent', v); getVisitorId(); };   // "Rifiuta" drops a stored id at once
 
 // discovered secret sides
 export function getDiscovered() {

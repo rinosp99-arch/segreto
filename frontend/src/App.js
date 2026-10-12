@@ -54,10 +54,11 @@ export default function App() {
     getSessionId();
     getVisit();                                   // visit_id: new tab or 30 min of inactivity -> new visit
     const attr = captureAttribution();
-    const fresh = new URLSearchParams(window.location.search).get('ref');
-    if (fresh && attr && attr.ref) {
-      startCampaignVisit(attr.ref);               // a campaign landing never mixes with the previous journey
-      track({ tipo: 'landing', model_slug: attr.ref, session_id: getSessionId(), entry_source: 'campaign' });
+    const query = new URLSearchParams(window.location.search);
+    const fresh = query.get('ref') || query.get('fonte') || query.get('utm_source');
+    if (fresh && attr) {
+      startCampaignVisit(attr.ref || `${attr.fonte}:${attr.campagna}`);   // a tagged landing never mixes with the previous journey
+      track({ tipo: 'landing', ...(attr.ref ? { model_slug: attr.ref } : {}), session_id: getSessionId(), entry_source: 'campaign' });
     }
   }, []);
 

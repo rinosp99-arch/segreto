@@ -5,7 +5,7 @@ import { ArrowLeft, Lock, ArrowRight, Mail, X, Sparkles, Volume2, VolumeX } from
 import { getModel, getModelSecret, getRelated, track, imgUrl, bigUrl } from '@/lib/api';
 import { MediaMorph } from '@/components/MediaMorph';
 import { ModelCard } from '@/components/ModelCard';
-import { setSeo, setNotFoundSeo, SITE } from '@/lib/seo';
+import { setSeo, setNotFoundSeo, isNotFound, SITE } from '@/lib/seo';
 import { getAudio } from '@/lib/sound';
 import { urlsForAudioCfg } from '@/lib/tracks';
 import { Instagram, Music2, Send, Youtube, Facebook, Globe, Twitter, Link2 } from 'lucide-react';
@@ -153,14 +153,14 @@ export default function ModelProfile() {
         markDiscovered(slug);
         track({ tipo: 'secret_activate', model_slug: slug, session_id: getSessionId(), valore: 0, mode: 'secret', meta: { via: 'swipe' } });
         carriedSecret.current = { audio: sd?.regia?.audio || {} };
-      }).catch(() => { if (alive) { setNotFoundSeo(); setNotFound(true); } });
+      }).catch((e) => { if (alive) { if (isNotFound(e)) setNotFoundSeo(); setNotFound(true); } });
     } else {
       getModel(slug).then((m) => {
         if (!alive) return;
         setModel(m);
         afterModel(m);
         getModelSecret(slug).then((sd) => { if (!alive) return; setSecretData(sd); preloadSecret(sd); }).catch(() => {});
-      }).catch(() => { if (alive) { setNotFoundSeo(); setNotFound(true); } });
+      }).catch((e) => { if (alive) { if (isNotFound(e)) setNotFoundSeo(); setNotFound(true); } });
     }
     return () => {
       alive = false;

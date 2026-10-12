@@ -6,9 +6,9 @@
    (the backend only derives device/browser FAMILY from the user agent).
 
    IDENTITY
-   - visitor_id : anonymous random UUID, persistent (localStorage `ls_visitor_id`). Same value as the historical
-                  `ls_session_id`, so old and new data join on the same visitor. Still sent as `session_id` for
-                  backward compatibility with legacy dashboards.
+   - visitor_id : anonymous random UUID. Persistent (localStorage `ls_visitor_id`) ONLY after the visitor chose "Accetta"
+                  in the cookie banner; without that choice (or after "Rifiuta") it is the id of the current visit and
+                  nothing permanent is stored. Still sent as `session_id` for backward compatibility.
    - visit_id   : one per VISIT. Stored in sessionStorage (`ls_visit`, i.e. per browser tab) and rotated when the
                   visitor has been inactive for more than VISIT_TIMEOUT_MIN minutes (30, industry standard) or a new
                   campaign landing (`?ref=`) starts. Everything inside a visit shares the same visit_id and a
@@ -49,6 +49,10 @@ function writeJson(store, key, v) { try { store.setItem(key, JSON.stringify(v));
 export function getVisitorId() {
   if (!hasWindow) return '';
   try {
+    if (localStorage.getItem('ls_consent') !== 'accept') {
+      localStorage.removeItem('ls_visitor_id'); localStorage.removeItem('ls_session_id');   // also clears ids stored before the choice
+      return getVisit().id;
+    }
     let v = localStorage.getItem('ls_visitor_id');
     if (!v) {
       v = localStorage.getItem('ls_session_id') || uuid();     // continuity with the historical id
@@ -299,6 +303,7 @@ function isBurstDuplicate(evt) {
 /* Public API: fire-and-forget. `_beacon: true` forces an immediate beacon flush (unload paths). */
 export function track(evt) {
   if (!hasWindow || !evt || !evt.tipo) return;
+  if (navigator.webdriver) return;                  // automated browsers (tests, monitoring) are not visitors
   try {
     installListeners();
     if (isBurstDuplicate(evt)) return;

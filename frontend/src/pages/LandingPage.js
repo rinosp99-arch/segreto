@@ -43,7 +43,7 @@ export default function LandingPage() {
         type: 'website',
         jsonLd,
       });
-    }).catch(() => { setNotFoundSeo(); setNotFound(true); });
+    }).catch((e) => { if (isNotFound(e)) setNotFoundSeo(); setNotFound(true); });
   }, [slug]);
 
   if (notFound) return <NotFound />;

@@ -2,7 +2,7 @@ import DOMPurify from 'dompurify';
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getArticle, track, bigUrl } from '@/lib/api';
-import { setSeo, setNotFoundSeo, SITE } from '@/lib/seo';
+import { setSeo, setNotFoundSeo, isNotFound, SITE } from '@/lib/seo';
 import { getSessionId } from '@/lib/session';
 import { ModelCard } from '@/components/ModelCard';
 import { ArrowLeft } from 'lucide-react';
@@ -24,7 +24,7 @@ export default function ArticlePage() {
         type: 'article', noindex: !art.indicizzabile,
         jsonLd: { '@context': 'https://schema.org', '@type': 'Article', headline: art.titolo, image: art.immagine_principale, datePublished: art.data_pubblicazione, author: { '@type': 'Organization', name: art.autore } },
       });
-    }).catch(() => { setNotFoundSeo(); setNotFound(true); });
+    }).catch((e) => { if (isNotFound(e)) setNotFoundSeo(); setNotFound(true); });
   }, [slug]);
 
   if (notFound) return <div className="max-w-2xl mx-auto px-4 py-24 text-center" data-testid="article-not-found"><div className="font-serif text-3xl mb-3">Articolo non trovato</div><Link to="/articoli" className="btn-gold inline-block rounded-xl px-6 py-3 text-sm">Torna alla rivista</Link></div>;

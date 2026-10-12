@@ -71,12 +71,25 @@ https-Domain, die schon auf diese App zeigt. Der gespeicherte Wert hat dann Vorr
 - **Icons** (`favicon.ico`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`) liegen in `frontend/public`; neu erzeugen mit
   `node scripts/icons.js`.
 
+## Herkunft der Besucher und Suchmaschinen (seit 10/2026)
+
+- **Dashboard → „Provenienza dei visitatori“:** Besuche, gesehene Profile und OnlyFans-Klicks je Quelle (Instagram, Google, direkt …) für
+  heute, 7 und 30 Tage, jeweils mit Vergleich zum Zeitraum davor; dazu Besuche je Tag, meistgesehene Profile und markierte Links.
+  Die Zahlen kommen aus der eigenen Zählung der Seite (`server/sources.js`, Tabelle `events`), nicht von einem fremden Dienst.
+- **Markierte Links** (im Dashboard unter „Crea un link marcato“): `https://<domain>/?fonte=instagram&campagna=bio` oder dasselbe an
+  einer Profil-Adresse. Wer so ankommt, zählt sicher unter der Quelle – Apps wie Instagram geben die Herkunft sonst oft nicht weiter.
+- **Cookie-Leiste:** Eine dauerhafte Besucher-Kennung wird nur nach „Accetta“ gespeichert. Ohne Auswahl und nach „Rifiuta“ gilt die
+  Kennung nur für den laufenden Besuch. Automatische Browser (Tests) werden nicht gezählt.
+- **robots.txt:** Die öffentliche Schnittstelle (`/api/models`, `/api/articles` …) muss für Suchmaschinen lesbar bleiben – die Seite lädt
+  ihre Inhalte von dort. Gesperrt sind nur `/admin`, `/api/admin`, `/api/v2/` und `/api/track`. Wird `/api/` ganz gesperrt, sieht Google
+  jede Unterseite leer und nimmt sie nicht auf (so passiert bis 12.10.2026).
+
 ## Was wo ist
 
 | Pfad | Inhalt |
 |---|---|
 | `frontend/` | die bisherige React-Seite + Admin (Autopiloten entfernt) |
-| `server/` | Server: `public.js` Seite-API, `admin.js` Admin-API, `rules.js` gemeinsame Schreibregeln, `seo.js` HTML für Google + Sitemap, `images.js` verkleinerte Bilder, `migrate.js` einmalige Inhalts-Korrekturen, `site.js` Basis-URL, `db.js` Datenbank, `ai*.js` KI-Schnittstelle |
+| `server/` | Server: `public.js` Seite-API, `admin.js` Admin-API, `rules.js` gemeinsame Schreibregeln, `seo.js` HTML für Google + Sitemap, `images.js` verkleinerte Bilder, `sources.js` Herkunft der Besucher, `migrate.js` einmalige Inhalts-Korrekturen, `site.js` Basis-URL, `db.js` Datenbank, `ai*.js` KI-Schnittstelle |
 | `scripts/` | Import, Admin anlegen, Admin-Test, KI-Test, `icons.js` (Icons neu erzeugen) |
 | `inhalte/` | Texte der alten Seite + Liste der Medien; `inhalte/medien/` = lokale Sicherungskopie (nicht in Git) |
 | `data/` | Datenbank + hochgeladene Medien (nicht in Git, auf dem Server = Volume) |

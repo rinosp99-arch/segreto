@@ -226,8 +226,10 @@ function sitemap(req, res) {
   res.type('application/xml').set('Cache-Control', 'public, max-age=3600').send(xml);
 }
 
+// The public API (/api/models, /api/articles ...) must stay readable for search engines: the React app loads its content
+// from there, and a renderer that may not fetch it sees an empty "not found" page. Closed: admin, AI interface, visit counter.
 function robots(req, res) {
-  res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\nAllow: /api/uploads/\n\nSitemap: ${baseUrl(req)}/sitemap.xml\n`);
+  res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/admin\nDisallow: /api/v2/\nDisallow: /api/track\n\nSitemap: ${baseUrl(req)}/sitemap.xml\n`);
 }
 
 module.exports = { htmlHandler, sitemap, robots, pageFor, sitemapUrls };

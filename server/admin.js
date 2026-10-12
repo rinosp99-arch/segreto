@@ -337,6 +337,9 @@ router.get('/analytics/overview', (req, res) => {
   });
 });
 
+// where the visitors come from (Instagram, Google, tagged links ...), compared with the period before
+router.get('/analytics/sources', (req, res) => res.json(require('./sources').report(req.query.range || '7g')));
+
 router.get('/analytics/funnel', (req, res) => {
   const range = req.query.range || '30g';
   const c = countsByType(cutoff(range), req.query.model_id);
