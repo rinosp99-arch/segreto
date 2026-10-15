@@ -9,6 +9,7 @@ import { GlobalOfMarquee } from '@/components/GlobalOfMarquee';
 import { useTheme } from '@/lib/themeContext';
 import { setSeo, SITE } from '@/lib/seo';
 import { SearchX } from 'lucide-react';
+import { CategoryLinks } from '@/components/CategoryLinks';
 
 const FILTERS = [
   { key: 'tutte', label: 'Tutte' },
@@ -166,6 +167,7 @@ export default function Home() {
       <section className="max-w-3xl pt-6 pb-4" data-testid="home-about">
         <h2 className="text-2xl sm:text-3xl mb-3">{HOME_ABOUT.title}</h2>
         {HOME_ABOUT.text.map((t) => <p key={t} className="text-sm sm:text-base text-muted-foreground leading-relaxed mb-3">{t}</p>)}
+        <CategoryLinks className="mt-4 mb-4" />
         <Link to="/articoli" className="caps-label gold-text">Vai alla Rivista</Link>
       </section>
       </div>

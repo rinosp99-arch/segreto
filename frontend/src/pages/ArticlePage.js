@@ -6,6 +6,7 @@ import { setSeo, setNotFoundSeo, isNotFound, SITE } from '@/lib/seo';
 import { getSessionId } from '@/lib/session';
 import { ModelCard } from '@/components/ModelCard';
 import { ArrowLeft } from 'lucide-react';
+import { CategoryLinks } from '@/components/CategoryLinks';
 
 export default function ArticlePage() {
   const { slug } = useParams();
@@ -48,6 +49,7 @@ export default function ArticlePage() {
           </div>
         </section>
       )}
+      <CategoryLinks className="mt-12 pt-6 border-t border-border/60" />
     </article>
   );
 }

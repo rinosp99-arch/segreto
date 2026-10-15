@@ -34,6 +34,11 @@ const abs = (base, url) => (!url ? '' : /^https?:\/\//.test(url) ? url : `${base
 
 const modelList = (items) => `<ul>${items.map((m) =>
   `<li><a href="/modelle/${esc(m.slug)}">${m.foto_card ? `<img src="${esc(images.url(m.foto_card, 480))}" alt="${esc(name(m))}" width="300" height="400" loading="lazy">` : ''}<strong>${esc(name(m))}</strong>${m.frase ? ` — ${esc(clean(m.frase))}` : ''}</a></li>`).join('')}</ul>`;
+// links to every indexable category, worded like the searches - same as frontend/src/components/CategoryLinks.js
+const categoryLinks = (title = 'Esplora per categoria') => {
+  const cats = categories().filter((c) => c.indicizzabile !== false);
+  return cats.length ? `<nav aria-label="${title}"><h2>${title}</h2><p>${cats.map((c) => `<a href="/categorie/${esc(c.slug)}">OnlyFans ${esc(String(c.nome).toLowerCase())} italiane</a>`).join(' · ')}</p></nav>` : '';
+};
 const categoryNav = () => `<nav><h2>Categorie</h2><ul>${categories().map((c) => `<li><a href="/categorie/${esc(c.slug)}">${esc(c.nome)}</a></li>`).join('')}</ul></nav>`;
 
 // on every page: without JavaScript the navigation of the React app does not exist, these links replace it
@@ -66,7 +71,7 @@ function pageFor(pathname, base) {
         ],
       },
       body: `<h1>${esc(SITE)}: creator italiane su OnlyFans</h1><p>${esc(HOME_DESC)}</p><section><h2>Le creator</h2>${modelList(models)}</section>`
-        + `<section><h2>${esc(HOME_ABOUT.title)}</h2>${HOME_ABOUT.text.map((t) => `<p>${esc(t)}</p>`).join('')}</section>`
+        + `<section><h2>${esc(HOME_ABOUT.title)}</h2>${HOME_ABOUT.text.map((t) => `<p>${esc(t)}</p>`).join('')}${categoryLinks()}</section>`
         + `<section><h2>Dalla rivista</h2><ul>${articles().slice(0, 6).map((a) => `<li><a href="/articoli/${esc(a.slug)}">${esc(a.titolo)}</a></li>`).join('')}</ul></section>`
         + categoryNav(),
     };
@@ -133,7 +138,7 @@ function pageFor(pathname, base) {
         datePublished: a.data_pubblicazione, dateModified: a.data_aggiornamento || a.data_pubblicazione,
         author: { '@type': 'Organization', name: SITE }, publisher: { '@type': 'Organization', name: SITE },
       },
-      body: `<article><h1>${esc(a.titolo)}</h1>${a.contenuto || ''}</article>`,
+      body: `<article><h1>${esc(a.titolo)}</h1>${a.contenuto || ''}</article>${categoryLinks()}`,
     };
   }
 

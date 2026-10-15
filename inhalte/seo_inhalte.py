@@ -455,8 +455,8 @@ riconoscere i profili ufficiali. Inizia dalla <a href="/articoli/onlyfans-italia
 # ---------------------------------------------------------------- category texts
 CATEGORIES = {
     'more': {
-        'seo_title': 'Creator more italiane su OnlyFans | LATO SEGRETO',
-        'meta_description': 'Le creator more italiane di LATO SEGRETO: sguardi intensi e fascino mediterraneo. Scopri il lato pubblico e il lato segreto di ogni profilo.',
+        'seo_title': 'OnlyFans more italiane: creator selezionate | LATO SEGRETO',
+        'meta_description': 'OnlyFans more italiane: le creator dal fascino mediterraneo selezionate da LATO SEGRETO. Guarda il lato pubblico, poi scopri il lato segreto.',
         'testo_seo': '''
 <h2>Creator more italiane: il fascino mediterraneo</h2>
 <p>Capelli scuri, sguardi intensi e un fascino che sa di Mediterraneo: le creator more sono la categoria più ampia di LATO
@@ -469,8 +469,8 @@ in più prima di passare al profilo ufficiale. Se ti piace uno stile più deciso
 <a href="/articoli/quanto-costa-onlyfans">quanto costa</a>.</p>''',
     },
     'bionde': {
-        'seo_title': 'Creator bionde italiane su OnlyFans | LATO SEGRETO',
-        'meta_description': 'Le creator bionde italiane di LATO SEGRETO: luce, dolcezza e personalità. Scopri il lato pubblico e il lato segreto di ogni profilo.',
+        'seo_title': 'OnlyFans bionde italiane: creator selezionate | LATO SEGRETO',
+        'meta_description': 'OnlyFans bionde italiane: creator dallo stile solare al glamour, selezionate da LATO SEGRETO. Guarda il lato pubblico, poi il lato segreto.',
         'testo_seo': '''
 <h2>Creator bionde italiane: luce e personalità</h2>
 <p>Le creator bionde hanno un’immagine immediata, luminosa e solare. Ma dietro l’estetica c’è molto di più: identità, cura
@@ -481,8 +481,8 @@ prima di continuare sul suo profilo ufficiale. Approfondisci nella nostra guida
 <a href="/articoli/bionde-italiane-da-seguire-stile-personalita-e-presenza-online">bionde italiane da seguire</a>.</p>''',
     },
     'tatuate': {
-        'seo_title': 'Creator tatuate italiane su OnlyFans | LATO SEGRETO',
-        'meta_description': 'Le creator tatuate italiane di LATO SEGRETO: stile alternativo, carattere e lato segreto. Scopri tutti i profili.',
+        'seo_title': 'OnlyFans tatuate italiane: creator selezionate | LATO SEGRETO',
+        'meta_description': 'OnlyFans tatuate italiane: creator con tatuaggi e stile alternativo, selezionate da LATO SEGRETO. Guarda il lato pubblico, poi il lato segreto.',
         'testo_seo': '''
 <h2>Creator tatuate italiane: stile e carattere</h2>
 <p>Ogni tatuaggio racconta qualcosa. Le creator tatuate di LATO SEGRETO hanno uno stile deciso e una personalità forte, che
@@ -491,8 +491,8 @@ si ritrova nei loro contenuti: dal black work ai colori, dall’alternativo all�
 Vuoi saperne di più? Leggi la nostra <a href="/articoli/guida-profili-tatuati-stile-carattere">guida alle creator tatuate</a>.</p>''',
     },
     'eleganti': {
-        'seo_title': 'Creator eleganti italiane su OnlyFans | LATO SEGRETO',
-        'meta_description': 'Le creator eleganti italiane di LATO SEGRETO: fashion, classe e atmosfera. Scopri il lato pubblico e il lato segreto di ogni profilo.',
+        'seo_title': 'OnlyFans eleganti italiane: creator selezionate | LATO SEGRETO',
+        'meta_description': 'OnlyFans eleganti italiane: creator dallo stile raffinato selezionate da LATO SEGRETO. Guarda il lato pubblico, poi scopri il lato segreto.',
         'testo_seo': '''
 <h2>Creator eleganti: classe senza tempo</h2>
 <p>Luce morbida, abiti curati e un’atmosfera raffinata: le creator eleganti puntano sullo stile più che sull’eccesso. Sono
@@ -502,8 +502,8 @@ lascia spazio a qualcosa di più personale. Esplora anche le <a href="/categorie
 <a href="/categorie/more">more</a>.</p>''',
     },
     'sportive': {
-        'seo_title': 'Creator sportive italiane su OnlyFans | LATO SEGRETO',
-        'meta_description': 'Le creator sportive italiane di LATO SEGRETO: fitness, energia e disciplina. Scopri il lato pubblico e il lato segreto di ogni profilo.',
+        'seo_title': 'OnlyFans sportive italiane: creator fitness | LATO SEGRETO',
+        'meta_description': 'OnlyFans sportive italiane: creator fitness selezionate da LATO SEGRETO, tra energia e disciplina. Guarda il lato pubblico, poi il lato segreto.',
         'testo_seo': '''
 <h2>Creator sportive italiane: energia e disciplina</h2>
 <p>Allenamento, costanza e sicurezza di sé: le creator sportive uniscono la forza di chi si allena ogni giorno a un lato più
@@ -512,8 +512,8 @@ personale, che si scopre solo andando oltre.</p>
 <a href="/articoli/fitness-e-sensualita-creator-sportive">fitness e sensualità: le creator sportive</a>.</p>''',
     },
     'cosplay': {
-        'seo_title': 'Creator cosplay italiane su OnlyFans | LATO SEGRETO',
-        'meta_description': 'Le creator cosplay italiane di LATO SEGRETO: personaggi, fantasia e creatività. Scopri il lato pubblico e il lato segreto.',
+        'seo_title': 'OnlyFans cosplay italiane: creator selezionate | LATO SEGRETO',
+        'meta_description': 'OnlyFans cosplay italiane: creator tra costumi, personaggi e fantasia, selezionate da LATO SEGRETO. Guarda il lato pubblico, poi il lato segreto.',
         'testo_seo': '''
 <h2>Creator cosplay italiane: fantasia e trasformazione</h2>
 <p>Costumi, personaggi e tanta creatività: le creator cosplay trasformano ogni contenuto in una piccola storia. È il mondo
@@ -524,6 +524,43 @@ giusto per chi ama anime, videogiochi e fantasia, ma anche la personalità di ch
     # no creators yet: keep the page out of Google until there is content
     'latine': {'indicizzabile': False},
 }
+
+# 10/2026: every category page also gets a short guide, questions and answers and links to the other categories
+CATEGORY_GUIDE = {
+    'more': 'Tra le creator more c’è chi punta sull’eleganza e chi su uno stile più deciso, spesso con tatuaggi.',
+    'bionde': 'Le creator bionde di LATO SEGRETO vanno dal look naturale e solare a uno stile più glamour o sportivo.',
+    'tatuate': 'Tra le creator tatuate trovi stili molto diversi: dal look alternativo e dark a quello più glamour.',
+    'eleganti': 'Le creator eleganti puntano su abiti curati, luce morbida e atmosfera, più che sull’eccesso.',
+    'sportive': 'Le creator sportive raccontano allenamento, costanza e sicurezza di sé.',
+    'cosplay': 'Le creator cosplay giocano con costumi e personaggi, ognuna con il suo universo preferito.',
+}
+
+
+def category_guide(slug):
+    others = ' · '.join(f'<a href="/categorie/{o}">OnlyFans {o} italiane</a>' for o in CATEGORY_GUIDE if o != slug)
+    return f'''
+<h2>Come scegliere tra le creator {slug} su OnlyFans</h2>
+<p>{CATEGORY_GUIDE[slug]} Su ogni scheda trovi la frase che la descrive, le foto del lato pubblico e le categorie a cui
+appartiene: bastano pochi secondi per capire se il suo stile fa per te. Il lato segreto è un’anteprima in più, prima di
+passare a OnlyFans.</p>
+<p>Su OnlyFans molti profili hanno un abbonamento mensile, altri sono gratuiti e propongono contenuti a pagamento nei
+messaggi. Se è la prima volta, leggi <a href="/articoli/quanto-costa-onlyfans">quanto costa OnlyFans</a> e
+<a href="/articoli/onlyfans-gratis">cosa puoi vedere gratis</a>.</p>
+<h2>Domande frequenti</h2>
+<h3>Dove trovo creator {slug} italiane su OnlyFans?</h3>
+<p>OnlyFans non permette di cercare per nazionalità o stile. Su questa pagina trovi le creator {slug} italiane selezionate da
+LATO SEGRETO, ognuna con il link per continuare su OnlyFans.</p>
+<h3>Le creator sono maggiorenni?</h3>
+<p>Sì. Tutte le creator presenti su LATO SEGRETO sono maggiorenni e il sito è riservato a un pubblico adulto.</p>
+<h3>Pagare su OnlyFans è sicuro?</h3>
+<p>Paga solo all’interno della piattaforma e diffida di chi chiede bonifici o carte regalo fuori da OnlyFans. Trovi tutti i
+consigli nella guida <a href="/articoli/onlyfans-e-sicuro">OnlyFans è sicuro?</a></p>
+<h2>Altre categorie</h2>
+<p>{others}</p>'''
+
+
+for slug in CATEGORY_GUIDE:
+    CATEGORIES[slug]['testo_seo'] += category_guide(slug)
 
 out = {'articles': ARTICLES, 'categories': CATEGORIES}
 (HERE / 'seo-inhalte.json').write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding='utf8')
