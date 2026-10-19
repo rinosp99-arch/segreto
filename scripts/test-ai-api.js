@@ -401,6 +401,19 @@ const expectErr = (r, status, code, label) => { assert.equal(r.status, status, `
     assert.equal(rbS.status, 200, rbS.text); assert.ok(rbS.json.data.restored_count >= 2);
     assert.equal((await admin('GET', '/models')).json.items.filter((m) => m.nome.includes(`Prova ${tag}`)).length, 0); ok('Rollback der Erstell-Sitzung: Test-Creators wieder weg (soft-deleted)');
 
+    // ---------- export for the old Emergent autopilots ----------
+    expectErr(await ai(null, 'GET', '/export/models'), 401, 'AUTH_REQUIRED', 'Export ohne Schlüssel -> 401');
+    const ex = await ai(RO, 'GET', '/export/models');
+    assert.equal(ex.status, 200, ex.text); assert.equal(ex.json.action, 'models.export');
+    const exItems = ex.json.data.items;
+    assert.equal(ex.json.data.total, exItems.length); assert.equal(ex.json.data.media_base_url, control0.base_url);
+    const pubList = (await call(null, 'GET', '/api/models?limit=500')).json.items;
+    for (const p of pubList) assert.ok(exItems.some((m) => m.id === p.id && m.slug === p.slug), `Export: ${p.slug} fehlt`);
+    assert.ok(exItems.every((m) => !('analytics' in m) && !('visite_base' in m)), 'Export enthält Zähler');
+    assert.ok(exItems.some((m) => m.is_deleted && m.nome.includes(`Prova ${tag}`)), 'Export: gelöschte Test-Creator fehlt');
+    if (pubList.some((p) => p.has_secret)) assert.ok(exItems.some((m) => (m.media_pairs || []).some((x) => x?.segreto?.url)), 'Export ohne geheime Medien');
+    ok(`Export: ${exItems.length} Creators mit Nur-Lese-Schlüssel, alle öffentlichen dabei, geheime Medien und gelöschte enthalten, ohne Zähler`);
+
     // ---------- rate limit ----------
     const rl = await newKey('Test Rate-Limit', 'read_only');
     await setControl({ ai_rate_limit_per_min: 10 });
@@ -417,6 +430,7 @@ const expectErr = (r, status, code, label) => { assert.equal(r.status, status, `
     expectErr(await ai(FULL, 'GET', '/capabilities'), 503, 'AI_API_DISABLED', 'Not-Aus: Katalog -> AI_API_DISABLED');
     expectErr(await exec(FULL, 'models.list'), 503, 'AI_API_DISABLED', 'Not-Aus: execute -> AI_API_DISABLED');
     expectErr(await preview(RO, 'models.list'), 503, 'AI_API_DISABLED', 'Not-Aus: preview -> AI_API_DISABLED');
+    expectErr(await ai(RO, 'GET', '/export/models'), 503, 'AI_API_DISABLED', 'Not-Aus: Export -> AI_API_DISABLED');
     expectErr(await exec(FULL, 'gibt.es.nicht'), 404, 'UNKNOWN_CAPABILITY', 'Not-Aus: unbekannte Capability bleibt 404');
     assert.equal((await ai(jwt, 'GET', '/status')).status, 200); assert.equal((await call(null, 'GET', '/api/models')).status, 200); ok('Not-Aus trifft nur die Schlüssel: Admin und Website laufen weiter');
     await setControl({ ai_api_enabled: true });

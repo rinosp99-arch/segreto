@@ -471,6 +471,20 @@ router.post('/models/find', route((req, res) => {
     { next_steps: ['Dettaglio: executeCapability models.get', 'Modifica: previewCapability models.update {changes}'] });
 }));
 
+// Full export of every creator for the old Emergent system, whose autopilots (Telegram, X, OnlyFans) keep their own copy.
+// Unlike the public /api/models it includes the secret side and drafts/archived ones, so the copy can mirror the state.
+// Media paths stay relative (/api/uploads/...): they are served from data.media_base_url.
+const EXPORT_OMIT = new Set(['analytics', 'visite_base']); // counters belong to each system, never overwritten by the copy
+router.get('/export/models', route((req, res) => {
+  req.aiAction = 'models.export';
+  gate(req, res, ['models:read']);
+  const items = store.all('models').map((m) => Object.fromEntries(Object.entries(m).filter(([k]) => !EXPORT_OMIT.has(k))));
+  const by = {};
+  for (const m of items) { const k = m.is_deleted ? 'eliminata' : m.stato || 'senza_stato'; by[k] = (by[k] || 0) + 1; }
+  return envelope(req, 'models.export', `${items.length} modelle (${Object.entries(by).map(([k, v]) => `${v} ${k}`).join(', ') || 'nessuna'})`,
+    { generated_at: new Date().toISOString(), media_base_url: site.baseUrl(req), total: items.length, by_stato: by, items });
+}));
+
 router.use((req, res) => sendError(req, res, new AiError(404, 'NOT_FOUND', 'Operazione inesistente')));
 router.use((err, req, res, next) => sendError(req, res, err)); // eslint-disable-line no-unused-vars
 
