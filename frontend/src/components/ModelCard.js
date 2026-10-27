@@ -2,13 +2,16 @@ import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { MediaImage } from '@/components/MediaImage';
-import { isDiscovered } from '@/lib/session';
+import { isDiscovered, markOfClicked } from '@/lib/session';
 import { track } from '@/lib/api';
 import { setEntry, observeImpression, currentMode } from '@/lib/analytics';
 import { Lock, Unlock } from 'lucide-react';
 
 /* placement -> entry_source of the profile opened from this card */
 const ENTRY_BY_PLACEMENT = { home: 'home_card', related: 'related_models', category: 'category' };
+
+/* OnlyFans link of the card button, tagged like the profile CTAs (openOnlyFans in ModelProfile.js) */
+const ofHref = (url, slug) => (url ? `${url}${url.includes('?') ? '&' : '?'}utm_source=lato_segreto&utm_medium=card&utm_campaign=lato_segreto&creator=${slug}&cta=of_click_card` : '');
 
 const BADGE_STYLES = {
   'IN TENDENZA': { bg: 'hsl(var(--primary) / 0.16)', bd: 'hsl(var(--primary) / 0.45)', c: 'hsl(var(--primary))' },
@@ -37,9 +40,19 @@ export function ModelCard({ model, index = 0, teaser = false, placement = 'home'
     track({ tipo: placement === 'home' ? 'home_model_card_click' : 'model_card_click', model_slug: model.slug, placement, mode: placement === 'home' ? (teaser ? 'secret' : 'public') : currentMode(), meta: { position: index, context } });
   };
 
+  const of = ofHref(model.onlyfans_url, model.slug);
+  const onOf = () => {
+    const common = { model_slug: model.slug, cta_source: 'of_click_card', cta_type: 'card', cta_position: placement, placement,
+      mode: placement === 'home' ? (teaser ? 'secret' : 'public') : currentMode(), meta: { position: index, context } };
+    track({ tipo: 'cta_click', ...common });
+    track({ tipo: 'of_click', ...common });
+    markOfClicked(model.slug);
+  };
+
   return (
     <motion.div
       ref={ref}
+      className="relative"
       initial={{ opacity: 0, y: 18 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-40px' }}
@@ -77,7 +90,7 @@ export function ModelCard({ model, index = 0, teaser = false, placement = 'home'
           )}
 
           {/* bottom gradient */}
-          <div className="absolute inset-x-0 bottom-0 h-2/5 pointer-events-none"
+          <div className={`absolute inset-x-0 bottom-0 ${of ? 'h-3/5' : 'h-2/5'} pointer-events-none`}
             style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.82), transparent)' }} />
 
           {/* badge */}
@@ -103,7 +116,7 @@ export function ModelCard({ model, index = 0, teaser = false, placement = 'home'
           </div>
 
           {/* meta */}
-          <div className="absolute inset-x-0 bottom-0 p-3.5">
+          <div className={`absolute inset-x-0 bottom-0 p-3.5 ${of ? 'pb-[3.75rem] md:pb-16' : ''}`}>
             <div className="text-xl md:text-2xl font-serif leading-none mb-1">{model.nome_artistico}</div>
             <div className="text-xs text-white/70 line-clamp-1">{model.frase}</div>
             <div className="mt-2 h-[1px] w-0 group-hover:w-full transition-all duration-500" style={{ background: 'hsl(var(--primary) / 0.6)' }} />
@@ -113,6 +126,15 @@ export function ModelCard({ model, index = 0, teaser = false, placement = 'home'
           </div>
         </div>
       </Link>
+
+      {/* straight to OnlyFans; a sibling of the card link, links cannot be nested */}
+      {of && (
+        <a href={of} target="_blank" rel="nofollow sponsored noopener" onClick={onOf} data-testid="card-of-cta"
+          className="absolute inset-x-2.5 bottom-2.5 md:inset-x-3 md:bottom-3 z-10 flex items-center justify-center gap-1.5 md:gap-2 rounded-full py-2.5 md:py-3 text-[9.5px] md:text-[11px] font-semibold uppercase tracking-[0.12em] md:tracking-[0.16em] whitespace-nowrap transition-all hover:brightness-110 active:scale-[0.98]"
+          style={{ color: 'hsl(var(--primary))', background: 'rgba(10,8,6,0.62)', border: '1.5px solid hsl(var(--primary) / 0.85)', boxShadow: '0 0 14px hsl(var(--primary) / 0.35), inset 0 0 10px hsl(var(--primary) / 0.12)', backdropFilter: 'blur(6px)' }}>
+          <Lock className="h-3 w-3 md:h-3.5 md:w-3.5 shrink-0" /> Scopri su OnlyFans
+        </a>
+      )}
     </motion.div>
   );
 }
