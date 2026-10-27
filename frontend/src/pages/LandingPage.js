@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { ModelCard } from '@/components/ModelCard';
-import { setSeo, setNotFoundSeo, SITE } from '@/lib/seo';
+import { setSeo, setNotFoundSeo, isNotFound, SITE } from '@/lib/seo';
 import { ArrowLeft, SearchX } from 'lucide-react';
 import NotFound from '@/pages/NotFound';
 

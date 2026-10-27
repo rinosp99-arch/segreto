@@ -37,8 +37,11 @@ const modelList = (items) => `<ul>${items.map((m) =>
 // links to every indexable category, worded like the searches - same as frontend/src/components/CategoryLinks.js
 const categoryLinks = (title = 'Esplora per categoria') => {
   const cats = categories().filter((c) => c.indicizzabile !== false);
-  return cats.length ? `<nav aria-label="${title}"><h2>${title}</h2><p>${cats.map((c) => `<a href="/categorie/${esc(c.slug)}">OnlyFans ${esc(String(c.nome).toLowerCase())} italiane</a>`).join(' · ')}</p></nav>` : '';
+  return cats.length ? `<nav aria-label="${title}"><h2>${title}</h2><p>${cats.map((c) => `<a href="/categorie/${esc(c.slug)}">${esc(categoryLabel(c))}</a>`).join(' · ')}</p></nav>` : '';
 };
+// category heading and title worded like the searches; "creator selezionate" gets the number of profiles
+const categoryLabel = (c) => `OnlyFans ${String(c.nome || c.slug).toLowerCase()} italiane`; // same in frontend CategoryLinks.js
+const categoryTitle = (c, n) => { const t = clean(c.seo_title) || `${c.nome} | ${SITE}`; return n > 1 ? t.replace(/: creator selezionate/i, `: ${n} creator selezionate`) : t; }; // same in CategoryPage.js
 const categoryNav = () => `<nav><h2>Categorie</h2><ul>${categories().map((c) => `<li><a href="/categorie/${esc(c.slug)}">${esc(c.nome)}</a></li>`).join('')}</ul></nav>`;
 
 // on every page: without JavaScript the navigation of the React app does not exist, these links replace it
@@ -111,11 +114,11 @@ function pageFor(pathname, base) {
     if (!cat) return null;
     const items = published().filter((x) => arr(x.categorie).includes(cat.slug));
     return {
-      title: clean(cat.seo_title) || `${cat.nome} | ${SITE}`,
+      title: categoryTitle(cat, items.length),
       description: cut(cat.meta_description || cat.descrizione || `${cat.nome}: le creator di ${SITE}.`),
       image: cat.immagine || items[0]?.foto_card, noindex: cat.indicizzabile === false,
       jsonLd: { '@context': 'https://schema.org', ...crumbs(base, [{ name: 'Inizio', path: '/' }, { name: cat.nome, path: `/categorie/${cat.slug}` }]) },
-      body: `<h1>${esc(cat.nome)}</h1>${cat.descrizione ? `<p>${esc(clean(cat.descrizione))}</p>` : ''}${modelList(items)}${cat.testo_seo ? `<section>${cat.testo_seo}</section>` : ''}${categoryNav()}`,
+      body: `<h1>${esc(categoryLabel(cat))}</h1>${cat.descrizione ? `<p>${esc(clean(cat.descrizione))}</p>` : ''}${modelList(items)}${cat.testo_seo ? `<section>${cat.testo_seo}</section>` : ''}${categoryNav()}`,
     };
   }
 

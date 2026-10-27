@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const store = require('./db');
+const C = require('./content');
 
 const clean = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
 const hash = (s) => crypto.createHash('sha1').update(clean(s)).digest('hex').slice(0, 16);
@@ -47,6 +48,23 @@ function profileTitles() {
   return n;
 }
 
+// 10/2026: every profile title under the "<name> OnlyFans" rule of content.js (titles from before the rule,
+// from the AI interface or overwritten later). Idempotent: a title that already has "OnlyFans" is left alone.
+function profileTitlesOnlyFans() {
+  let n = 0;
+  for (const doc of store.all('models')) {
+    const seo = doc.seo || {};
+    const title = C.profileTitle(seo.title, doc.nome_artistico || doc.nome);
+    if (title === clean(seo.title)) continue;
+    const next = { ...seo, title };
+    if (seo.og_title && clean(seo.og_title) === clean(seo.title)) next.og_title = title;
+    store.put('models', { ...doc, seo: next, updated_at: store.nowIso() });
+    store.audit('sistema', 'update', 'model', doc.id, { campo: 'seo.title', da: seo.title, a: title });
+    n += 1;
+  }
+  return n;
+}
+
 // 10/2026: category titles in the word order people search ("OnlyFans bionde italiane"), longer category texts.
 // New values come from inhalte/seo-inhalte.json; a field is replaced only while it still holds the old text (checksum).
 const CATEGORY_OLD = {
@@ -78,6 +96,8 @@ function categoryTexts() {
 function run() {
   const n = store.transaction(profileTitles);
   if (n) console.log(`Profil-Titel angepasst: ${n}.`);
+  const o = store.transaction(profileTitlesOnlyFans);
+  if (o) console.log(`Profil-Titel mit OnlyFans ergänzt: ${o}.`);
   const c = store.transaction(categoryTexts);
   if (c) console.log(`Kategorie-Texte angepasst: ${c}.`);
 }

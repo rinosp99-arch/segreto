@@ -167,7 +167,7 @@ const expectErr = (r, status, code, label) => { assert.equal(r.status, status, `
     const upd = await exec(FULL, 'models.update', slug, { changes: { bio: 'Bio di prova', seo: { title: 'Titolo di prova' }, tema: { preset: 'bordeaux' } } }, { session_id: S });
     assert.equal(upd.status, 200, upd.text); assert.ok(upd.json.changes.some((c) => c.field === 'bio') && upd.json.changes.some((c) => c.field === 'seo.title'));
     let doc = (await admin('GET', `/models/${id}`)).json;
-    assert.equal(doc.bio, 'Bio di prova'); assert.equal(doc.seo.title, 'Titolo di prova'); assert.equal(doc.seo.robots, 'index,follow'); assert.equal(doc.frase, 'Claim di prova');
+    assert.equal(doc.bio, 'Bio di prova'); assert.match(doc.seo.title, /^.+ OnlyFans \| Titolo di prova/); assert.equal(doc.seo.robots, 'index,follow'); assert.equal(doc.frase, 'Claim di prova');
     ok('models.update: Teiländerung, verschachtelte Felder werden zusammengeführt, Rest bleibt');
     expectErr(await exec(FULL, 'models.update', slug, { changes: { conferma_maggiorenne: true } }), 422, 'VALIDATION_FAILED', 'Volljährigkeits-Bestätigung nicht über die API setzbar');
     expectErr(await exec(FULL, 'models.update', slug, { changes: { stato: 'pubblicata' } }), 422, 'VALIDATION_FAILED', 'Status nicht über models.update (kein Umgehen der Prüfung)');

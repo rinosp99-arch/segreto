@@ -34,6 +34,23 @@ const mediaPair = (p) => {
   return { id: o.id || require('crypto').randomUUID(), tipo: o.tipo || 'image', pubblico: mediaItem(o.pubblico), segreto: mediaItem(o.segreto) };
 };
 
+// 10/2026: a profile title starts with "<name> OnlyFans" - the searches that bring the clicks (Search Console).
+// A title without "OnlyFans" (admin, AI interface) gets it after the name; the rest stays, the bare site name goes.
+const SITE_PART = /^(scopri il suo )?lato segreto$/i;
+const tidy = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
+const displayName = (s) => (/[a-zà-ÿ]/.test(s) ? s : s.toLowerCase().replace(/(^|[\s'-])(\S)/g, (x, p, c) => p + c.toUpperCase()));
+
+function profileTitle(title, nome) {
+  const t = tidy(title);
+  if (!t || /onlyfans/i.test(t)) return t;
+  const parts = t.split('|').map(tidy).filter(Boolean);
+  const name = displayName(tidy(nome) || parts[0]);
+  const first = parts[0].toLowerCase(), n = name.toLowerCase();
+  const rest = parts.slice(n.includes(first) || first.includes(n) ? 1 : 0).filter((p) => !SITE_PART.test(p));
+  const head = `${name} OnlyFans | ${rest.length ? rest.join(' | ') : 'Profilo su LATO SEGRETO'}`;
+  return rest.length && head.length <= 45 ? `${head} | LATO SEGRETO` : head;
+}
+
 function normalizeModel(input) {
   const d = obj(input);
   const tema = obj(d.tema);
@@ -81,13 +98,13 @@ function normalizeModel(input) {
     },
     seo: {
       ...seo,
-      title: seo.title || '',
+      title: profileTitle(seo.title, d.nome_artistico || d.nome),
       meta_description: seo.meta_description || '',
       alt_default: seo.alt_default || '',
       og_image: seo.og_image || '',
       canonical: seo.canonical || '',
       robots: seo.robots || 'index,follow',
-      og_title: seo.og_title || '',
+      og_title: seo.og_title && tidy(seo.og_title) === tidy(seo.title) ? profileTitle(seo.title, d.nome_artistico || d.nome) : seo.og_title || '',
       og_description: seo.og_description || '',
       structured_data_type: seo.structured_data_type || 'ProfilePage',
       keywords: arr(seo.keywords),
@@ -281,6 +298,6 @@ function secretProjection(d) {
 }
 
 module.exports = {
-  slugify, sanitizeHtml, normalizeModel, normalizeCategory, normalizeArticle,
+  slugify, sanitizeHtml, normalizeModel, profileTitle, normalizeCategory, normalizeArticle,
   readiness, fullStatus, publicProjection, secretProjection, obj, arr,
 };

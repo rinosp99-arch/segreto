@@ -3,8 +3,12 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getCategory } from '@/lib/api';
 import { ModelCard } from '@/components/ModelCard';
-import { setSeo, setNotFoundSeo, SITE } from '@/lib/seo';
+import { setSeo, setNotFoundSeo, isNotFound, SITE } from '@/lib/seo';
+import { categoryLabel } from '@/components/CategoryLinks';
 import { ArrowLeft, SearchX } from 'lucide-react';
+
+/* "creator selezionate" in the title gets the number of profiles (same as categoryTitle() in server/seo.js) */
+const categoryTitle = (c, n) => { const t = c.seo_title || `${c.nome} | ${SITE.name}`; return n > 1 ? t.replace(/: creator selezionate/i, `: ${n} creator selezionate`) : t; };
 
 export default function CategoryPage() {
   const { slug } = useParams();
@@ -17,7 +21,7 @@ export default function CategoryPage() {
       setData(d);
       const c = d.categoria;
       setSeo({
-        title: c.seo_title || `${c.nome} | ${SITE.name}`,
+        title: categoryTitle(c, d.items.length),
         description: c.meta_description || c.descrizione,
         noindex: !c.indicizzabile,
         jsonLd: {
@@ -46,7 +50,8 @@ export default function CategoryPage() {
         <Link to="/" className="hover:text-foreground inline-flex items-center gap-1"><ArrowLeft className="h-4 w-4" />Inizio</Link>
         <span>/</span><span className="text-foreground">{categoria.nome}</span>
       </nav>
-      <h1 className="text-4xl sm:text-5xl font-serif mb-3">{categoria.nome}</h1>
+      <h1 className="caps-label font-sans gold-text mb-2">{categoryLabel(categoria)}</h1>
+      <div className="text-4xl sm:text-5xl font-serif mb-3">{categoria.nome}</div>
       {categoria.descrizione && <p className="text-muted-foreground max-w-2xl mb-8">{categoria.descrizione}</p>}
       {items.length === 0 ? (
         <div className="py-20 text-center"><SearchX className="h-10 w-10 mx-auto mb-3 text-muted-foreground" /><p className="text-muted-foreground">Questa categoria non contiene ancora profili.</p></div>

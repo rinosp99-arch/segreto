@@ -420,8 +420,8 @@ cap({
 
 cap({
   id: 'models.set_seo', category: 'models', scopes: ['models:update'], target: 'model',
-  description: `Imposta i campi SEO di una modella (solo quelli indicati). Campi: ${SEO_FIELDS.join(', ')}.`,
-  params: { seo: { type: 'object', required: true, example: { title: 'Giulia Rossi | LATO SEGRETO', meta_description: 'Scopri il lato segreto di Giulia.' } } },
+  description: `Imposta i campi SEO di una modella (solo quelli indicati). Campi: ${SEO_FIELDS.join(', ')}. Il titolo inizia sempre con "<nome> OnlyFans" (è ciò che le persone cercano): se manca, il server lo aggiunge dopo il nome.`,
+  params: { seo: { type: 'object', required: true, example: { title: 'Giulia Rossi OnlyFans | Profilo su LATO SEGRETO', meta_description: 'Scopri il lato segreto di Giulia.' } } },
   natural: ['scrivi il titolo SEO di Giulia'],
   handler(ctx) {
     onlyKeys(ctx.params.seo, SEO_FIELDS, 'seo');
