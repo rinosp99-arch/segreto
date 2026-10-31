@@ -68,7 +68,7 @@ export default function Home() {
 
   useEffect(() => {
     setLoading(true);
-    getModels({ filtro, limit: 60 })
+    getModels({ filtro, limit: 500 }) // every published profile (the server caps at 500; same in profileNav.js)
       .then((d) => setItems(d.items || []))
       .finally(() => setLoading(false));
   }, [filtro]);
