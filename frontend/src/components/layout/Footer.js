@@ -23,6 +23,7 @@ export function Footer() {
             <Link to="/privacy" className="text-muted-foreground hover:text-foreground transition-colors">Privacy</Link>
             <Link to="/cookie" className="text-muted-foreground hover:text-foreground transition-colors">Cookie</Link>
             <Link to="/termini" className="text-muted-foreground hover:text-foreground transition-colors">Termini</Link>
+            <Link to="/note-legali" className="text-muted-foreground hover:text-foreground transition-colors">Note legali</Link>
             <Link to="/articoli" className="text-muted-foreground hover:text-foreground transition-colors">Rivista</Link>
           </div>
         </div>

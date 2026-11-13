@@ -53,7 +53,14 @@ const crumbs = (base, items) => ({
 });
 
 const LEGAL = {
-  privacy: 'Privacy', cookie: 'Cookie', termini: 'Termini e condizioni', '18-plus': 'Solo per maggiorenni (18+)',
+  privacy: 'Privacy', cookie: 'Cookie', termini: 'Termini e condizioni', '18-plus': 'Solo per maggiorenni (18+)', 'note-legali': 'Note legali',
+};
+// operator of the site, same text in frontend/src/pages/Legal.js
+const OPERATOR_ADDRESS = '<address><strong>novag LLC</strong><br>30 N Gould St Ste N<br>Sheridan, WY 82801<br>Stati Uniti</address>';
+const OPERATOR_MAIL = '<p>Email: <a href="mailto:novag.management69@gmail.com">novag.management69@gmail.com</a></p>';
+const LEGAL_BODY = {
+  'note-legali': `<p>Il sito LATO SEGRETO è gestito da:</p>${OPERATOR_ADDRESS}<p>EIN (Tax ID): 37-1299036</p>${OPERATOR_MAIL}`,
+  privacy: `<p>Titolare del trattamento dei dati è:</p>${OPERATOR_ADDRESS}${OPERATOR_MAIL}`,
 };
 
 // Returns { status, title, description, image, type, noindex, jsonLd, body } for a path, or a 404 page.
@@ -146,7 +153,7 @@ function pageFor(pathname, base) {
   }
 
   const legal = p.slice(1);
-  if (LEGAL[legal]) return { title: `${LEGAL[legal]} | ${SITE}`, description: `${LEGAL[legal]} — ${SITE}`, body: `<h1>${esc(LEGAL[legal])}</h1>` };
+  if (LEGAL[legal]) return { title: `${LEGAL[legal]} | ${SITE}`, description: `${LEGAL[legal]} — ${SITE}`, body: `<h1>${esc(LEGAL[legal])}</h1>${LEGAL_BODY[legal] || ''}` };
 
   if ((m = p.match(/^\/([^/]+)$/))) {
     const l = store.find('landings', (x) => x.slug === m[1] && (x.stato === 'pubblicata' || x.stato === 'published'));
