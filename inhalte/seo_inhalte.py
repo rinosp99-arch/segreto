@@ -562,6 +562,58 @@ consigli nella guida <a href="/articoli/onlyfans-e-sicuro">OnlyFans è sicuro?</
 for slug in CATEGORY_GUIDE:
     CATEGORIES[slug]['testo_seo'] += category_guide(slug)
 
+# 11/2026: "bionde" fell from position 6 to 44 after 17 profiles with short bios were added and while 12 of its 20
+# sentences were the same as on the other category pages. It gets its own text; every statement about a creator
+# comes from her own bio or tags.
+CATEGORIES['bionde']['testo_seo'] = '''
+<h2>OnlyFans bionde italiane: stili diversi, non un solo look</h2>
+<p>Chi cerca “OnlyFans bionde” di solito ha in mente un’immagine precisa. Le creator bionde di LATO SEGRETO però non si
+somigliano: c’è chi punta sulla luce dell’estate, chi sul glamour, chi sullo sport. Qui sotto trovi i loro stili, così
+arrivi prima al profilo che fa per te.</p>
+
+<h3>Solari e naturali</h3>
+<p><a href="/modelle/chiara-marino">Chiara Marino</a> è luce calda, beach vibes e sorrisi spontanei, con uno stile femminile
+che resta elegante anche nei dettagli più semplici. <a href="/modelle/lara-destro">Lara Destro</a> unisce fascino naturale
+e carattere: vibrazioni estive, look neri e tatuaggi, in un’estetica spontanea ma decisa.</p>
+
+<h3>Glamour ed eleganti</h3>
+<p><a href="/modelle/aurora-bianchini">Aurora Bianchini</a> gioca con la moda: look raffinati, dettagli glamour e scatti
+luminosi. <a href="/modelle/anna-bionda">Anna Bionda</a> costruisce un’immagine chiara ed elegante, tra spontaneità e
+mistero. <a href="/modelle/federica-castro">Federica Castro</a> racconta un universo editoriale fatto di dettagli e
+atmosfera.</p>
+
+<h3>Sportive</h3>
+<p><a href="/modelle/veronica">Veronica</a> unisce energia e stile: sport, padel, giornate al sole e look curati. Altre
+creator con lo stesso spirito sono tra le <a href="/categorie/sportive">OnlyFans sportive italiane</a>.</p>
+
+<h3>Bionde e tatuate</h3>
+<p>Se ti piace il contrasto tra capelli chiari e tatuaggi, guarda Lara Destro e Veronica, poi tutta la categoria
+<a href="/categorie/tatuate">OnlyFans tatuate italiane</a>.</p>
+
+<h2>Come usare questa pagina</h2>
+<p>Ogni scheda mostra il nome, una frase e il lato pubblico della creator. Il lato segreto è un’anteprima scelta da lei,
+prima di passare al suo profilo ufficiale su OnlyFans: nessun sito intermedio, nessun contenuto copiato. Per conoscere
+meglio i diversi stili leggi anche <a href="/articoli/bionde-italiane-da-seguire-stile-personalita-e-presenza-online">bionde
+italiane da seguire</a>.</p>
+
+<h2>Domande frequenti sulle OnlyFans bionde</h2>
+<h3>Come trovo una bionda italiana su OnlyFans?</h3>
+<p>OnlyFans non ha un filtro per colore dei capelli o nazionalità. Su questa pagina trovi le creator bionde italiane
+selezionate da LATO SEGRETO, ognuna con il link al suo profilo ufficiale.</p>
+<h3>Ci sono OnlyFans bionde gratis?</h3>
+<p>Alcune creator hanno un profilo gratuito o offrono periodi di prova: lo vedi direttamente sul loro profilo OnlyFans.
+Evita i siti di “leak”: sono illegali e spesso pericolosi. Tutto quello che puoi vedere senza pagare è spiegato in
+<a href="/articoli/onlyfans-gratis">OnlyFans gratis</a>.</p>
+<h3>Quanto costa seguire una creator bionda?</h3>
+<p>Il prezzo lo decide ogni creator: di solito è un abbonamento mensile, a volte con sconti sul primo mese. Trovi i
+dettagli in <a href="/articoli/quanto-costa-onlyfans">quanto costa OnlyFans</a>.</p>
+<h3>Le creator sono maggiorenni?</h3>
+<p>Sì. Tutte le creator presenti su LATO SEGRETO sono maggiorenni e il sito è riservato a un pubblico adulto.</p>
+
+<h2>Cerchi un altro stile?</h2>
+<p><a href="/categorie/more">OnlyFans more italiane</a> · <a href="/categorie/eleganti">OnlyFans eleganti italiane</a> ·
+<a href="/categorie/cosplay">OnlyFans cosplay italiane</a></p>'''
+
 out = {'articles': ARTICLES, 'categories': CATEGORIES}
 (HERE / 'seo-inhalte.json').write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding='utf8')
 import re

@@ -27,6 +27,16 @@ const HOME_ABOUT = {
   ],
 };
 
+// The guides are always linked from the home page. 11/2026: when only the newest articles were linked, the four guides
+// that dropped off the home page lost their Google positions within days. Same list in server/seo.js (GUIDES) - change both.
+const GUIDES = [
+  ['onlyfans-italiane-guida', 'Guida alle OnlyFans italiane'],
+  ['onlyfans-gratis', 'OnlyFans gratis'],
+  ['quanto-costa-onlyfans', 'Quanto costa OnlyFans'],
+  ['come-funziona-onlyfans', 'Come funziona OnlyFans'],
+  ['onlyfans-e-sicuro', 'OnlyFans è sicuro?'],
+];
+
 let lastHomeViewAt = 0;
 
 function CardSkeleton() {
@@ -168,6 +178,14 @@ export default function Home() {
         <h2 className="text-2xl sm:text-3xl mb-3">{HOME_ABOUT.title}</h2>
         {HOME_ABOUT.text.map((t) => <p key={t} className="text-sm sm:text-base text-muted-foreground leading-relaxed mb-3">{t}</p>)}
         <CategoryLinks className="mt-4 mb-4" />
+        <nav aria-label="Guide" className="mb-4" data-testid="home-guides">
+          <div className="caps-label gold-text mb-2">Guide</div>
+          <p className="text-sm leading-relaxed">
+            {GUIDES.map(([slug, label], i) => (
+              <span key={slug}>{i > 0 && <span className="text-muted-foreground"> · </span>}<Link to={`/articoli/${slug}`} className="underline-offset-4 hover:underline" style={{ color: 'hsl(var(--primary))' }}>{label}</Link></span>
+            ))}
+          </p>
+        </nav>
         <Link to="/articoli" className="caps-label gold-text">Vai alla Rivista</Link>
       </section>
       </div>

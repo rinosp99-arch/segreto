@@ -76,12 +76,17 @@ const CATEGORY_OLD = {
   cosplay: { seo_title: '07d8bb1e2fe989ee', meta_description: '72b133feda57aca7', testo_seo: '84627321b865795c' },
 };
 
-function categoryTexts() {
+// 11/2026: "bionde" gets its own text instead of the shared template (same rule: only while the 10/2026 text is unchanged).
+const CATEGORY_OLD_2 = {
+  bionde: { testo_seo: '2b55ebdf13afd461' },
+};
+
+function categoryTexts(oldValues = CATEGORY_OLD) {
   const file = path.join(__dirname, '..', 'inhalte', 'seo-inhalte.json');
   if (!fs.existsSync(file)) return 0;
   const fresh = JSON.parse(fs.readFileSync(file, 'utf8')).categories || {};
   let n = 0;
-  for (const [slug, old] of Object.entries(CATEGORY_OLD)) {
+  for (const [slug, old] of Object.entries(oldValues)) {
     const doc = store.find('categories', (c) => c.slug === slug);
     if (!doc || !fresh[slug]) continue;
     const fields = Object.keys(old).filter((k) => fresh[slug][k] && hash(doc[k]) === old[k]);
@@ -98,7 +103,7 @@ function run() {
   if (n) console.log(`Profil-Titel angepasst: ${n}.`);
   const o = store.transaction(profileTitlesOnlyFans);
   if (o) console.log(`Profil-Titel mit OnlyFans ergänzt: ${o}.`);
-  const c = store.transaction(categoryTexts);
+  const c = store.transaction(() => categoryTexts(CATEGORY_OLD) + categoryTexts(CATEGORY_OLD_2));
   if (c) console.log(`Kategorie-Texte angepasst: ${c}.`);
 }
 

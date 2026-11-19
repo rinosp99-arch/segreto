@@ -52,6 +52,16 @@ const crumbs = (base, items) => ({
   itemListElement: items.map((it, i) => ({ '@type': 'ListItem', position: i + 1, name: it.name, item: `${base}${it.path}` })),
 });
 
+// The guides are always linked from the home page, then the newest other articles. 11/2026: when only the 6 newest were
+// linked, the four guides that dropped off the home page lost their Google positions within days.
+// Same list in frontend/src/pages/Home.js (GUIDES).
+const GUIDES = ['onlyfans-italiane-guida', 'onlyfans-gratis', 'quanto-costa-onlyfans', 'come-funziona-onlyfans', 'onlyfans-e-sicuro'];
+const homeArticles = () => {
+  const all = articles();
+  const guides = GUIDES.map((s) => all.find((a) => a.slug === s)).filter(Boolean);
+  return [...guides, ...all.filter((a) => !GUIDES.includes(a.slug)).slice(0, 4)];
+};
+
 const LEGAL = {
   privacy: 'Privacy', cookie: 'Cookie', termini: 'Termini e condizioni', '18-plus': 'Solo per maggiorenni (18+)', 'note-legali': 'Note legali',
 };
@@ -82,7 +92,7 @@ function pageFor(pathname, base) {
       },
       body: `<h1>${esc(SITE)}: creator italiane su OnlyFans</h1><p>${esc(HOME_DESC)}</p><section><h2>Le creator</h2>${modelList(models)}</section>`
         + `<section><h2>${esc(HOME_ABOUT.title)}</h2>${HOME_ABOUT.text.map((t) => `<p>${esc(t)}</p>`).join('')}${categoryLinks()}</section>`
-        + `<section><h2>Dalla rivista</h2><ul>${articles().slice(0, 6).map((a) => `<li><a href="/articoli/${esc(a.slug)}">${esc(a.titolo)}</a></li>`).join('')}</ul></section>`
+        + `<section><h2>Dalla rivista</h2><ul>${homeArticles().map((a) => `<li><a href="/articoli/${esc(a.slug)}">${esc(a.titolo)}</a></li>`).join('')}</ul></section>`
         + categoryNav(),
     };
   }
